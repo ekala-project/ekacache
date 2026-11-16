@@ -426,11 +426,19 @@ auto LoadDriverConf() -> std::optional<DriverConf> {
       return conf;
     }
   }
-  DriverConf conf;
-  conf.cc = Env("JIG_CC");
-  if (conf.cc.empty()) {
+  const std::string from_env = Env("JIG_CC");
+  if (from_env.empty()) {
     return std::nullopt;
   }
+  return ConfLessDriverConf(from_env);
+}
+
+auto ConfLessDriverConf(std::string_view compiler) -> DriverConf {
+  DriverConf conf;
+  conf.cc = compiler;
+#ifdef __APPLE__
+  conf.binfmt = BinFmt::kMachO;
+#endif
   return conf;
 }
 

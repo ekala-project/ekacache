@@ -22,6 +22,7 @@
 #include "fixup_mode.h"
 #include "gocache_mode.h"
 #include "keys.h"
+#include "launcher.h"
 #include "manifest.h"
 #include "nix_store_mode.h"
 #include "process.h"
@@ -656,6 +657,19 @@ void TestNixStore() {
 }  // namespace
 
 // NOLINTNEXTLINE(bugprone-exception-escape): a throwing test is a failing test
+void TestClassifyLaunch() {
+  using jig::LaunchKind;
+  for (const char* name : {"cc", "c++", "gcc", "g++", "clang", "clang++", "gcc-15", "clang++-21.1",
+                           "x86_64-unknown-linux-gnu-gcc", "aarch64-unknown-linux-gnu-g++", "x86_64-w64-mingw32-cc"}) {
+    assert(jig::ClassifyLaunch(name) == LaunchKind::kCc);
+  }
+  assert(jig::ClassifyLaunch("rustc") == LaunchKind::kRustc);
+  assert(jig::ClassifyLaunch("go") == LaunchKind::kGo);
+  for (const char* name : {"cpp", "gfortran", "gccgo", "gcc-ar", "clang-tidy", "ld", "rustdoc", "gofmt", "xcc"}) {
+    assert(jig::ClassifyLaunch(name) == LaunchKind::kOther);
+  }
+}
+
 auto main() -> int {
   setenv("JIG_STORE_IDENTITY", "content", 1);  // NOLINT(concurrency-mt-unsafe): before any Store::Get
   setenv("JIG_STORE_ROOTS", VENDOR_ROOT, 1);   // NOLINT(concurrency-mt-unsafe)
@@ -683,6 +697,7 @@ auto main() -> int {
   TestBinaryImage();
   TestMachOFixup();
   TestNixStore();
+  TestClassifyLaunch();
   std::println("jig_test: ok");
   return 0;
 }

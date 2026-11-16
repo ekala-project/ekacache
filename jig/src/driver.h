@@ -57,6 +57,9 @@ struct DriverConf {
 
 // Reads <exe>/../etc/jig.json, else falls back to $JIG_CC. nullopt if neither names a compiler.
 auto LoadDriverConf() -> std::optional<DriverConf>;
+// No flag injection, only the compiler to run: $JIG_CC, or a launcher's program. The binary format
+// is the build machine's, which is all a conf-less jig can know
+auto ConfLessDriverConf(std::string_view compiler) -> DriverConf;
 // `root`: the prefix "@/" in fflags stands for
 auto ParseDriverConf(std::string_view text, std::string_view root = "") -> DriverConf;
 

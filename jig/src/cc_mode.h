@@ -38,6 +38,8 @@ struct Invocation {
 
 auto ParseInvocation(std::span<const std::string> args) -> Invocation;
 
-auto RunCcMode(std::string_view argv0, std::span<const std::string> raw_args, const std::string& socket_path) -> int;
+// `compiler`: the real driver to run (launcher mode). Empty: etc/jig.json's, else $JIG_CC
+auto RunCcMode(std::string_view argv0, std::span<const std::string> raw_args, const std::string& socket_path,
+               std::string_view compiler = {}) -> int;
 
 }  // namespace jig

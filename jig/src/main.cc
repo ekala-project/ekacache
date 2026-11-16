@@ -14,6 +14,7 @@
 #include <optional>
 #include <span>
 #include <string>
+#include <system_error>
 #include <vector>
 
 #include "base.h"
@@ -23,6 +24,7 @@
 #include "fixup_mode.h"
 #include "gocache_mode.h"
 #include "keys.h"
+#include "launcher.h"
 #include "nix_store_mode.h"
 #include "process.h"
 #include "rustc_mode.h"
@@ -73,6 +75,7 @@ auto RunSlotMode(std::span<const std::string> args, const std::string& socket_pa
 
 constexpr const char* kUsage =
     "usage: jig <mode> [args...]   or via a symlink named after the mode\n"
+    "       jig /path/to/<compiler> [args...]   launcher for gcc, clang, rustc or go\n"
     "\n"
     "  cc c++ <args>         compiler driver + compile cache (any other name too)\n"
     "  rustcwrap <args>      rustc through the cache\n"
@@ -100,6 +103,13 @@ auto main(int argc, char** argv) -> int {
     }
     mode = args.front();
     args = args.subspan(1);
+    // `jig /path/to/gcc <args>`: a launcher in front of that compiler (launcher.h)
+    if (mode.contains('/')) {
+      std::error_code error;
+      const std::string self = all.at(0).contains('/') ? std::filesystem::absolute(all.at(0), error).string()
+                                                       : std::filesystem::read_symlink("/proc/self/exe", error).string();
+      return jig::RunLauncher(mode, args, socket_path, self);
+    }
   }
   if (mode == "nix-store") {
     return jig::RunNixStoreMode(args);

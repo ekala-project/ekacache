@@ -562,12 +562,13 @@ auto ParseInvocation(std::span<const std::string> args) -> Invocation {
   return inv;
 }
 
-auto RunCcMode(std::string_view argv0, std::span<const std::string> raw_args, const std::string& socket_path) -> int {
+auto RunCcMode(std::string_view argv0, std::span<const std::string> raw_args, const std::string& socket_path,
+               std::string_view launched) -> int {
   const Stopwatch clock;
   // ghc puts the whole link behind one @rsp, -shared and -o included: classify, key and link
   // policy (no crt_interp.o into a shared object) all need the words themselves
   const std::vector<std::string> user_args = ExpandResponseFiles(raw_args);
-  const std::optional<DriverConf> conf = LoadDriverConf();
+  const std::optional<DriverConf> conf = launched.empty() ? LoadDriverConf() : ConfLessDriverConf(launched);
   if (!conf) {
     std::println(stderr, "jig: no etc/jig.json next to the binary and JIG_CC unset");
     return 1;

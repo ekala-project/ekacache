@@ -7,6 +7,7 @@ common_sources = files(
   'src/elf_fixup.cc',
   'src/fixup_mode.cc',
   'src/gocache_mode.cc',
+  'src/launcher.cc',
   'src/macho_fixup.cc',
   'src/manifest.cc',
   'src/nix_store_mode.cc',
