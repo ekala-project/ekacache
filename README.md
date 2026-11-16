@@ -1,7 +1,26 @@
 # jig
 
-A compile cache for Nix builds. Extracted, with history, from
-[repkgs](https://github.com/Mic92/repkgs) (`pkgs/ji/jig`, `pkgs/ji/jigd`) for use with ekapkgs.
+A compile cache for Nix builds, packaged for use with
+[ekapkgs](https://github.com/ekala-project) (core-pkgs).
+
+## Origin
+
+jig and jigd were written by Jörg Thalheim ([@Mic92](https://github.com/Mic92)) and the repkgs
+contributors as part of [repkgs](https://github.com/Mic92/repkgs), where they live under
+`pkgs/ji/jig` and `pkgs/ji/jigd`. This repository was extracted from repkgs
+(at `e92484a`) with `git filter-repo`, so their full commit history and authorship are
+preserved here. Changes made after the extraction:
+
+- a standalone Meson build for jig, with jigd as a plain Go module
+- builds with GCC and libstdc++ as well as clang and libc++
+- launcher mode (`jig /path/to/<compiler> <args>`), so jig can sit under nixpkgs-style
+  cc-wrapper and rustc-wrapper, and in front of `go`
+- GCC as the compiler being cached
+- cache keys that account for the environment read by nixpkgs-style wrappers
+
+The original MIT license and copyright are kept, see [LICENSE](LICENSE).
+
+## Overview
 
 - **jig** (`jig/`, C++26): sits in front of a compiler. It caches C/C++ objects, configure
   probes, links and replayable failures, rustc library crates, and Go build actions
