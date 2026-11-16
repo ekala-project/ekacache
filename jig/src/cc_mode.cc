@@ -273,6 +273,17 @@ auto Replay(const CachedResult& result, const Invocation& inv) -> int {
   return result.status;
 }
 
+// clang and GCC differ in how a depfile with system headers is asked for
+auto IsClangDriver(const std::string& compiler) -> bool {
+  return fs::path(compiler).filename().string().contains("clang");
+}
+
+// a header or input that is absent now may exist in a later build: clang says "file not found",
+// GCC "<name>: No such file or directory"
+auto MissingInput(std::string_view stderr_text) -> bool {
+  return stderr_text.contains("file not found") || stderr_text.contains("No such file or directory");
+}
+
 // The real compiler run plus what it read: the preprocessor depfile (none for a pure link, then
 // ""), and for links lld's dependency file minus the driver's temp object. nullopt = not learnable
 struct Observed {
@@ -298,7 +309,19 @@ auto RunObserved(CacheClient& cache, const std::string& compiler, const Invocati
   } else if (!own_depfile && !inv.link && !IsAssembly(inv.source)) {
     // -MMD omits -isystem headers, which is every dependency the manifest must see. Assembler
     // input has no cc1 to take the flag
-    args.insert(args.end(), {"-Xclang", "-sys-header-deps"});
+    if (IsClangDriver(compiler)) {
+      args.insert(args.end(), {"-Xclang", "-sys-header-deps"});
+    } else {
+      // GCC has no such switch: ask for -MD instead. The build system's depfile then also lists
+      // system headers, which are immutable store files to make and ninja
+      for (std::string& arg : args) {
+        if (arg == "-MMD") {
+          arg = "-MD";
+        } else if (arg.starts_with("-Wp,-MMD,")) {
+          arg = "-Wp,-MD," + arg.substr(std::string_view("-Wp,-MMD,").size());
+        }
+      }
+    }
   }
   if (inv.to_stdout) {
     args.insert(args.end(), {"-o", inv.output.string()});
@@ -360,7 +383,7 @@ auto CompileAndStore(CacheClient& cache, const std::string& compiler, const Requ
     ForwardStdout(inv, std::nullopt);
     // replayable only if every input is known. A missing header or any link error depends on
     // a killed or crashed compiler says nothing about the inputs
-    if (!dep_text || links || run.stderr_text.contains("file not found") || !Deterministic(run)) {
+    if (!dep_text || links || MissingInput(run.stderr_text) || !Deterministic(run)) {
       LogOutcome("cc", Outcome::kMissFail, subject, clock);
       return run.status;
     }
