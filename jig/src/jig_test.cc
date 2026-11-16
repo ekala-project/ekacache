@@ -454,9 +454,9 @@ void TestRustInvocation() {
   assert(inv.cacheable && inv.source == "src/lib.rs" && inv.crate_name == "foo" && inv.out_dir == "/b/deps" &&
          inv.extra_filename == "-abcd");
   assert(inv.externs == V({"/b/deps/libbar-1.rmeta"}));
-  assert(std::ranges::contains(inv.key_args, "--crate-type=lib"));
-  assert(std::ranges::contains(inv.key_args, "--cap-lints=allow"));
-  assert(!std::ranges::contains(inv.key_args, "-C=metadata=abcd"));
+  assert(std::ranges::contains(inv.key_args, std::string_view("--crate-type=lib")));
+  assert(std::ranges::contains(inv.key_args, std::string_view("--cap-lints=allow")));
+  assert(!std::ranges::contains(inv.key_args, std::string_view("-C=metadata=abcd")));
   assert(!inv.links);
   inv = jig::ParseRustInvocation(V({
       "--crate-name",

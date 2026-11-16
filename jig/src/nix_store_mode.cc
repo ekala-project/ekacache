@@ -50,8 +50,14 @@ constexpr std::array<std::uint32_t, 8> kInitialState = {0x6a09e667, 0xbb67ae85, 
                                                         0x510e527f, 0x9b05688c, 0x1f83d9ab, 0x5be0cd19};
 constexpr size_t kBlockBytes = 64;
 
-// SHA-256 is defined over arithmetic mod 2^32: the one place wrap-around is intended
-__attribute__((no_sanitize("unsigned-integer-overflow"))) void Compress(
+// SHA-256 is defined over arithmetic mod 2^32: the one place wrap-around is intended. Only clang
+// has the unsigned-integer-overflow sanitizer to exempt it from
+#ifdef __clang__
+#define JIG_WRAPS_MOD_2_32 __attribute__((no_sanitize("unsigned-integer-overflow")))
+#else
+#define JIG_WRAPS_MOD_2_32
+#endif
+JIG_WRAPS_MOD_2_32 void Compress(
     std::array<std::uint32_t, 8>& state, std::span<const std::uint8_t, kBlockBytes> block) {
   std::array<std::uint32_t, 64> schedule{};
   for (size_t i = 0; i < 16; ++i) {
