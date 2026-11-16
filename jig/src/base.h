@@ -14,7 +14,7 @@
 
 #include "keys.h"
 
-// Built with libc++ hardening (pkgs/ji/jig/bootstrap.nu): container/span/string_view indexing and
+// Built with libc++ hardening (meson.build): container/span/string_view indexing and
 // optional dereference are bounds-checked at runtime and trap, so plain operator[] is safe here.
 namespace jig {
 

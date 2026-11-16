@@ -23,7 +23,7 @@
 #include <vector>
 
 #define JSON_NOEXCEPTION 1  // NOLINT(cppcoreguidelines-macro-usage): nlohmann-json's configuration knob
-#include <json.hpp>
+#include <nlohmann/json.hpp>
 
 #include "base.h"
 

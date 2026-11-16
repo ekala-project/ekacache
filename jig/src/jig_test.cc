@@ -1,4 +1,4 @@
-// Plain-assert unit tests for the pure parts of jig. Built and run by pkgs/ji/jig/bootstrap.nu
+// Plain-assert unit tests for the pure parts of jig. Built and run by `meson test`
 // before the binary is installed; also: c++ -std=c++26 ... jig_test.cc <srcs> && ./a.out
 #include <stdlib.h>  // NOLINT(modernize-deprecated-headers): setenv is POSIX
 #include <unistd.h>
