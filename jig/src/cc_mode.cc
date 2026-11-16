@@ -86,6 +86,14 @@ auto IsNoOutputOption(std::string_view arg) -> bool {
          arg.starts_with("-dump");
 }
 
+auto EnvironEntries() -> std::vector<std::string> {
+  std::vector<std::string> entries;
+  for (char** entry = environ; *entry != nullptr; ++entry) {  // NOLINT(cppcoreguidelines-pro-bounds-pointer-arithmetic)
+    entries.emplace_back(*entry);
+  }
+  return entries;
+}
+
 // `primary`: the source bytes, or for a link the InputId of every object/archive argument
 auto ComputeRequestKey(const std::string& compiler, const Invocation& inv, std::string_view primary) -> RequestKey {
   const Store& store = Store::Get();
@@ -108,6 +116,7 @@ auto ComputeRequestKey(const std::string& compiler, const Invocation& inv, std::
   if (links) {
     hasher.Field("LIBRARY_PATH=" + store.MaskForReplay(Env("LIBRARY_PATH")));
   }
+  hasher.Field("env=" + store.MaskForReplay(store.MaskOut(KeyEnvironment(EnvironEntries(), links))));
   // never masked: dependency paths a link embeds verbatim (PT_INTERP, RUNPATH). Our own prefix is
   // a placeholder in keys and stored bytes alike (Store::MaskOut), so it may appear anywhere
   for (const std::string& arg : inv.key_args) {
@@ -378,12 +387,20 @@ auto CompileAndStore(CacheClient& cache, const std::string& compiler, const Requ
   const std::string subject = inv.source + " " + why;
   const bool links = inv.link_one || inv.link;
   const auto [run, dep_text, link_dep_text, inputs, absent] = RunObserved(cache, compiler, inv);
+  // store headers do not use them; the build tree's (version.h) might
+  const bool build_time = !links && std::ranges::any_of(inputs, [&](const std::string& input) -> bool {
+    if (store.IsStorePath(input)) {
+      return false;
+    }
+    const std::optional<std::string> text = ReadFile(input);
+    return text && MentionsBuildTime(*text);
+  });
 
   if (run.status != 0) {
     ForwardStdout(inv, std::nullopt);
     // replayable only if every input is known. A missing header or any link error depends on
     // a killed or crashed compiler says nothing about the inputs
-    if (!dep_text || links || MissingInput(run.stderr_text) || !Deterministic(run)) {
+    if (!dep_text || links || build_time || MissingInput(run.stderr_text) || !Deterministic(run)) {
       LogOutcome("cc", Outcome::kMissFail, subject, clock);
       return run.status;
     }
@@ -397,7 +414,7 @@ auto CompileAndStore(CacheClient& cache, const std::string& compiler, const Requ
 
   const std::optional<std::string> object = ReadFile(inv.output);
   ForwardStdout(inv, object);
-  if (!dep_text || !object || (links && !link_dep_text)) {
+  if (!dep_text || !object || (links && !link_dep_text) || build_time) {
     LogOutcome("cc", Outcome::kMissUnstored, subject, clock);
     return 0;
   }
@@ -536,6 +553,36 @@ auto RunUncached(CacheClient& cache, const std::string& socket_path, const std::
 
 }  // namespace
 
+auto KeyEnvironment(std::span<const std::string> environ_entries, bool links) -> std::string {
+  static constexpr std::array kCompilerVars{
+      "CPATH"sv,         "C_INCLUDE_PATH"sv,  "CPLUS_INCLUDE_PATH"sv, "OBJC_INCLUDE_PATH"sv,
+      "GCC_EXEC_PREFIX"sv, "COMPILER_PATH"sv,
+  };
+  // differ between two runs of one build, or say nothing about its outputs
+  static constexpr std::array kVolatile{
+      "NIX_BUILD_TOP"sv,  "NIX_BUILD_CORES"sv, "NIX_LOG_FD"sv, "NIX_ATTRS_JSON_FILE"sv, "NIX_ATTRS_SH_FILE"sv,
+      "NIX_SSL_CERT_FILE"sv, "NIX_REMOTE"sv,   "NIX_PATH"sv,   "NIX_PROFILES"sv,        "NIX_USER_PROFILE_DIR"sv,
+  };
+  std::vector<std::string_view> kept;
+  for (const std::string& entry : environ_entries) {
+    const std::string_view name = std::string_view(entry).substr(0, entry.find('='));
+    const bool wrapper = links && name.starts_with("NIX_") && !std::ranges::contains(kVolatile, name);
+    if (wrapper || std::ranges::contains(kCompilerVars, name)) {
+      kept.push_back(entry);
+    }
+  }
+  std::ranges::sort(kept);
+  std::string out;
+  for (const std::string_view entry : kept) {
+    out.append(entry).push_back('\n');
+  }
+  return out;
+}
+
+auto MentionsBuildTime(std::string_view text) -> bool {
+  return text.contains("__DATE__") || text.contains("__TIME__") || text.contains("__TIMESTAMP__");
+}
+
 auto ParseInvocation(std::span<const std::string> args) -> Invocation {
   Invocation inv;
   inv.args.assign(args.begin(), args.end());
@@ -581,7 +628,17 @@ auto ParseInvocation(std::span<const std::string> args) -> Invocation {
   // /dev/null: a flag probe. Nothing to replay, and the observed run puts temp files beside -o
   inv.cacheable = inv.cacheable && inv.output.extension() != ".pch" && inv.output.extension() != ".gch" &&
                   inv.output != "/dev/null";
+  // clang's frontend called directly (some build systems, our own driver's children): its own
+  // argument language, nothing for us to classify
+  if (!args.empty() && (args.front() == "-cc1" || args.front() == "-cc1as")) {
+    inv.cacheable = false;
+    inv.query = true;
+  }
   Classify(inv, sources, objects, stop);
+  // gold has no --dependency-file to learn a link's inputs from
+  if ((inv.link || inv.link_one) && std::ranges::contains(args, std::string_view("-fuse-ld=gold"))) {
+    inv.cacheable = false;
+  }
   return inv;
 }
 
@@ -629,6 +686,7 @@ auto RunCcMode(std::string_view argv0, std::span<const std::string> raw_args, co
   std::optional<std::string> primary;
   if (inv.cacheable) {
     primary = PrimaryIdentity(inv);
+    inv.cacheable = inv.link || !primary || !MentionsBuildTime(*primary);
   }
   if (!inv.cacheable || !primary || !cache.Connect(socket_path)) {
     return RunUncached(

@@ -670,6 +670,23 @@ void TestClassifyLaunch() {
   }
 }
 
+void TestKeyEnvironment() {
+  const std::vector<std::string> env{
+      "PATH=/bin", "NIX_HARDENING_ENABLE=bindnow relro", "NIX_BUILD_TOP=/build", "CPATH=/inc",
+      "NIX_LDFLAGS=-rpath /nix/store/x/lib", "NIX_LOG_FD=2", "NIX_ATTRS_SH_FILE=/build/.attrs.sh"};
+  assert(jig::KeyEnvironment(env, false) == "CPATH=/inc\n");
+  assert(jig::KeyEnvironment(env, true) ==
+         "CPATH=/inc\nNIX_HARDENING_ENABLE=bindnow relro\nNIX_LDFLAGS=-rpath /nix/store/x/lib\n");
+  assert(jig::MentionsBuildTime("const char* d = __DATE__;"));
+  assert(!jig::MentionsBuildTime("int x;"));
+}
+
+void TestParseGuards() {
+  assert(!jig::ParseInvocation(std::vector<std::string>{"-cc1", "-emit-obj", "-o", "a.o", "a.c"}).cacheable);
+  assert(!jig::ParseInvocation(std::vector<std::string>{"-fuse-ld=gold", "a.o", "-o", "a"}).cacheable);
+  assert(jig::ParseInvocation(std::vector<std::string>{"-fuse-ld=bfd", "a.o", "-o", "a"}).cacheable);
+}
+
 auto main() -> int {
   setenv("JIG_STORE_IDENTITY", "content", 1);  // NOLINT(concurrency-mt-unsafe): before any Store::Get
   setenv("JIG_STORE_ROOTS", VENDOR_ROOT, 1);   // NOLINT(concurrency-mt-unsafe)
@@ -698,6 +715,8 @@ auto main() -> int {
   TestMachOFixup();
   TestNixStore();
   TestClassifyLaunch();
+  TestKeyEnvironment();
+  TestParseGuards();
   std::println("jig_test: ok");
   return 0;
 }

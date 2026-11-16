@@ -38,6 +38,16 @@ struct Invocation {
 
 auto ParseInvocation(std::span<const std::string> args) -> Invocation;
 
+// The environment a key covers, from "NAME=value" entries. Compiles: the variables the compiler
+// itself reads (CPATH and friends). Links additionally hash every NIX_* variable but the
+// per-build ones: a bintools wrapper runs after jig and turns them into linker flags (hardening,
+// rpaths, NIX_LDFLAGS_AFTER) jig never sees as arguments.
+auto KeyEnvironment(std::span<const std::string> environ_entries, bool links) -> std::string;
+
+// __DATE__, __TIME__ and __TIMESTAMP__ expand to the build's time (SOURCE_DATE_EPOCH), which a
+// package set may derive from the newest source file, so text using them is never replayed
+auto MentionsBuildTime(std::string_view text) -> bool;
+
 // `compiler`: the real driver to run (launcher mode). Empty: etc/jig.json's, else $JIG_CC
 auto RunCcMode(std::string_view argv0, std::span<const std::string> raw_args, const std::string& socket_path,
                std::string_view compiler = {}) -> int;
