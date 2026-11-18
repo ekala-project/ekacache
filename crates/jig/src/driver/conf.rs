@@ -374,6 +374,14 @@ mod tests {
             .unwrap();
         assert_eq!(c, conf_less(b"/bin/cc"));
         assert!(!c.present);
+        // the build host's format (`driver.cc:439`): Mach-O on Apple, so conf-less links there
+        // are uncacheable (`jig-driver-policy.md §$JIG_CC and conf-less mode`)
+        let host = if cfg!(target_vendor = "apple") {
+            BinFmt::MachO
+        } else {
+            BinFmt::Elf
+        };
+        assert_eq!(c.binfmt, host);
         std::fs::create_dir(dir.path().join("etc")).unwrap();
         // Q-DRV-1: a conf without cc ignores JIG_CC
         std::fs::write(dir.path().join("etc/jig.json"), r#"{"flags":[]}"#).unwrap();

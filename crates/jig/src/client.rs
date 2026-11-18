@@ -19,7 +19,7 @@ use std::os::fd::{AsRawFd, OwnedFd};
 
 use jig_core::bytes::{itoa, parse_uint};
 use jig_core::frame;
-use rustix::net::{AddressFamily, SendFlags, SocketFlags, SocketType};
+use rustix::net::{AddressFamily, SendFlags, SocketType};
 
 /// Values longer than this on the wire close the connection (`kMaxObjectSize`, 2 GiB).
 pub const MAX_OBJECT_SIZE: u64 = 1 << 31;
@@ -38,20 +38,14 @@ pub fn sun_path_len() -> usize {
 
 /// `Connect` steps 1-4 (`cache_client.cc:27-44`), without HELLO: refuse a path of
 /// `sizeof(sun_path)` bytes or more without a syscall, `socket(AF_UNIX, SOCK_STREAM |
-/// SOCK_CLOEXEC)`, and `connect` with the path copied into a zeroed `sockaddr_un` and
+/// SOCK_CLOEXEC)` (see `stream_socket` for macOS), and `connect` with the path copied into a zeroed `sockaddr_un` and
 /// `addrlen = sizeof(sockaddr_un)`. Shared with nix-store (`jig-nix-store.md §Socket`).
 #[must_use]
 pub fn connect_unix(path: &[u8]) -> Option<OwnedFd> {
     if path.len() >= sun_path_len() {
         return None;
     }
-    let fd = rustix::net::socket_with(
-        AddressFamily::UNIX,
-        SocketType::STREAM,
-        SocketFlags::CLOEXEC,
-        None,
-    )
-    .ok()?;
+    let fd = stream_socket().ok()?;
     // SAFETY: as above.
     #[allow(unsafe_code)]
     let mut addr: libc::sockaddr_un = unsafe { std::mem::zeroed() };
@@ -72,6 +66,35 @@ pub fn connect_unix(path: &[u8]) -> Option<OwnedFd> {
     };
     (rc == 0).then_some(fd)
 }
+
+/// `socket(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC)`.
+#[cfg(not(target_vendor = "apple"))]
+fn stream_socket() -> rustix::io::Result<OwnedFd> {
+    rustix::net::socket_with(
+        AddressFamily::UNIX,
+        SocketType::STREAM,
+        rustix::net::SocketFlags::CLOEXEC,
+        None,
+    )
+}
+
+/// macOS has no `SOCK_CLOEXEC` (`11-macos.md` §Inventory): `socket`, then
+/// `fcntl(F_SETFD, FD_CLOEXEC)`. Nothing runs between the two in jig's single thread.
+#[cfg(target_vendor = "apple")]
+fn stream_socket() -> rustix::io::Result<OwnedFd> {
+    let fd = rustix::net::socket(AddressFamily::UNIX, SocketType::STREAM, None)?;
+    rustix::io::fcntl_setfd(&fd, rustix::io::FdFlags::CLOEXEC)?;
+    Ok(fd)
+}
+
+/// The flags of every `send` to jigd: `MSG_NOSIGNAL`, so a daemon that hung up is a failed send,
+/// not a `SIGPIPE`.
+#[cfg(not(target_vendor = "apple"))]
+const SEND_FLAGS: SendFlags = SendFlags::NOSIGNAL;
+
+/// macOS has no `MSG_NOSIGNAL`; the socket carries `SO_NOSIGPIPE` instead (set in `attach`).
+#[cfg(target_vendor = "apple")]
+const SEND_FLAGS: SendFlags = SendFlags::empty();
 
 /// A connection to jigd, or none (`CacheClient`).
 pub struct Client {
@@ -158,6 +181,12 @@ impl Client {
     }
 
     fn attach(&mut self, fd: OwnedFd) {
+        // macOS: `SO_NOSIGPIPE` in place of `MSG_NOSIGNAL` (`11-macos.md`). Only the cache client
+        // sets it; nix-store shares `connect_unix` and keeps `SIGPIPE` (Q-NIX-7). It does not
+        // fail on a connected AF_UNIX socket; if it did, a send to a closed daemon would raise
+        // `SIGPIPE`, as legacy built without `MSG_NOSIGNAL` would.
+        #[cfg(target_vendor = "apple")]
+        let _ = rustix::net::sockopt::set_socket_nosigpipe(&fd, true);
         self.fd = Some(fd);
         self.start = 0;
         self.end = 0;
@@ -175,7 +204,7 @@ impl Client {
             return false;
         };
         while !data.is_empty() {
-            match rustix::net::send(fd, data, SendFlags::NOSIGNAL) {
+            match rustix::net::send(fd, data, SEND_FLAGS) {
                 Ok(n) if n > 0 => data = &data[n..],
                 _ => return false,
             }

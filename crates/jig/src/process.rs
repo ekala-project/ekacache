@@ -20,7 +20,7 @@
 //! sound in a multi-threaded test process as well.
 
 use std::ffi::{CString, c_char};
-use std::os::fd::AsRawFd;
+use std::os::fd::{AsRawFd, OwnedFd};
 
 use jig_core::env::Env;
 
@@ -116,6 +116,22 @@ pub struct RunResult {
     pub captured: Vec<u8>,
 }
 
+/// `pipe2(O_CLOEXEC)`.
+#[cfg(not(target_vendor = "apple"))]
+fn cloexec_pipe() -> Option<(OwnedFd, OwnedFd)> {
+    rustix::pipe::pipe_with(rustix::pipe::PipeFlags::CLOEXEC).ok()
+}
+
+/// macOS has no `pipe2` (`11-macos.md`): `pipe`, then `FD_CLOEXEC` on both ends. jig forks from
+/// one thread, so no child can inherit the ends between the calls.
+#[cfg(target_vendor = "apple")]
+fn cloexec_pipe() -> Option<(OwnedFd, OwnedFd)> {
+    let (r, w) = rustix::pipe::pipe().ok()?;
+    rustix::io::fcntl_setfd(&r, rustix::io::FdFlags::CLOEXEC).ok()?;
+    rustix::io::fcntl_setfd(&w, rustix::io::FdFlags::CLOEXEC).ok()?;
+    Some((r, w))
+}
+
 /// `Run(program, args, mode)`: `execvp(program, [program, args...])` with a `PATH` search when
 /// `program` has no `/`, and wait.
 pub fn run<A: AsRef<[u8]>>(
@@ -136,9 +152,7 @@ pub fn run<A: AsRef<[u8]>>(
     // originals in the child at exec, as legacy closes them by hand
     let pipe = match capture {
         Capture::Inherit => None,
-        Capture::Stderr | Capture::Stdout => {
-            rustix::pipe::pipe_with(rustix::pipe::PipeFlags::CLOEXEC).ok()
-        }
+        Capture::Stderr | Capture::Stdout => cloexec_pipe(),
     };
 
     // SAFETY: fork has no preconditions; the child below only calls async-signal-safe

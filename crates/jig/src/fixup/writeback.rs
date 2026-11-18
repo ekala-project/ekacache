@@ -79,6 +79,9 @@ fn write_file(path: &[u8], data: &[u8], errno: &mut Errno) -> bool {
         .is_some()
 }
 
+/// `S_IWUSR` as a `u32` (`mode_t` is `u16` on macOS).
+const OWNER_WRITE: u32 = 0o200;
+
 /// `WriteBack(path, bytes)`. On failure the message is written here; the caller counts the
 /// error.
 pub fn write_back(out: &mut Out, path: &[u8], bytes: &[u8]) -> bool {
@@ -89,7 +92,7 @@ pub fn write_back(out: &mut Out, path: &[u8], bytes: &[u8]) -> bool {
     if let Some(m) = mode {
         errno.record(std::fs::set_permissions(
             p,
-            Permissions::from_mode(m | libc::S_IWUSR),
+            Permissions::from_mode(m | OWNER_WRITE),
         ));
     }
     let written = write_file(path, bytes, &mut errno);
