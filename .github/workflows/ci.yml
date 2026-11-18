@@ -1,0 +1,154 @@
+# CI for the Rust workspace (implementation/01-workspace.md §CI, 12-testing.md).
+#
+# Every job runs in nix-shell (shell.nix), so CI uses the same rustc, clippy, libzstd and
+# legacy build inputs as a local checkout. nixpkgs is pinned to the revision the work was
+# tested against.
+name: ci
+
+on:
+  push:
+  pull_request:
+  schedule:
+    - cron: "17 3 * * *" # nightly: bench and fuzz
+  workflow_dispatch:
+
+env:
+  NIX_PATH: nixpkgs=https://github.com/NixOS/nixpkgs/archive/8fd9daa3db09ced9700431c5b7ad0e8ba199b575.tar.gz
+  CARGO_TERM_COLOR: never
+  QUINT_VERSION: 0.33.1
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  check:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: cachix/install-nix-action@v31
+      - name: fmt
+        run: nix-shell --run 'cargo fmt --all --check && (cd fuzz && cargo fmt --check)'
+      - name: clippy
+        run: nix-shell --run 'cargo clippy --workspace --all-targets --locked -- -D warnings'
+      - name: cargo deny
+        run: nix-shell --run 'cargo deny --locked check'
+      - name: spec cross-checks
+        run: |
+          scripts/check-legacy-ports.sh
+          scripts/check-allow-list.sh
+          nix-shell --run scripts/check-vectors.sh
+      - name: macOS cfg branches (type-check and lint)
+        run: nix-shell --run scripts/check-macos.sh
+
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [ubuntu-24.04, ubuntu-24.04-arm]
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: cachix/install-nix-action@v31
+      - name: cargo test (unit, vectors, ported legacy tests)
+        run: nix-shell --run 'cargo test --workspace --locked'
+
+  quint:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: cachix/install-nix-action@v31
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: install quint
+        run: npm install -g "@informalsystems/quint@$QUINT_VERSION"
+      - name: quint test (unchanged models)
+        run: |
+          quint test --main=slots spec/slots.qnt
+          quint test spec/store.qnt
+          quint test spec/jigd_protocol.qnt
+          quint test spec/twokey.qnt
+          quint test spec/builder_rpc.qnt
+      - name: quint run (safety invariants)
+        run: |
+          quint run --main=slots       --invariant=safety       --max-steps=60 --max-samples=5000  spec/slots.qnt
+          quint run --main=slotNesting --invariant=noNestedWait --max-steps=20                     spec/slots.qnt
+          quint run --invariant=safety --max-steps=50 --max-samples=3000  spec/store.qnt
+          quint run --invariant=safety --max-steps=40 --max-samples=5000  spec/jigd_protocol.qnt
+          quint run --invariant=sound  --max-steps=30 --max-samples=20000 spec/twokey.qnt
+          quint run --invariant=entriesSound --max-steps=30 --max-samples=20000 spec/twokey.qnt
+          quint run --invariant=safety --max-steps=30 --max-samples=10000 spec/gocache.qnt
+          quint run --invariant=safety --max-steps=40 --max-samples=20000 spec/builder_rpc.qnt
+      - name: generate ITF traces
+        run: QUINT="$(command -v quint)" scripts/gen-itf.sh
+      - name: replay traces
+        shell: bash # -o pipefail, so tee keeps cargo's exit status
+        run: |
+          nix-shell --run 'cargo build -p jigd --locked && JIG_RUST_JIGD=$PWD/target/debug/jigd cargo test --locked -p jigd -p jig --test store_itf --test slots_itf --test protocol_itf --test twokey_itf --test nix_store_quint -- --nocapture' 2>&1 | tee replay.log
+          # a replay test with no traces passes and says so: that must not happen here
+          ! grep -q 'no traces' replay.log
+
+  difftest:
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [ubuntu-24.04, ubuntu-24.04-arm]
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: cachix/install-nix-action@v31
+      - name: build legacy and the real compilers
+        run: |
+          echo "JIG_LEGACY_JIG=$(nix-build --no-out-link -A legacy.jig)/bin/jig" >>"$GITHUB_ENV"
+          echo "JIG_LEGACY_JIGD=$(nix-build --no-out-link -A legacy.jigd)/bin/jigd" >>"$GITHUB_ENV"
+          echo "JIG_TEST_GCC=$(nix-build --no-out-link '<nixpkgs>' -A gcc15)/bin/gcc" >>"$GITHUB_ENV"
+          echo "JIG_TEST_CLANG=$(nix-build --no-out-link '<nixpkgs>' -A clang_20)/bin/clang" >>"$GITHUB_ENV"
+      - name: Rust jig + Rust jigd, against legacy
+        run: nix-shell --run 'cargo build -p jigd --locked && JIG_RUST_JIGD=$PWD/target/debug/jigd cargo test --workspace --locked'
+      - name: Rust jig + Go jigd
+        run: nix-shell --run 'cargo test -p jig --locked'
+
+  bench:
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: cachix/install-nix-action@v31
+      - name: "hit latency and jigd round trips (gate: Rust <= legacy + 5%)"
+        run: |
+          legacy_jig=$(nix-build --no-out-link -A legacy.jig)/bin/jig
+          legacy_jigd=$(nix-build --no-out-link -A legacy.jigd)/bin/jigd
+          nix-shell --run "cargo build --release --locked -p jig -p jigd && scripts/bench.sh target/release/jig target/release/jigd $legacy_jig $legacy_jigd \$(command -v cc)"
+
+  fuzz:
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: cachix/install-nix-action@v31
+      - name: 60 s per target, against legacy
+        run: |
+          legacy_jig=$(nix-build --no-out-link -A legacy.jig)/bin/jig
+          nix-shell --run "cargo build --release --locked -p jig && JIG_RUST_JIG=\$PWD/target/release/jig JIG_LEGACY_JIG=$legacy_jig scripts/fuzz.sh 60"
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: fuzz-artifacts
+          path: fuzz/artifacts/
+
+  macos:
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [macos-15, macos-13] # aarch64, x86_64
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: cachix/install-nix-action@v31
+      - name: build legacy
+        run: |
+          echo "JIG_LEGACY_JIG=$(nix-build --no-out-link -A legacy.jig)/bin/jig" >>"$GITHUB_ENV"
+          echo "JIG_LEGACY_JIGD=$(nix-build --no-out-link -A legacy.jigd)/bin/jigd" >>"$GITHUB_ENV"
+      - name: test and difftest
+        run: nix-shell --run 'cargo build -p jigd --locked && JIG_RUST_JIGD=$PWD/target/debug/jigd cargo test --workspace --locked'
