@@ -12,6 +12,9 @@ path = "src/lib.rs"
 [[bin]]
 name = "jig"
 path = "src/main.rs"
+# `#![no_main]`: the binary has no test harness; its behaviour is tested through the library and
+# the integration tests in tests/
+test = false
 
 [dependencies]
 jig-core = { workspace = true, features = ["frame"] }

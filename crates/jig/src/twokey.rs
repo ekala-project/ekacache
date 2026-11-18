@@ -1,0 +1,114 @@
+//! The two-key engine over a jigd connection (`behaviors/jig-keys.md §Manifest`,
+//! `manifest.cc:94-178`, `spec/twokey.qnt`).
+//!
+//! The manifest logic itself (k2, `!absent` lines, ADOPTED Q-KEY-3) is `jig_core::manifest`; this
+//! module supplies the daemon's `IDS` answers and the `m/<k1>` lookup.
+
+use jig_core::keys::{RequestKey, ResultKey, slot};
+use jig_core::manifest::{self, Manifest, Unstorable};
+use jig_core::store_path::Store;
+
+use crate::client::Client;
+
+/// `FindResult(cache, k1)`: `GET m/<k1>`; no value (miss, I/O error, bad frame) is `new-key`,
+/// otherwise `ValidateManifest` gives k2 or `inputs-changed:<path>` / `appeared:<path>`.
+pub fn find_result(
+    client: &mut Client,
+    store: &Store,
+    k1: &RequestKey,
+) -> Result<ResultKey, Vec<u8>> {
+    let Some(text) = client.get(&slot::manifest(k1)) else {
+        return Err(b"new-key".to_vec());
+    };
+    manifest::validate(store, k1, &text, &mut |paths: &[&[u8]]| {
+        client.identities(paths)
+    })
+}
+
+/// `BuildManifest` after a compile, identities prefetched from the daemon. ADOPTED Q-KEY-3: an
+/// input without an identity makes the result unstorable.
+pub fn build_manifest<I: AsRef<[u8]>, A: AsRef<[u8]>>(
+    client: &mut Client,
+    store: &Store,
+    k1: &RequestKey,
+    inputs: &[I],
+    primary_source: &[u8],
+    absent: &[A],
+) -> Result<Manifest, Unstorable> {
+    manifest::build(
+        store,
+        k1,
+        inputs,
+        primary_source,
+        absent,
+        &mut |paths: &[&[u8]]| client.identities(paths),
+    )
+}
+
+/// `PrefetchIdentities` for the front ends' toolchain and stdlib ids.
+pub fn prefetch_identities<P: AsRef<[u8]>>(client: &mut Client, store: &Store, paths: &[P]) {
+    manifest::prefetch_identities(store, paths, &mut |p: &[&[u8]]| client.identities(p));
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use jig_core::env::Env;
+    use jig_core::hasher::hash_of;
+    use jig_core::keys::Tool;
+    use std::io::Write;
+    use std::os::fd::OwnedFd;
+    use std::os::unix::net::UnixStream;
+
+    #[test]
+    fn find_result_paths() {
+        let dir = tempfile::tempdir().unwrap();
+        let a = dir.path().join("a.h");
+        std::fs::write(&a, "int a;\n").unwrap();
+        let a = a.as_os_str().as_encoded_bytes().to_vec();
+        let gone = dir.path().join("gone.h");
+        let gone = gone.as_os_str().as_encoded_bytes().to_vec();
+        let store = Store::from_env(&Env::default());
+        let k1 = RequestKey::new(Tool::Cc, &hash_of(b"k1"));
+
+        let (s, mut peer) = UnixStream::pair().unwrap();
+        let mut c = Client::from_fd(OwnedFd::from(s), 1);
+        let m = build_manifest(&mut c, &store, &k1, &[&a], b"", &[&gone]).unwrap();
+        // a hit: the stored manifest still matches
+        let wire = jig_core::frame::encode(&m.text).unwrap();
+        peer.write_all(format!("OK {}\n", wire.len()).as_bytes())
+            .unwrap();
+        peer.write_all(&wire).unwrap();
+        assert_eq!(find_result(&mut c, &store, &k1), Ok(m.result_key.clone()));
+        // a miss
+        peer.write_all(b"MISS\n").unwrap();
+        assert_eq!(find_result(&mut c, &store, &k1), Err(b"new-key".to_vec()));
+        // the absent path appeared
+        std::fs::write(os(&gone), "").unwrap();
+        peer.write_all(format!("OK {}\n", wire.len()).as_bytes())
+            .unwrap();
+        peer.write_all(&wire).unwrap();
+        let mut why = b"appeared:".to_vec();
+        why.extend_from_slice(&gone);
+        assert_eq!(find_result(&mut c, &store, &k1), Err(why));
+        // an input changed
+        std::fs::remove_file(os(&gone)).unwrap();
+        std::fs::write(os(&a), "int b;\n").unwrap();
+        peer.write_all(format!("OK {}\n", wire.len()).as_bytes())
+            .unwrap();
+        peer.write_all(&wire).unwrap();
+        let mut why = b"inputs-changed:".to_vec();
+        why.extend_from_slice(&a);
+        assert_eq!(find_result(&mut c, &store, &k1), Err(why));
+        // ADOPTED Q-KEY-3: an unreadable input is not storable
+        std::fs::remove_file(os(&a)).unwrap();
+        assert_eq!(
+            build_manifest(&mut c, &store, &k1, &[&a], b"", &[] as &[&[u8]]),
+            Err(Unstorable::Unreadable(store.key(&a)))
+        );
+    }
+
+    fn os(b: &[u8]) -> &std::path::Path {
+        jig_core::bytes::os_path(b)
+    }
+}
