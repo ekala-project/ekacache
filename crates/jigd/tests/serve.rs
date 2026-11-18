@@ -602,6 +602,11 @@ fn connections_are_independent() {
     let mut c = Client::connect(&srv.sock);
     c.put(b"k", b"v");
     assert_eq!(c.get(b"k"), Some(b"v".to_vec()));
-    assert!(c.stats().contains(" slots=1 waiting=1 "));
+    // b's SLOT is served on its own connection, so it may not have queued yet
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+    while !c.stats().contains(" slots=1 waiting=1 ") {
+        assert!(std::time::Instant::now() < deadline, "b never queued");
+        std::thread::sleep(std::time::Duration::from_millis(5));
+    }
     assert!(b.quiet());
 }
