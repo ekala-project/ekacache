@@ -23,9 +23,39 @@
 //!  - `drainOne` releases one build of the model's choosing: the build is the one whose count
 //!    in the model's `connHeld` dropped (the action's own `b` shadows the step's `b` in
 //!    `mbt::nondetPicks`).
+//!
+//! Witnesses (12 §L4.3): some state must queue two waiters (`witnessQueueNonEmpty`), and no
+//! state may queue a waiter whose peer is gone (`witnessAbandonedWaiterGranted`, unreachable
+//! under the adopted `CANCEL_ABANDONED`).
+//!
+//! `slots_socket_traces_replay` replays the same model through a real jigd (`common::InProc`
+//! with `LIMIT` slots) over its socket, one connection per model connection, from traces of
+//! `tests/itf-wrappers/slots_socket.qnt`:
+//!
+//! ```text
+//! quint run tests/itf-wrappers/slots_socket.qnt --step=socketStep --mbt \
+//!     --out-itf='tests/itf/slots_socket/t{seq}.itf.json' --n-traces=200 --max-steps=60 \
+//!     --max-samples=200 --seed=1 --invariant=safety
+//! ```
+//!
+//! `requestSlot` writes `SLOT b` and must get `OK` at once or nothing; `done` writes `DONE b`
+//! and must get `OK`; `peerCloses` closes the socket; `reconnect` opens a new one. A connection
+//! the model moves from `Blocked` to `Idle` must then get its `OK`. Whenever no connection is
+//! draining, the server's pool (tokens out, per-build counts, queued builds in order) must come
+//! to the model's. Where the socket replay and the model differ in form only:
+//!  - jigd drains a closed connection at once, so the wrapper runs `drainOne` steps right after
+//!    `peerCloses`, and the pool is compared only once the drain is over;
+//!  - jigd releases a closed connection's tokens in build order (its `held` is a `BTreeMap`),
+//!    where the model's `drainOne` picks any build. With nobody queued the order changes
+//!    nothing; a trace whose drain takes another order while a waiter is queued is replayed up
+//!    to that step and counted.
+
+mod common;
 
 use std::collections::{BTreeMap, HashMap};
+use std::time::Duration;
 
+use common::{Client, InProc, eventually, show};
 use jig_testkit::itf::{self, State, Trace, Value};
 use jigd::slots::{Acquire, Slots, Ticket};
 use tokio::sync::oneshot::error::TryRecvError;
@@ -382,6 +412,7 @@ fn slots_traces_replay() {
     let mut actions: BTreeMap<String, usize> = BTreeMap::new();
     let mut states = 0;
     let mut queued = 0;
+    let mut two_queued = 0;
     for path in &files {
         let trace = Trace::read(path).unwrap_or_else(|x| panic!("{x}"));
         for st in &trace.states {
@@ -396,13 +427,216 @@ fn slots_traces_replay() {
             {
                 queued += 1;
             }
+            let m = Model::parse(st).unwrap_or_else(|x| panic!("{}: {x}", path.display()));
+            if m.waiting.len() >= 2 {
+                two_queued += 1;
+            }
+            // witnessAbandonedWaiterGranted must not be reachable under CANCEL_ABANDONED
+            for (c, _) in &m.waiting {
+                assert!(
+                    m.conns.get(c).is_some_and(|k| k.up),
+                    "{}: conn {c} is queued with its peer gone",
+                    path.display()
+                );
+            }
         }
         states += replay(&trace).unwrap_or_else(|x| panic!("{}: {x}", path.display()));
     }
     // the traces must exercise the queue, or the replay proves little
     assert!(queued > 0, "no trace ever queued a waiter");
+    assert!(
+        two_queued > 0,
+        "witnessQueueNonEmpty: no trace queued two waiters"
+    );
     eprintln!(
-        "replayed {} traces, {states} states ({queued} with waiters): {actions:?}",
+        "replayed {} traces, {states} states ({queued} with waiters, {two_queued} with two or more): {actions:?}",
+        files.len()
+    );
+}
+
+/// How long a SLOT the model blocks is watched for a wrong `OK`.
+const BLOCKED_WAIT: Duration = Duration::from_millis(20);
+
+/// The socket replay: one real connection per model connection.
+struct Sock {
+    srv: InProc,
+    conns: BTreeMap<i64, Option<Client>>,
+}
+
+impl Sock {
+    fn conn(&mut self, c: i64) -> Res<&mut Client> {
+        self.conns
+            .get_mut(&c)
+            .and_then(Option::as_mut)
+            .ok_or(format!("conn {c} has no open socket"))
+    }
+
+    fn line(&mut self, c: i64, what: &str) -> Res<()> {
+        let k = self.conn(c)?;
+        let l = k
+            .try_line()
+            .ok_or(format!("conn {c}: no reply to {what}: {:?}", k.end()))?;
+        if l == b"OK\n" {
+            Ok(())
+        } else {
+            Err(format!("conn {c}: {what} answered {}", show(&l)))
+        }
+    }
+
+    /// False when the model drains in an order jigd does not.
+    fn step(&mut self, action: &str, st: &State, pre: &Model, post: &Model) -> Res<bool> {
+        // quint names a step by the action under its `any`; the wrapper's drain branch has none
+        let action = if action == "socketStep" {
+            "drainOne"
+        } else {
+            action
+        };
+        let name = if action == "drainOne" { "d" } else { "c" };
+        let c = st
+            .pick(name)
+            .map_err(e)?
+            .ok_or(format!("no {name} pick"))?
+            .int()
+            .map_err(e)?;
+        let b = match st.pick("b").map_err(e)? {
+            Some(v) => v.str().map_err(e)?.as_bytes().to_vec(),
+            None => Vec::new(),
+        };
+        let bs = String::from_utf8_lossy(&b).into_owned();
+        let blocked = |m: &Model, c: i64| {
+            m.conns
+                .get(&c)
+                .is_some_and(|k| matches!(k.phase, Phase::Blocked(_)))
+        };
+        match action {
+            "requestSlot" => {
+                self.conn(c)?.send(format!("SLOT {bs}\n").as_bytes());
+                if blocked(post, c) {
+                    let k = self.conn(c)?;
+                    let got = k.within(BLOCKED_WAIT);
+                    if !got.is_empty() || k.end().is_some() {
+                        return Err(format!(
+                            "conn {c}: SLOT should block, got {} and {:?}",
+                            show(&got),
+                            k.end()
+                        ));
+                    }
+                } else {
+                    self.line(c, "SLOT")?;
+                }
+            }
+            "done" => {
+                self.conn(c)?.send(format!("DONE {bs}\n").as_bytes());
+                self.line(c, "DONE")?;
+            }
+            "peerCloses" => {
+                self.conns.insert(c, None);
+            }
+            "drainOne" => {
+                let held = &pre.conns.get(&c).ok_or("no such conn")?.held;
+                // the order only matters when a release grants a waiter
+                if let Some(first) = held.keys().next()
+                    && !pre.waiting.is_empty()
+                    && drained(pre, post, c)? != *first
+                {
+                    return Ok(false);
+                }
+            }
+            "reconnect" => {
+                self.conns.insert(c, Some(self.srv.connect()));
+            }
+            a => return Err(format!("unknown action {a}")),
+        }
+        // every connection the model woke gets its OK
+        for (&d, k) in &post.conns {
+            if blocked(pre, d) && k.phase == Phase::Idle {
+                self.line(d, "a queued SLOT")?;
+            }
+        }
+        if post.conns.values().all(|k| k.phase != Phase::Draining) {
+            let want = (
+                post.out,
+                post.held.clone(),
+                post.waiting
+                    .iter()
+                    .map(|(_, b)| b.clone())
+                    .collect::<Vec<_>>(),
+            );
+            let got = || {
+                let s = self.srv.ctx.slots.snapshot();
+                (
+                    s.out,
+                    s.held,
+                    s.waiting.into_iter().map(|(_, b)| b).collect::<Vec<_>>(),
+                )
+            };
+            if !eventually(|| got() == want) {
+                return Err(format!("pool {:?}, want {want:?}", got()));
+            }
+        }
+        Ok(true)
+    }
+}
+
+/// States replayed, and whether the trace stopped on a drain order.
+fn replay_socket(trace: &Trace) -> Res<(usize, bool)> {
+    let Some(first) = trace.states.first() else {
+        return Err("empty trace".into());
+    };
+    let mut pre = Model::parse(first)?;
+    let srv = InProc::start(LIMIT);
+    let conns = pre
+        .conns
+        .keys()
+        .map(|&c| (c, Some(srv.connect())))
+        .collect();
+    let mut s = Sock { srv, conns };
+    for (i, st) in trace.states.iter().enumerate().skip(1) {
+        let post = Model::parse(st)?;
+        let action = st.action().map_err(e)?.to_owned();
+        if !s
+            .step(&action, st, &pre, &post)
+            .map_err(|x| format!("state {i} ({action}): {x}"))?
+        {
+            return Ok((i, true));
+        }
+        pre = post;
+    }
+    Ok((trace.states.len(), false))
+}
+
+#[test]
+fn slots_socket_traces_replay() {
+    let files = itf::trace_files("slots_socket");
+    if files.is_empty() {
+        eprintln!(
+            "note: no traces under tests/itf/slots_socket/; generate them with quint (see this file's header). Skipping."
+        );
+        return;
+    }
+    let (mut states, mut stopped, mut grants) = (0, 0, 0);
+    for path in &files {
+        let trace = Trace::read(path).unwrap_or_else(|x| panic!("{x}"));
+        let (n, stop) = replay_socket(&trace).unwrap_or_else(|x| panic!("{}: {x}", path.display()));
+        for w in trace.states[..n].windows(2) {
+            let (Ok(a), Ok(z)) = (Model::parse(&w[0]), Model::parse(&w[1])) else {
+                continue;
+            };
+            grants += a
+                .conns
+                .iter()
+                .filter(|(c, k)| {
+                    matches!(k.phase, Phase::Blocked(_))
+                        && z.conns.get(c).is_some_and(|k| k.phase == Phase::Idle)
+                })
+                .count();
+        }
+        states += n;
+        stopped += usize::from(stop);
+    }
+    assert!(grants > 0, "no trace ever granted a queued SLOT");
+    eprintln!(
+        "socket: replayed {} traces, {states} states, {grants} queued grants; {stopped} stopped on drain order",
         files.len()
     );
 }
