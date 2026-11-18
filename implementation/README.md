@@ -114,3 +114,4 @@ The plan does not resolve these. Each blocks only the item named:
 | [11-macos.md](11-macos.md) | the macOS phase |
 | [12-testing.md](12-testing.md) | test layers: vectors, ported tests, differential, Quint MBT, fuzzing |
 | [13-rollout.md](13-rollout.md) | packaging, mixed fleets, cutover, legacy removal, TODO list |
+| [STATUS.md](STATUS.md) | what is done per phase, test and performance results, decisions awaiting sign-off |
