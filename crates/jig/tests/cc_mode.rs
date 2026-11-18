@@ -269,47 +269,45 @@ fn run_corpus(jig: &Path) -> Vec<Run> {
         .collect()
 }
 
-/// TV-37 on the Rust binary.
+/// TV-37 on the Rust binary: the `end-to-end` rows of `tests/vectors/jig-driver-policy.toml`.
 #[test]
 fn tv37_end_to_end() {
     let jig = Path::new(JIG);
-    let root = Root::new(jig, Some(r#"{"cc":"<R>/fakecc","flags":["-fx"]}"#));
-    let r = root.run("cc", &["-print-search-dirs"], &[]);
-    assert_eq!(r.status, Some(0));
-    assert_eq!(r.stdout, "install: /i\nprograms: =/p\nlibraries: =/l\n");
-    let meta = r#"-Wl,--package-metadata={"type":"repkgs"}"#;
-    let pkgs = r#"{"<R>":{"ldflags":["-L/dep/lib","-L","/x"],"cflags":["-DP"]}}"#;
-    let r = root.run("cc", &["-print-search-dirs"], &[("PKGS_CC", pkgs)]);
-    assert_eq!(
-        r.stderr,
-        format!(
-            "[--start-no-unused-arguments][-fx][-DP][-Wl,--build-id=sha1][{meta}][--end-no-unused-arguments][-print-search-dirs]\n"
-        )
-    );
-    assert!(r.stdout.ends_with("\nlibraries: =/l:/dep/lib\n"), "{r:?}");
-    assert_eq!(r.log, ["cc\tquery\t"]);
-
-    let r = root.run("gfortran", &["-c", "a.f"], &[]);
-    assert_eq!(r.status, Some(1));
-    assert_eq!(
-        r.stderr,
-        "jig: gfortran called but etc/jig.json names no fc\n"
-    );
-
-    let root = Root::new(jig, Some(r#"{"flags":[]}"#));
-    let r = root.run("cc", &["-c", "a.c"], &[("JIG_CC", "/bin/true")]);
-    assert_eq!(r.status, Some(1));
-    assert_eq!(
-        r.stderr,
-        "jig: no etc/jig.json next to the binary and JIG_CC unset\n"
-    );
-
-    let root = Root::new(jig, None);
-    let r = root.run("c++", &["-c", "a.cc", "-O0"], &[("JIG_CC", "<R>/fakecc")]);
-    assert_eq!(r.status, Some(0));
-    assert_eq!(r.stderr, "[-c][a.cc][-O0]\n");
-    // a.cc does not exist: no primary
-    assert_eq!(r.log, ["cc\tuncacheable-nosrc\ta.cc"]);
+    let file = jig_testkit::vectors::VectorFile::load("jig-driver-policy");
+    for v in file.of_kind("end-to-end", 5) {
+        let at = v.label();
+        let root = Root::new(jig, v.opt_str("conf"));
+        let env: Vec<(&str, &str)> = v
+            .strs("env")
+            .into_iter()
+            .map(|kv| kv.split_once('=').unwrap())
+            .collect();
+        let r = root.run(v.str("tool"), &v.strs("args"), &env);
+        let mut checked = 0;
+        if v.get("status").is_some() {
+            assert_eq!(
+                r.status,
+                Some(i32::try_from(v.int("status")).unwrap()),
+                "{at}: {r:?}"
+            );
+            checked += 1;
+        }
+        for (key, got) in [("stdout", &r.stdout), ("stderr", &r.stderr)] {
+            if let Some(want) = v.opt_str(key) {
+                assert_eq!(got, want, "{at}: {key}");
+                checked += 1;
+            }
+        }
+        if let Some(tail) = v.opt_str("stdout_ends_with") {
+            assert!(r.stdout.ends_with(tail), "{at}: {r:?}");
+            checked += 1;
+        }
+        if let Some(log) = v.opt_strs("log") {
+            assert_eq!(r.log, log, "{at}");
+            checked += 1;
+        }
+        assert!(checked > 0, "{at}: no expectation");
+    }
 }
 
 /// The driver-argv difftest: legacy and Rust print the same argv, output and log rows.

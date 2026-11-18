@@ -36,23 +36,10 @@ pub fn with_package_lib_dirs<F: AsRef<[u8]>>(search_dirs: &[u8], ldflags: &[F]) 
 mod tests {
     use super::*;
 
+    /// Beyond TV-20 and TV-34, which `tests/driver_vectors.rs` reads from
+    /// `tests/vectors/jig-driver-policy.toml`.
     #[test]
-    fn tv20_tv34() {
-        let text = b"programs: =/cc/bin\nlibraries: =/cc/lib/clang/23:/sysroot/lib\n";
-        assert_eq!(
-            with_package_lib_dirs(text, &["-L/deps/zlib/lib", "-Wl,-z,now", "-L/deps/xz/lib"]),
-            b"programs: =/cc/bin\nlibraries: =/cc/lib/clang/23:/sysroot/lib:/deps/zlib/lib:/deps/xz/lib\n"
-        );
-        assert_eq!(with_package_lib_dirs(text, &[] as &[&str]), text);
-        assert_eq!(
-            with_package_lib_dirs(b"programs: =/a\nlibraries: =", &["-L/x", "-L", "/y", "-Lz"]),
-            b"programs: =/a\nlibraries: =:/x:z\n"
-        );
-        assert_eq!(with_package_lib_dirs(b"", &["-L/x"]), b"");
-        assert_eq!(
-            with_package_lib_dirs(b"a\n\nlibraries: =/l\n", &["-L/x"]),
-            b"a\n\nlibraries: =/l:/x\n"
-        );
+    fn crlf_has_no_libraries_line() {
         assert_eq!(with_package_lib_dirs(b"\r\n", &["-L/x"]), b"\r\n");
     }
 }

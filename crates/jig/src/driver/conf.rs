@@ -283,46 +283,10 @@ mod tests {
         assert_eq!(c.fflags, v(&["/lib"]));
     }
 
+    /// Beyond TV-36, which `tests/driver_vectors.rs` reads from
+    /// `tests/vectors/jig-driver-policy.toml`.
     #[test]
-    fn tv36_parse_errors() {
-        let not_object = Err(Fatal::Exit(b"jig.json: not a JSON object\n".to_vec()));
-        for t in [
-            &b"[]"[..],
-            b"",
-            br#"{"cc":"/c"} x"#,
-            br#"{"cc":"/c", /*c*/ "x":1}"#,
-            b"{\"cc\":\"\xff\"}",
-        ] {
-            assert_eq!(parse_driver_conf(t, b""), not_object);
-        }
-        assert_eq!(
-            parse_driver_conf(br#"{"cc":"/c","binfmt":"pe"}"#, b""),
-            Err(Fatal::Exit(
-                b"jig.json: binfmt pe is none of elf, macho, coff\n".to_vec()
-            ))
-        );
-        assert_eq!(
-            parse_driver_conf(br#"{"cc":"/c","binfmt":""}"#, b""),
-            Err(Fatal::Exit(
-                b"jig.json: binfmt  is none of elf, macho, coff\n".to_vec()
-            ))
-        );
-        let c = parse_driver_conf(br#"{"cc":"/c","binfmt":5}"#, b"").unwrap();
-        assert_eq!(c.binfmt, BinFmt::Elf);
-        let c = parse_driver_conf(br#"{"cc":"/c","flags":"x","libc":7}"#, b"").unwrap();
-        assert!(c.flags.is_empty() && c.libc.is_empty());
-        let c = parse_driver_conf(br#"{"cc":"/a","cc":"/b"}"#, b"").unwrap();
-        assert_eq!(c.cc, b"/b");
-        let c = parse_driver_conf(b"\xef\xbb\xbf{\"cc\":\"/bom\"}", b"").unwrap();
-        assert_eq!(c.cc, b"/bom");
-        assert_eq!(
-            parse_driver_conf(br#"{"cc":"/c","flags":[1]}"#, b""),
-            Err(Fatal::Abort)
-        );
-        assert_eq!(
-            parse_driver_conf(br#"{"cc":"/c","flags":[1],"binfmt":"pe"}"#, b""),
-            Err(Fatal::Abort)
-        );
+    fn empty_interp_and_no_cc() {
         let c = parse_driver_conf(br#"{"interp":"","binfmt":"coff"}"#, b"").unwrap();
         assert_eq!(c.interp, b"");
         assert_eq!(c.binfmt, BinFmt::Coff);
@@ -333,27 +297,18 @@ mod tests {
     fn pkgs_cc() {
         let root = b"/r";
         let ok = |t: &str| package_flags(t.as_bytes(), root).unwrap();
-        for t in [
-            "",
-            r#"{"/r":5}"#,
-            "not json",
-            r#"[{"/r":1}]"#,
-            r#"{"/r/":{"cflags":["x"]}}"#,
-            r#"{"/r":{}}"#,
-        ] {
+        // TV-37's rows are in `tests/driver_vectors.rs`
+        for t in ["", r#"{"/r":{}}"#] {
             assert_eq!(ok(t), PackageCcFlags::default(), "{t}");
         }
         let f = ok(r#"{"/r":{"cflags":["-DP"],"ldflags":["-L/dep/lib","-L","/x"]}}"#);
         assert_eq!(f.cflags, v(&["-DP"]));
         assert_eq!(f.ldflags, v(&["-L/dep/lib", "-L", "/x"]));
         assert!(f.cxxflags.is_empty());
-        for t in [
-            r#"{"/r":{"cflags":"x"}}"#,
-            r#"{"/r":{"cflags":null}}"#,
-            r#"{"/r":{"ldflags":["a",2]}}"#,
-        ] {
-            assert_eq!(package_flags(t.as_bytes(), root), Err(Fatal::Abort), "{t}");
-        }
+        assert_eq!(
+            package_flags(br#"{"/r":{"ldflags":["a",2]}}"#, root),
+            Err(Fatal::Abort)
+        );
     }
 
     #[test]

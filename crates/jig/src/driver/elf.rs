@@ -177,16 +177,11 @@ pub fn elf_link(conf: &DriverConf, cxx: bool, user: &mut UserArgs, out: &mut Vec
 mod tests {
     use super::*;
 
+    /// Beyond TV-19 and TV-35, which `tests/driver_vectors.rs` reads from
+    /// `tests/vectors/jig-driver-policy.toml`.
     #[test]
-    fn tv19_tv35_shared_lib_names() {
+    fn shared_lib_names() {
         for (name, want) in [
-            ("libz.so", true),
-            ("libz.so.1.3", true),
-            ("libz.son", false),
-            ("x.o", false),
-            ("libz.so.1a", false),
-            ("a.dylib", true),
-            ("libz.so.", true),
             ("x.so", true),
             ("x.dylib.1", false),
             ("libz.so.1.so", true),
