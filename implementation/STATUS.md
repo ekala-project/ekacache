@@ -10,9 +10,9 @@ or what is still missing.
 
 | Phase | Commits | Exit criterion |
 |---|---|---|
-| P0 | `0769b87` | Vectors pass (`jig-core` unit tests, `go_vectors`). **No CI config exists**, so "CI green" is not met (see §Not built). |
-| P1 | `3f849ec` | Met: `store_test.go` ported (`store`, `legacy_store`); each implementation opens the other's store (`difftest_store_compat`); Quint store traces replay (`store_itf`). |
-| P2 | `c9f5a59`, `2176bdb` | Ported serve/slots/identity tests pass; wire transcripts match the Go jigd (`difftest_wire`); slots traces replay (`slots_itf`). The C++ jig's difftests and a compile smoke test pass against the Rust jigd. **No nixpkgs-style package build** was run with the C++ jig. |
+| P0 | `0769b87` | Vectors pass: every vector section of `behaviors/` is extracted to `tests/vectors/<doc>.toml`, which the tests read (§L1 below). A CI workflow exists (`.github/workflows/ci.yml`) but **has not run on GitHub yet**, so "CI green" is not shown. |
+| P1 | `3f849ec` | Met: `store_test.go` ported (`store`, `legacy_store`); each implementation opens the other's store (`difftest_store_compat`); Quint store traces replay, and the model's witnesses are checked (`store_itf`). |
+| P2 | `c9f5a59`, `2176bdb` | Ported serve/slots/identity tests pass; wire transcripts match the Go jigd (`difftest_wire`); slots traces replay in-process and over jigd's socket (`slots_itf`), and so do `jigd_protocol` traces (`protocol_itf`). The C++ jig's difftests and a compile smoke test pass against the Rust jigd. **No nixpkgs-style package build** was run with the C++ jig. |
 | P3 | `81a8005` | Met: dispatch/usage/exit-code difftests (`binary`, `legacy_jig`); the client talks to the Go jigd, falling back to v0 (`client_jigd`). |
 | P4 | `6044c3f` | Met: blobs interchangeable with the C++ jig (`cache_cmd` difftests). |
 | P5 | `d451990`, `e03b0e3` | Met: `jig_test.cc` parse/key tests ported (`legacy_jig`, `2d5de7b`); k1/k2 identical to the C++ jig with real GCC 15.3 and clang 20.1 (`cc_mode`). The corpus is the test corpus, not a package set. |
@@ -25,19 +25,70 @@ or what is still missing.
 
 ## Test results
 
-All on Linux x86_64, at `04033fb`. The legacy jig is the GCC 15 build from `nix-build -A
-legacy.jig`, the Go jigd is `legacy/jigd` built with Go 1.25.9, and the real compilers are GCC
-15.3 and clang 20.1.
+All on Linux x86_64, at `2d708bb`. The legacy jig is the GCC 15 build from `nix-build -A
+legacy.jig`, the Go jigd is `nix-build -A legacy.jigd`, and the real compilers are GCC 15.2 and
+clang 20.1.8 from the pinned nixpkgs (the ones the CI difftest job uses). The ITF traces were
+generated with `scripts/gen-itf.sh` and quint 0.33.1.
 
 | Combination | Result |
 |---|---|
-| Rust jig + Rust jigd, every gate set (`cargo test --workspace`) | 448 passed, 0 failed, 1 ignored (the HELLO benchmark, by design) |
-| Rust jig + Go jigd (`cargo test -p jig`, no `JIG_RUST_JIGD`) | 310 passed, 0 failed, 1 ignored |
+| Rust jig + Rust jigd, every gate set (`cargo test --workspace`), twice | 462 passed, 0 failed, 1 ignored (the HELLO benchmark, by design) |
+| Rust jig + Go jigd (`cargo test -p jig`, no `JIG_RUST_JIGD`) | 313 passed, 0 failed, 1 ignored |
 | C++ jig + Rust jigd | difftests and compile smoke pass |
 | Go jigd ↔ Rust jigd store files | each opens the other's store (`difftest_store_compat`) |
-| Nix sandbox: `nix-build -A jig` | 448 passed; the gated tests skip themselves |
+| Nix sandbox: `nix-build -A jig` | 462 passed; the gated tests skip themselves |
 | Nix sandbox: `nix-build -A legacy.jig` | `jig_test` passes (it segfaulted under GCC 14, see below) |
 | macOS (aarch64, x86_64) | type-check and clippy only, clean |
+| `cargo deny check` | advisories, bans, licenses, sources: ok |
+| `scripts/check-legacy-ports.sh`, `check-allow-list.sh`, `check-vectors.sh` | pass |
+
+Two test-harness races showed up in these runs and are fixed: `ETXTBSY` when a test execs a
+binary it has just written while another thread forks (`1c28c67`), and
+`connections_are_independent` reading STATS before the second SLOT had queued (`23af4d6`).
+
+### L1: spec vectors
+
+| File | Entries | Read by |
+|---|---|---|
+| `jig-keys.toml` | 59 | `jig-core/tests/spec_vectors.rs` |
+| `jig-cache-client.toml` | 1 | `jig-core/tests/spec_vectors.rs` |
+| `jigd-identities.toml` | 2 | `jigd/tests/identity.rs` |
+| `jig-driver-policy.toml` | 90 | `jig/tests/driver_vectors.rs`, `cc_mode.rs` (`tv37_end_to_end`) |
+| `jig-reloc-fixup.toml` | 41 | `fixup/image.rs`, `fixup/mod.rs`, `fixup_vectors.rs`, `fixup_macho.rs` |
+| `jig-nix-store.toml` | 42 | `nix_store/hash.rs`, `nix_store/drv.rs`, `nix_store_offline.rs`, `nix_store_rpc.rs`, and the `nix_store_support` constants |
+
+Entries marked `doc-only` are extracted but not checked from the file: the jig-keys `e670…`
+prefix example (no Digest-from-hex constructor), the six ELF end-to-end fixup outputs (they
+depend on the host's gcc and glibc, so `elf_end_to_end` builds them), and the nix-store daemon
+example (no fixed bytes for its version string). TV-37's "SIGABRT even for `cc --version`" is
+checked through `package_flags`, not the binary. The file is read by a TOML-subset reader in
+`jig-testkit`, so no TOML crate was added.
+
+### L4: Quint replays
+
+| Model | Traces | States | Notes |
+|---|---|---|---|
+| store | 100 | 6,100 | witnesses: eviction 5,056 and demoted 3,001 states; power-loss fallback and over-budget-after-start never occur (5,276 states have `powerLost`) |
+| slots, in-process | 200 | 12,200 | 373 states queue two or more waiters; an abandoned waiter is never granted |
+| slots, over jigd's socket | 200 | 11,655 | 21 traces stop early where jigd's sorted drain order differs from the model's free choice |
+| jigd_protocol | 300 | 1,497 | the model's own traces are short, as most requests end the connection |
+| jigd_protocol, long wrapper | 200 | 4,866 | 17 GET hits, 37 misses after eviction, 53 blocked SLOTs, 7 grants |
+| twokey | 300 | 9,300 | `witnessReplay` and `witnessCachedFailure` reached; dropping the missed-lookup paths makes the replay fail |
+
+The two wrapper modules (`tests/itf-wrappers/`) are subsets of their model's `step`;
+`spec/*.qnt` is unchanged. Both socket replays fail, as they should, with one slot too many.
+
+### L5: fuzzing
+
+`scripts/fuzz.sh`, 12 targets, libFuzzer without a sanitizer (nixpkgs' rustc ships none), the
+process targets compared with the C++ jig. 20–30 s per target, all clean at `2d708bb`. What
+the runs found:
+
+- `elf_fixup`: legacy prints libstdc++'s `terminate` text where both abort with the same bytes.
+  That is decision 11, and it is the one difference the fixup targets tolerate.
+- `nix_drv_json`: the target called `derivation_to_aterm` in-process, which aborts by design on
+  type errors (Q-NIX-4). Both jigs abort identically; the target now runs it only in the jig
+  process (`eebd97c`).
 
 ## Performance (12 §Performance checks)
 
@@ -152,15 +203,21 @@ These quirks are kept, though they look unreasonable:
 
 ## Not built, or not run
 
-- **CI.** There is no CI config. The jobs in 01 §CI, including the difftest and macOS jobs, need
-  writing.
+- **CI has not run.** `.github/workflows/ci.yml` has every job from 01 §CI, but it has never
+  run on GitHub. Expect first-run fixes. Things to check:
+  - the runner labels (`ubuntu-24.04-arm`, `macos-15`, `macos-13`);
+  - the nixpkgs pin, `8fd9daa3db09ced9700431c5b7ad0e8ba199b575` (the archive exists);
+  - quint 0.33.1 from npm.
+
+  The bench and fuzz jobs are nightly only.
 - **Testing infrastructure from 12 that was not built as specified:**
-  - the `jig-testkit` harness (TOML scenarios, recording proxy, fakes) is a stub; each phase
-    has its own Rust difftest harness instead, and `jig-testkit` holds only the ITF reader;
-  - `tests/difftest/allow.toml`;
-  - the extraction of `tests/vectors/<doc>.toml` and its CI check;
-  - the L5 fuzz targets;
-  - a socket-level replay of `spec/jigd_protocol.qnt`.
+  - The `jig-testkit` harness (TOML scenarios, recording proxy, fakes) was not built. Each
+    phase has its own Rust difftest harness, with proxies and fakes where it needs them.
+    `jig-testkit` holds the ITF reader, the vector reader and the `ETXTBSY` retry.
+  - `tests/difftest/allow.toml` lists one rule per adopted change, with the tests that pin it,
+    and `scripts/check-allow-list.sh` keeps it in step with `behaviors/README.md`. The
+    harnesses apply the rules in code, at the `ADOPTED Q-…` lines; nothing reads the file at
+    run time.
 
   The jigd peer refusal is tested only in-process.
 - **The macOS tests have not run on a Mac**, only the cross type-check and lint.
