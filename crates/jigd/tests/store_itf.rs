@@ -26,6 +26,12 @@
 //!  - adopted Q-STORE-2 rule 1 deletes an empty active pack at `Close`, where the model seals it
 //!    and drops it at the next open; the deleted id is then reused by the store but not by the
 //!    model, so model pack ids are mapped to real ones (both sequences are increasing).
+//!
+//! Witnesses (12 §L4.3), evaluated on the replayed model states: `witnessEviction` (a pack was
+//! deleted from the last tier) and `witnessDemoted` (a pack left tier 0) must be reached;
+//! `witnessPowerLossFallback` (after a power loss an index entry is not the newest record of its
+//! key) and a violation of `idleWithinBudgetEvenAfterStart` must not be, since FSYNC_ON_SEAL and
+//! KICK_AT_START are adopted.
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::os::unix::fs::FileExt;
@@ -209,6 +215,58 @@ impl Model {
             .find(|r| r.key == key && r.off + REC_HEADER + KLEN == l.off && r.vlen == l.len)
             .map(|r| r.ver)
             .ok_or_else(|| format!("no record for {key} at {}", l.off))
+    }
+}
+
+/// Which of the model's witnesses hold in a state.
+#[derive(Debug, Default, Clone, Copy)]
+struct Witnesses {
+    eviction: usize,
+    demoted: usize,
+    power_loss_fallback: usize,
+    over_budget_after_start: usize,
+}
+
+impl Witnesses {
+    fn add(&mut self, st: &State) -> Res<()> {
+        let m = Model::parse(st)?;
+        let max_id = st.var("maxId").and_then(Value::int).map_err(e)?;
+        let power_lost = st.var("powerLost").and_then(Value::bool).map_err(e)?;
+        let n = i64::try_from(m.packs.len()).map_err(|x| x.to_string())?;
+        // not(witnessEviction) = not(maxId < 4 or |packs| >= maxId - 1)
+        if max_id >= 4 && n < max_id - 1 {
+            self.eviction += 1;
+        }
+        if m.packs.values().any(|p| p.tier != 0) {
+            self.demoted += 1;
+        }
+        // newestWinsRaw: no pack newer than an entry's holds a record of its key
+        let newest = m.index.iter().all(|(k, l)| {
+            m.packs
+                .iter()
+                .filter(|(id, _)| **id > l.pack)
+                .all(|(id, p)| {
+                    m.files
+                        .get(&(p.tier, *id))
+                        .is_none_or(|f| f.recs.iter().all(|r| r.key != *k))
+                })
+        });
+        if power_lost && !m.index.is_empty() && !newest {
+            self.power_loss_fallback += 1;
+        }
+        if !m.demoting && m.copying == -1 {
+            for (t, budget) in BUDGET.iter().enumerate() {
+                let t64 = i64::try_from(t).map_err(|x| x.to_string())?;
+                let victim = m
+                    .packs
+                    .iter()
+                    .any(|(id, p)| p.tier == t64 && *id != m.active);
+                if *budget > 0 && m.totals[t] > *budget && victim {
+                    self.over_budget_after_start += 1;
+                }
+            }
+        }
+        Ok(())
     }
 }
 
@@ -621,17 +679,27 @@ fn store_traces_replay() {
     }
     let mut actions: BTreeMap<String, usize> = BTreeMap::new();
     let mut states = 0;
+    let mut w = Witnesses::default();
     for path in &files {
         let trace = Trace::read(path).unwrap_or_else(|x| panic!("{x}"));
         for st in &trace.states {
             *actions
                 .entry(st.action().unwrap_or("?").to_owned())
                 .or_default() += 1;
+            w.add(st)
+                .unwrap_or_else(|x| panic!("{}: {x}", path.display()));
         }
         states += replay(&trace).unwrap_or_else(|x| panic!("{}: {x}", path.display()));
     }
     eprintln!(
-        "replayed {} traces, {states} states: {actions:?}",
+        "replayed {} traces, {states} states: {actions:?}; witnesses {w:?}",
         files.len()
+    );
+    assert!(w.eviction > 0, "witnessEviction never reached");
+    assert!(w.demoted > 0, "witnessDemoted never reached");
+    assert_eq!(w.power_loss_fallback, 0, "witnessPowerLossFallback reached");
+    assert_eq!(
+        w.over_budget_after_start, 0,
+        "idleWithinBudgetEvenAfterStart violated"
     );
 }
