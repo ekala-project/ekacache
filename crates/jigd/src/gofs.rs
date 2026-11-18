@@ -351,3 +351,105 @@ pub fn is_not_exist(e: &GoErr) -> bool {
 pub fn is_exist(e: &GoErr) -> bool {
     e.errno() == Some(EEXIST)
 }
+
+/// A path for a syscall, or `None` if it holds a NUL byte (Go's `syscall.ByteSliceFromString`
+/// fails with `EINVAL` there, where `os_path` would cut the path short).
+pub fn nul_free(path: &[u8]) -> Option<&Path> {
+    if path.contains(&0) {
+        return None;
+    }
+    Some(p(path))
+}
+
+/// The index of the last `/` in `dest` at or after `from` (Go's backwards scan that stops at
+/// the volume).
+fn last_slash(dest: &[u8], from: usize) -> Option<usize> {
+    dest.get(from..)
+        .and_then(|tail| tail.iter().rposition(|&c| c == b'/'))
+        .map(|i| i + from)
+}
+
+/// `filepath.EvalSymlinks` on Unix (`walkSymlinks` in Go 1.25's `path/filepath/symlink.go`),
+/// ported literally: components are resolved one at a time with `Lstat` and `Readlink`, at
+/// most 255 links are followed, and a non-directory with components left after it is
+/// `ENOTDIR`. The result is `Clean`ed. `None` on any error (`jigd-identities.md` §Algorithm
+/// step 2 needs only success or failure). This is not `fs::canonicalize`, which treats `..` and
+/// dangling links differently.
+pub fn eval_symlinks(path: &[u8]) -> Option<Vec<u8>> {
+    let mut path = path.to_vec();
+    let mut vol_len = usize::from(path.first() == Some(&b'/'));
+    let mut vol = path[..vol_len].to_vec();
+    let mut dest = vol.clone();
+    let mut links_walked = 0;
+    let mut start = vol_len;
+    while start < path.len() {
+        while start < path.len() && path[start] == b'/' {
+            start += 1;
+        }
+        let mut end = start;
+        while end < path.len() && path[end] != b'/' {
+            end += 1;
+        }
+        if end == start {
+            // no more path components
+            break;
+        }
+        let comp = &path[start..end];
+        if comp == b"." {
+            start = end;
+            continue;
+        }
+        if comp == b".." {
+            // back up to the previous component if possible (vol_len counts a leading slash)
+            match last_slash(&dest, vol_len) {
+                Some(r) if &dest[r + 1..] != b".." => dest.truncate(r),
+                // no slash after the volume, or dest ends in a ".." we had to keep: keep this
+                _ => {
+                    if dest.len() > vol_len {
+                        dest.push(b'/');
+                    }
+                    dest.extend_from_slice(b"..");
+                }
+            }
+            start = end;
+            continue;
+        }
+        // an ordinary component
+        if !dest.is_empty() && dest.last() != Some(&b'/') {
+            dest.push(b'/');
+        }
+        dest.extend_from_slice(comp);
+        let meta = std::fs::symlink_metadata(nul_free(&dest)?).ok()?;
+        if !meta.file_type().is_symlink() {
+            if !meta.is_dir() && end < path.len() {
+                return None; // ENOTDIR
+            }
+            start = end;
+            continue;
+        }
+        links_walked += 1;
+        if links_walked > 255 {
+            return None; // "EvalSymlinks: too many links"
+        }
+        let link = std::fs::read_link(nul_free(&dest)?).ok()?;
+        let link = link.as_os_str().as_encoded_bytes();
+        let mut next = link.to_vec();
+        next.extend_from_slice(&path[end..]);
+        path = next;
+        if link.first() == Some(&b'/') {
+            // a symlink to an absolute path
+            dest = b"/".to_vec();
+            vol = b"/".to_vec();
+            vol_len = 1;
+            start = 1;
+        } else {
+            // a symlink to a relative path: replace the last component of dest
+            match last_slash(&dest, vol_len) {
+                Some(r) => dest.truncate(r),
+                None => dest.clone_from(&vol),
+            }
+            start = 0;
+        }
+    }
+    Some(crate::gopath::clean(&dest))
+}

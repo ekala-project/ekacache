@@ -1,5 +1,5 @@
-//! The `jigd` binary (`behaviors/jigd-daemon.md`).
+//! The `jigd` binary (`behaviors/jigd-daemon.md`); everything lives in [`jigd::daemon`].
 
 fn main() {
-    std::process::exit(2);
+    jigd::daemon::main();
 }
