@@ -1,0 +1,115 @@
+# L5 fuzz targets (implementation/12-testing.md §L5), run with cargo-fuzz:
+#
+#   RUSTC_BOOTSTRAP=1 cargo fuzz run --sanitizer none <target> -- -max_total_time=60
+#
+# A workspace of its own, so the main workspace never builds libFuzzer. The targets that run
+# processes (`nix_drv_json`, `elf_fixup`, `macho_fixup`) need JIG_RUST_JIG (a release jig) and
+# compare with JIG_LEGACY_JIG when it is set. scripts/fuzz.sh seeds the corpora and runs them all.
+[package]
+name = "jig-fuzz"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+[package.metadata]
+cargo-fuzz = true
+
+[workspace]
+members = ["."]
+
+[dependencies]
+libfuzzer-sys = "0.4"
+arbitrary = { version = "1", features = ["derive"] }
+jig-core = { path = "../crates/jig-core" }
+jig = { path = "../crates/jig" }
+jigd = { path = "../crates/jigd" }
+serde_json = "1"
+tempfile = "3"
+
+[profile.release]
+debug = 1
+
+[[bin]]
+name = "wire_fields"
+path = "fuzz_targets/wire_fields.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "wire_request"
+path = "fuzz_targets/wire_request.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "frame_decode"
+path = "fuzz_targets/frame_decode.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "store_load"
+path = "fuzz_targets/store_load.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "gocache_line"
+path = "fuzz_targets/gocache_line.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "nix_drv_json"
+path = "fuzz_targets/nix_drv_json.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "elf_fixup"
+path = "fuzz_targets/elf_fixup.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "macho_fixup"
+path = "fuzz_targets/macho_fixup.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "depfile_parse"
+path = "fuzz_targets/depfile_parse.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "rsp_expand"
+path = "fuzz_targets/rsp_expand.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "listing_parse"
+path = "fuzz_targets/listing_parse.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "driver_json"
+path = "fuzz_targets/driver_json.rs"
+test = false
+doc = false
+bench = false
+

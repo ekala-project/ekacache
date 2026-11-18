@@ -1,6 +1,7 @@
 [workspace]
 resolver = "3"
 members = ["crates/jig-core", "crates/jigd", "crates/jig", "crates/jig-testkit"]
+exclude = ["fuzz"]
 
 [workspace.package]
 version = "0.2.0"

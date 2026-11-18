@@ -18,6 +18,9 @@ mod offline;
 mod rpc;
 mod wire;
 
+/// For the `nix_drv_json` fuzz target.
+pub use drv::derivation_to_aterm;
+
 use std::io::{Read, Write};
 
 use jig_core::store_path::STORE_DIR;

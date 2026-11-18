@@ -246,9 +246,9 @@ impl Uploader<'_> {
     }
 }
 
-/// One parsed listing line (`Entry`).
+/// One parsed listing line (`Entry`). Public for the `listing_parse` fuzz target.
 #[derive(Debug, PartialEq, Eq)]
-struct Entry {
+pub struct Entry {
     kind: u8,
     mode: u64,
     /// The blob hash (`f`) or the link target (`l`).
@@ -258,7 +258,8 @@ struct Entry {
 
 /// `ParseListing(text)` (§get-dir step 3): lines without a tab, or whose part before the first
 /// tab is not three words, are skipped; a mode that is not octal is `0644`.
-fn parse_listing(text: &[u8]) -> Vec<Entry> {
+#[must_use]
+pub fn parse_listing(text: &[u8]) -> Vec<Entry> {
     split(text, b'\n', false)
         .into_iter()
         .filter_map(|line| {
