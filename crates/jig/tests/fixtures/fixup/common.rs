@@ -3,6 +3,7 @@
 //! (`implementation/12-testing.md`, difftests gated on `JIG_LEGACY_JIG`).
 #![allow(dead_code, clippy::unwrap_used)]
 
+use jig_testkit::busy::CommandBusyExt as _;
 use std::ffi::OsStr;
 use std::os::unix::ffi::OsStrExt;
 use std::os::unix::fs::{MetadataExt, PermissionsExt};
@@ -74,7 +75,7 @@ pub fn copy_tree(src: &Path, dst: &Path) {
         .arg("-a")
         .arg(src)
         .arg(dst)
-        .status()
+        .status_busy()
         .unwrap();
     assert!(st.success(), "cp -a {} {}", src.display(), dst.display());
 }
@@ -225,7 +226,7 @@ pub fn run_mode(bin: &Path, cwd: &Path, args: &[Vec<u8>], sink: Sink, limit: Dur
     if sink != Sink::StderrClosed {
         cmd.stderr(std::fs::File::create(&err_path).unwrap());
     }
-    let mut child = cmd.spawn().unwrap();
+    let mut child = cmd.spawn_busy().unwrap();
     let mut pipe = child.stdout.take();
     let reader = std::thread::spawn(move || {
         let mut buf = Vec::new();
@@ -497,7 +498,7 @@ pub fn gcc() -> Option<&'static Gcc> {
     GCC.get_or_init(|| {
         let out = Command::new("gcc")
             .arg("-print-file-name=libc.so.6")
-            .output()
+            .output_busy()
             .ok()
             .filter(|o| o.status.success());
         let Some(out) = out else {
@@ -557,7 +558,7 @@ impl Gcc {
             .current_dir(&self.src)
             .env("NIX_DONT_SET_RPATH", "1")
             .env("NIX_LDFLAGS", "")
-            .output()
+            .output_busy()
             .unwrap();
         assert!(
             out.status.success(),

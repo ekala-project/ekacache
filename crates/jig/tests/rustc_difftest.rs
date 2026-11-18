@@ -14,6 +14,7 @@ mod common;
 #[path = "fixtures/rustc/harness.rs"]
 mod harness;
 
+use jig_testkit::busy::CommandBusyExt as _;
 use std::ffi::{OsStr, OsString};
 use std::os::unix::ffi::OsStrExt;
 use std::os::unix::fs::PermissionsExt;
@@ -741,7 +742,10 @@ fn difftest_pack_interop() {
 #[test]
 fn difftest_real_rustc() {
     let Some(t) = setup() else { return };
-    let Ok(o) = Command::new("rustc").args(["--print", "sysroot"]).output() else {
+    let Ok(o) = Command::new("rustc")
+        .args(["--print", "sysroot"])
+        .output_busy()
+    else {
         eprintln!("no rustc on PATH: skipped");
         return;
     };

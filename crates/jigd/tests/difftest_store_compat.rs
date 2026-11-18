@@ -21,6 +21,7 @@
 // pack and hint names are compared byte for byte, as the daemons do
 #![allow(clippy::case_sensitive_file_extension_comparisons)]
 
+use jig_testkit::busy::CommandBusyExt as _;
 use std::collections::BTreeMap;
 use std::io::{BufRead, BufReader, Read, Write};
 use std::os::unix::net::UnixStream;
@@ -62,7 +63,7 @@ impl GoJigd {
         if let Some(c) = cold {
             cmd.env("JIGD_COLD", c);
         }
-        let child = cmd.spawn().expect("start Go jigd");
+        let child = cmd.spawn_busy().expect("start Go jigd");
         let d = GoJigd { child, sock };
         let deadline = Instant::now() + Duration::from_secs(20);
         while UnixStream::connect(&d.sock).is_err() {

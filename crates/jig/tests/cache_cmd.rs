@@ -7,6 +7,7 @@
 
 mod common;
 
+use jig_testkit::busy::CommandBusyExt as _;
 use std::collections::BTreeMap;
 use std::ffi::OsStr;
 use std::os::unix::fs::{MetadataExt, PermissionsExt, symlink};
@@ -29,7 +30,7 @@ fn run_with(bin: &OsStr, sock: &Path, args: &[&OsStr], extra: &[(&str, &str)]) -
     for (k, v) in extra {
         cmd.env(k, v);
     }
-    cmd.output().unwrap()
+    cmd.output_busy().unwrap()
 }
 
 fn jig(sock: &Path, args: &[&str]) -> Output {
@@ -156,7 +157,7 @@ fn blobs() {
             .args(["cache", verb, "user/key", name])
             .current_dir(dir.path())
             .env("JIG_SOCK", &d.sock)
-            .output()
+            .output_busy()
             .unwrap();
         assert_eq!(o.status.code(), Some(0), "{verb}");
         assert!(o.stdout.is_empty() && o.stderr.is_empty());
@@ -259,7 +260,7 @@ fn make_tree(root: &Path) -> bool {
         let sub = if i % 2 == 0 { "many" } else { "many/deeper" };
         std::fs::write(root.join(format!("{sub}/f{i:03}")), format!("file {i}\n")).unwrap();
     }
-    let _ = Command::new("mkfifo").arg(root.join("fifo")).status();
+    let _ = Command::new("mkfifo").arg(root.join("fifo")).status_busy();
     // root can read a mode-000 file
     std::fs::File::open(root.join("secret")).is_ok()
 }

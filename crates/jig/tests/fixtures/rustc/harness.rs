@@ -3,6 +3,7 @@
 //! fake rustc of `fake-rustc.sh`, and helpers to run a jig and read its `$JIG_LOG`.
 #![allow(dead_code, clippy::unwrap_used)]
 
+use jig_testkit::busy::CommandBusyExt as _;
 use std::collections::HashMap;
 use std::ffi::{OsStr, OsString};
 use std::io::{BufRead, BufReader, Write};
@@ -401,7 +402,7 @@ pub fn run_in(
     for (k, v) in env {
         cmd.env(k, v);
     }
-    cmd.output().unwrap()
+    cmd.output_busy().unwrap()
 }
 
 /// `(outcome, subject)` of each `$JIG_LOG` line, after checking the tool name and the time.
@@ -458,7 +459,7 @@ pub fn snapshot(dir: &Path) -> Snapshot {
 pub fn have_rustc() -> bool {
     Command::new("rustc")
         .arg("-vV")
-        .output()
+        .output_busy()
         .is_ok_and(|o| o.status.success())
 }
 

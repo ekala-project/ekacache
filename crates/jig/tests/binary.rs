@@ -6,13 +6,14 @@
     clippy::items_after_statements
 )]
 
+use jig_testkit::busy::CommandBusyExt as _;
 use std::os::unix::process::ExitStatusExt;
 use std::process::{Command, Output};
 
 const JIG: &str = env!("CARGO_BIN_EXE_jig");
 
 fn jig(args: &[&str]) -> Output {
-    Command::new(JIG).args(args).output().unwrap()
+    Command::new(JIG).args(args).output_busy().unwrap()
 }
 
 #[test]
@@ -48,7 +49,7 @@ fn launcher_exec() {
     let o = Command::new(JIG)
         .args(["./sh", "-c", "true"])
         .current_dir(dir.path())
-        .output()
+        .output_busy()
         .unwrap();
     assert_eq!(o.status.code(), Some(127));
     assert_eq!(
@@ -71,7 +72,7 @@ fn launcher_go_sets_gocacheprog() {
         if let Some(p) = preset {
             c.env("GOCACHEPROG", p);
         }
-        String::from_utf8(c.output().unwrap().stdout).unwrap()
+        String::from_utf8(c.output_busy().unwrap().stdout).unwrap()
     };
     // no socket file: untouched
     assert_eq!(run(&sock, None), "unset\n");
@@ -86,7 +87,7 @@ fn launcher_go_sets_gocacheprog() {
         .arg(&go2)
         .env("JIG_SOCK", &sock)
         .env_remove("GOCACHEPROG")
-        .output()
+        .output_busy()
         .unwrap();
     assert_eq!(
         String::from_utf8(o.stdout).unwrap(),
@@ -108,7 +109,7 @@ fn self_path_is_absolute_not_resolved() {
         .current_dir(dir.path())
         .env("JIG_SOCK", "sock")
         .env_remove("GOCACHEPROG")
-        .output()
+        .output_busy()
         .unwrap();
     let cwd = dir.path().to_str().unwrap();
     assert_eq!(
@@ -122,7 +123,7 @@ fn self_path_is_absolute_not_resolved() {
         .env("PATH", cwd)
         .env("JIG_SOCK", "sock")
         .env_remove("GOCACHEPROG")
-        .output()
+        .output_busy()
         .unwrap();
     let exe = std::fs::canonicalize(JIG).unwrap();
     assert_eq!(
@@ -146,7 +147,7 @@ fn sigpipe_disposition_passes_through() {
             JIG,
             script,
         ])
-        .output()
+        .output_busy()
         .unwrap();
     assert_eq!(o.status.code(), Some(0));
     assert_eq!(o.stdout, b"alive\n");
@@ -159,7 +160,7 @@ fn mode_names_from_argv0() {
         let link = dir.path().join(name);
         std::os::unix::fs::symlink(JIG, &link).unwrap();
         // Q-DISPATCH-1: only the exact basename `jig` looks at argv[1]; these are cc mode
-        let o = Command::new(&link).arg("--help").output().unwrap();
+        let o = Command::new(&link).arg("--help").output_busy().unwrap();
         assert_ne!(o.stdout, jig::dispatch::USAGE);
     }
 }

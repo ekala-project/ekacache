@@ -14,6 +14,7 @@
 //! Every test skips (with a message) when what it needs is not given.
 #![allow(clippy::unwrap_used, clippy::too_many_lines)]
 
+use jig_testkit::busy::CommandBusyExt as _;
 use std::io::{BufRead, BufReader, Read, Write};
 use std::os::unix::fs::PermissionsExt;
 use std::os::unix::net::UnixListener;
@@ -85,7 +86,7 @@ impl Root {
         for (k, v) in env {
             cmd.env(k, self.subst(v));
         }
-        let out = cmd.output().unwrap();
+        let out = cmd.output_busy().unwrap();
         let log = std::fs::read(&log).unwrap_or_default();
         Run::of(&out, &log, self.path())
     }
@@ -393,7 +394,7 @@ impl Work {
             .env("JIG_SOCK", &self.sock)
             .env("JIG_LOG", &log)
             .stdin(Stdio::null())
-            .output()
+            .output_busy()
             .unwrap();
         let rows = std::fs::read_to_string(&log)
             .unwrap_or_default()
@@ -501,7 +502,7 @@ fn real_compiles_hit() {
         }
         assert!(
             Command::new(w.path().join("prog"))
-                .status()
+                .status_busy()
                 .unwrap()
                 .success()
         );
@@ -645,7 +646,7 @@ fn adopted_rules() {
             .env("JIG_SOCK", &w.sock)
             .env("JIG_LOG", &log)
             .env("JIG_FAKE_ERR", err)
-            .output()
+            .output_busy()
             .unwrap();
         assert_eq!(out.status.code(), Some(1));
         std::fs::read_to_string(&log)
@@ -707,7 +708,7 @@ fn preprocess_temp_path() {
         if let Some(t) = tmpdir {
             cmd.env("TMPDIR", t);
         }
-        let out = cmd.output().unwrap();
+        let out = cmd.output_busy().unwrap();
         let err = String::from_utf8(out.stderr).unwrap();
         let after = err.split("[-o][").nth(1).unwrap_or_else(|| panic!("{err}"));
         let path = after.split(']').next().unwrap().to_string();
