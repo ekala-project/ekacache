@@ -738,7 +738,8 @@ fn preprocess_temp_path() {
 // Q-CC-2: a recording daemon
 
 /// A fake jigd that answers every request plainly (GET: MISS) and records the command words.
-fn recording_daemon() -> (tempfile::TempDir, PathBuf, Arc<Mutex<Vec<String>>>) {
+/// With `refuse_puts`, every PUT gets `ERR` (a daemon that cannot store).
+fn recording_daemon(refuse_puts: bool) -> (tempfile::TempDir, PathBuf, Arc<Mutex<Vec<String>>>) {
     let dir = tempfile::Builder::new()
         .prefix("jf")
         .tempdir_in("/tmp")
@@ -767,7 +768,7 @@ fn recording_daemon() -> (tempfile::TempDir, PathBuf, Arc<Mutex<Vec<String>>>) {
                             let n: usize = words[2].parse().unwrap();
                             let mut v = vec![0; n];
                             r.read_exact(&mut v).unwrap();
-                            "OK\n".to_string()
+                            if refuse_puts { "ERR\n" } else { "OK\n" }.to_string()
                         }
                         "IDS" => {
                             let n: usize = words[1].parse().unwrap();
@@ -795,7 +796,7 @@ fn done_after_the_last_put() {
         eprintln!("skipped: no gcc/clang");
         return;
     };
-    let (_dir, sock, seen) = recording_daemon();
+    let (_dir, sock, seen) = recording_daemon(false);
     let w = Work::with_sock(sock);
     w.write("a.c", "int f(void) { return 1; }\n");
     w.write("bad.c", "int x = ;\n");
@@ -819,5 +820,38 @@ fn done_after_the_last_put() {
         assert_eq!(puts.len(), want_puts, "{seen:?}");
         assert!(puts.iter().all(|&p| slot < p && p < done), "{seen:?}");
         assert_eq!(done, seen.len() - 1, "{seen:?}");
+    }
+}
+
+/// ADOPTED Q-CLIENT-2: a refused PUT is reported, the rest are skipped, the connection is not used
+/// again, and the compile is logged as not stored with the compiler's status.
+#[test]
+fn refused_put() {
+    let Some(compiler) = gcc().or_else(clang) else {
+        eprintln!("skipped: no gcc/clang");
+        return;
+    };
+    let (_dir, sock, seen) = recording_daemon(true);
+    let w = Work::with_sock(sock);
+    w.write("a.c", "int f(void) { return 1; }\n");
+    w.write("bad.c", "int x = ;\n");
+    for (args, outcome, status) in [
+        (&["-c", "a.c"][..], "compiled-unstored", Some(0)),
+        (&["-c", "bad.c"], "failed", Some(1)),
+    ] {
+        seen.lock().unwrap().clear();
+        let (out, log) = w.jig(rust(), &compiler, args);
+        let source = args[1];
+        assert_eq!(log, row(outcome, &format!("{source} new-key")));
+        assert_eq!(out.status.code(), status);
+        let stderr = String::from_utf8(out.stderr).unwrap();
+        let last = stderr.lines().last().unwrap();
+        assert!(
+            last.starts_with("jig: cache put m/") && last.ends_with(" failed"),
+            "{stderr}"
+        );
+        let seen = seen.lock().unwrap().clone();
+        assert_eq!(seen.iter().filter(|c| *c == "PUT").count(), 1, "{seen:?}");
+        assert_eq!(seen.last().map(String::as_str), Some("PUT"), "{seen:?}");
     }
 }

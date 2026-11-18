@@ -16,7 +16,7 @@ use super::primary::mentions_build_time;
 use super::uncacheable::mentions_incbin;
 use super::{Invocation, is_assembly, is_plain_assembly, stderr};
 use crate::client::Client;
-use crate::log::Outcome;
+use crate::log::{self, Outcome};
 use crate::process::{self, Capture, ProcEnv, RunResult, deterministic};
 use crate::sys;
 use crate::twokey::build_manifest;
@@ -151,16 +151,19 @@ fn run_observed(compiler: &[u8], inv: &Invocation, env: &mut ProcEnv) -> Observe
     }
 }
 
-/// ADOPTED Q-CLIENT-2: sequential PUTs, each reply checked; after a failure the rest are skipped.
+/// ADOPTED Q-CLIENT-2: sequential PUTs, each reply checked. The first failure is reported
+/// (`jig: cache put <key> failed`, as in rustc and gocacheprog modes) and the rest are skipped;
+/// the compile is then logged as not stored.
 struct Puts<'a> {
     client: &'a mut Client,
-    failed: Option<Vec<u8>>,
+    failed: bool,
 }
 
 impl Puts<'_> {
     fn put(&mut self, key: &[u8], value: &[u8]) {
-        if self.failed.is_none() && !self.client.put(key, value) {
-            self.failed = Some(key.to_vec());
+        if !self.failed && !self.client.put(key, value) {
+            log::put_failed(key);
+            self.failed = true;
         }
     }
 }
@@ -176,8 +179,7 @@ fn subject(source: &[u8], tail: &[&[u8]]) -> Vec<u8> {
 
 /// `CompileAndStore(cache, compiler, k1, inv, why)`: the compiler's status, the outcome and the
 /// `$JIG_LOG` subject (`<source> <why>`, or the adopted not-stored subjects:
-/// `<source> not-cached:unreadable:<Key(path)>` (Q-KEY-3), `<source> incbin` (Q-CC-12),
-/// `<source> put-failed:<key>` (Q-CLIENT-2)).
+/// `<source> not-cached:unreadable:<Key(path)>` (Q-KEY-3) and `<source> incbin` (Q-CC-12)).
 pub fn compile_and_store(
     client: &mut Client,
     store: &Store,
@@ -229,7 +231,7 @@ pub fn compile_and_store(
             };
         let mut puts = Puts {
             client,
-            failed: None,
+            failed: false,
         };
         puts.put(&slot::manifest(k1), &manifest.text);
         let status_text =
@@ -239,12 +241,8 @@ pub fn compile_and_store(
             &slot::stderr(&manifest.result_key),
             &store.mask_out(&obs.run.captured),
         );
-        if let Some(key) = puts.failed {
-            return (
-                status,
-                Outcome::MissFail,
-                subject(&inv.source, &[b"put-failed:", &key]),
-            );
+        if puts.failed {
+            return (status, Outcome::MissFail, missed);
         }
         return (status, Outcome::MissStoredFail, missed);
     }
@@ -270,7 +268,7 @@ pub fn compile_and_store(
     let k2 = &manifest.result_key;
     let mut puts = Puts {
         client,
-        failed: None,
+        failed: false,
     };
     puts.put(&slot::manifest(k1), &manifest.text);
     puts.put(&slot::object(k2), &store.mask_out(object));
@@ -282,12 +280,8 @@ pub fn compile_and_store(
             &store.mask_out(&store.mask_for_replay(dep_text)),
         );
     }
-    if let Some(key) = puts.failed {
-        return (
-            0,
-            Outcome::MissUnstored,
-            subject(&inv.source, &[b"put-failed:", &key]),
-        );
+    if puts.failed {
+        return (0, Outcome::MissUnstored, missed);
     }
     (0, Outcome::MissStored, missed)
 }
