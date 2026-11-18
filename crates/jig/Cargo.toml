@@ -1,0 +1,31 @@
+[package]
+name = "jig"
+description = "The jig compiler launcher: two-key compile cache for cc and rustc, Go cache program, nix-store and reloc-fixup"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[lib]
+path = "src/lib.rs"
+
+[[bin]]
+name = "jig"
+path = "src/main.rs"
+
+[dependencies]
+jig-core = { workspace = true, features = ["frame"] }
+serde.workspace = true
+serde_json.workspace = true
+base64.workspace = true
+sha2.workspace = true
+rustix.workspace = true
+object.workspace = true
+libc.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
+proptest.workspace = true
+
+[lints]
+workspace = true

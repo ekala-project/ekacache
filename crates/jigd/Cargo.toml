@@ -1,0 +1,27 @@
+[package]
+name = "jigd"
+description = "The jig cache daemon: a shared compile cache and job-slot server on a Unix socket"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[lib]
+path = "src/lib.rs"
+
+[[bin]]
+name = "jigd"
+path = "src/main.rs"
+
+[dependencies]
+jig-core = { workspace = true, default-features = false }
+tokio.workspace = true
+rustix.workspace = true
+libc.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
+proptest.workspace = true
+
+[lints]
+workspace = true

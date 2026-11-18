@@ -1,0 +1,25 @@
+[package]
+name = "jig-core"
+description = "What jig and jigd must agree on byte for byte: hasher, keys, store paths, value framing, wire codec"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+build = "build.rs"
+
+[features]
+default = ["frame"]
+# value framing (zstd). jigd never decompresses values and can build without it.
+frame = ["dep:zstd"]
+
+[dependencies]
+blake3.workspace = true
+zstd = { workspace = true, optional = true }
+
+[dev-dependencies]
+proptest.workspace = true
+serde_json.workspace = true
+tempfile.workspace = true
+
+[lints]
+workspace = true

@@ -1,0 +1,17 @@
+[package]
+name = "jig-testkit"
+description = "Test support for jig and jigd: differential harness, fake jigd, ITF trace replay"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish = false
+
+[dependencies]
+jig-core = { workspace = true, features = ["frame"] }
+serde.workspace = true
+serde_json.workspace = true
+tempfile.workspace = true
+
+[lints]
+workspace = true
