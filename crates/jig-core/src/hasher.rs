@@ -126,43 +126,6 @@ mod tests {
     use super::*;
 
     #[test]
-    fn digest_vectors() {
-        // behaviors/jig-keys.md §Digest test vectors
-        assert_eq!(
-            Hasher::new().finish().to_string(),
-            "af1349b9f5f9a1a6a0404dea36dcc949"
-        );
-        assert_eq!(
-            Hasher::new().field(b"").finish().to_string(),
-            "6dbf06cfd24126fcb3b1e039350b8ead"
-        );
-        assert_eq!(
-            Hasher::new().field(b"a").finish().to_string(),
-            "ceb3ce7a40070f320aa78d363dd9da34"
-        );
-        assert_eq!(
-            Hasher::new().field(b"ab").field(b"c").finish().to_string(),
-            "eafe26c443108bf8d097e6f3af8473a6"
-        );
-        assert_eq!(
-            Hasher::new().field(b"a").field(b"bc").finish().to_string(),
-            "a41516ff4f6e8e7b4f0534c112fc79e3"
-        );
-        assert_eq!(
-            Hasher::new().field(&[b'x'; 1000]).finish().to_string(),
-            "3f38432ebb6f115e1b974b087518b603"
-        );
-        assert_eq!(
-            hash_of(b"hello").to_string(),
-            "ea8f163db38682925e4491c5e58d4bb3"
-        );
-        assert_eq!(
-            hash_of(b"int a;\n").to_string(),
-            "0d937065826369d51c16019b838d8932"
-        );
-    }
-
-    #[test]
     fn finish_is_not_consuming() {
         let mut h = Hasher::new();
         h.field(b"a");

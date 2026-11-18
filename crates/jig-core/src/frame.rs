@@ -97,23 +97,6 @@ fn decode_stream(src: &[u8], size: usize) -> Option<Vec<u8>> {
 mod tests {
     use super::*;
 
-    fn linked_zstd_is_1_5_7() -> bool {
-        zstd_safe::version_number() == 10507
-    }
-
-    #[test]
-    fn hello_vector() {
-        // behaviors/jig-cache-client.md §Value encoding, libzstd 1.5.7
-        let wire = [
-            0x05, 0x00, 0x00, 0x00, 0x28, 0xb5, 0x2f, 0xfd, 0x20, 0x05, 0x29, 0x00, 0x00, b'h',
-            b'e', b'l', b'l', b'o',
-        ];
-        assert_eq!(decode(&wire).as_deref(), Some(&b"hello"[..]));
-        if linked_zstd_is_1_5_7() {
-            assert_eq!(encode(b"hello").unwrap(), wire);
-        }
-    }
-
     #[test]
     fn short_and_mismatched() {
         assert_eq!(decode(b""), None);

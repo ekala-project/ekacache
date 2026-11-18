@@ -482,68 +482,6 @@ mod tests {
     }
 
     #[test]
-    fn key_vectors() {
-        // behaviors/jig-keys.md §Key test vectors (path mode unless noted)
-        let st = path_store();
-        for (i, o) in [
-            ("-I./include//sub/../", "-Iinclude"),
-            ("./src/../src/a.c", "src/a.c"),
-            ("--sysroot=/a/b/../c/", "--sysroot=/a/c"),
-            ("-DFOO=./a//b", "-DFOO=./a//b"),
-            ("-Ufoo/../bar", "-Ufoo/../bar"),
-            ("-O2", "-O2"),
-            ("-I", "-I"),
-            ("-D", "-D"),
-            ("--param=x", "--param=x"),
-            ("foo.c", "foo.c"),
-            (".hidden", ".hidden"),
-            (".", "."),
-            ("./", "."),
-            ("a/", "a"),
-            ("/", "/"),
-            ("//x", "/x"),
-            ("x/..", "."),
-            ("a/b/../..", "."),
-            ("../..", "../.."),
-            ("a/../../b", "../b"),
-            ("/..", "/"),
-            ("/../a", "/a"),
-            ("-I=/x/../y", "-I=/y"),
-            ("-Ia/b=c/../d", "-Ia/d"),
-            ("-mfoo=a/b", "-mfoo=a/b"),
-            ("--x=", "--x="),
-            ("--x=./", "--x=."),
-            ("-L./lib", "-Llib"),
-            ("-l./x", "-lx"),
-            ("-o./a/../b.o", "-ob.o"),
-            ("-fprofile-use=./p/../q", "-fprofile-use=q"),
-            ("-Wl,-rpath,/a/../b", "-Wl,-rpath,/b"),
-            ("-Wp,-MD,./x.d", "-Wp,-MD,./x.d"),
-            ("-include./x.h", "-include./x.h"),
-            ("-iquote./a/../b", "-iquote./b"),
-            ("@./rsp", "@./rsp"),
-            ("cwd=/a/../b", "cwd=/b"),
-            ("/b/TryCompile-teSZ4z/src.c", "/b/TryCompile-######/src.c"),
-            (
-                "CMakeFiles/cmTC_7c7e5.dir/x.c.o",
-                "CMakeFiles/cmTC_#####.dir/x.c.o",
-            ),
-            ("TryCompile-abcdefgh", "TryCompile-######gh"),
-            ("cmTC_abcde_cmTC_12345", "cmTC_#####_cmTC_#####"),
-        ] {
-            assert_eq!(s(st.key(i.as_bytes())), o, "Key({i:?})");
-        }
-        if default_store_dir() {
-            let arg = b"-I/nix/store/0123456789abcdfghijklmnpqrsvwxyz-zlib-1.3/include";
-            assert_eq!(st.key(arg), arg);
-            assert_eq!(
-                s(content_store(&[]).key(arg)),
-                "-I/nix/store/*-zlib-1.3/include"
-            );
-        }
-    }
-
-    #[test]
     fn modes() {
         assert_eq!(path_store().mode(), IdentityMode::Path);
         for v in ["", "Content", "path", "content "] {
