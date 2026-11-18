@@ -10,7 +10,7 @@
 //! sorted build order; Go's map order is random, Q-SLOT-4).
 //!
 //! Adopted here: HELLO (only as the first request, H11) and Q-SLOT-1 (a queued SLOT whose peer
-//! hangs up is dequeued). Store calls and IDS hashing run on the blocking pool.
+//! hangs up is dequeued). Store calls and IDS hashing run off the async workers ([`blocking`]).
 
 pub mod bufio;
 
@@ -149,10 +149,25 @@ struct Conn<'a> {
     line: Vec<u8>,
 }
 
-/// Run `f` on the blocking pool. `None` only if it panicked, which the caller treats as a
-/// hang-up.
+/// Run `f`, which may block, without stalling other connections. `None` only if it panicked
+/// (under `panic = "unwind"`), which the caller treats as a hang-up.
+///
+/// On the multi-thread runtime (the daemon's) this is `block_in_place`. The worker hands its
+/// queue to a fresh thread and runs `f` itself, so a slow call (the fsync of a seal, a read
+/// from the cold tier) delays no other task. The thread count stays under the same
+/// blocking-pool cap. The plan names `spawn_blocking` (`implementation/03-jigd-server.md`
+/// §Runtime shape), which costs two thread hand-offs per call. With it, a 4 KiB GET or PUT
+/// round trip took about 22 µs, against 15 µs for Go's jigd. `block_in_place` brings that to
+/// about 13 µs, and a pipelined GET from 12 µs to 4 µs (Go: 7 µs). Anywhere else (a
+/// current-thread runtime, where `block_in_place` panics), it is still `spawn_blocking`.
 async fn blocking<T: Send + 'static>(f: impl FnOnce() -> T + Send + 'static) -> Option<T> {
-    tokio::task::spawn_blocking(f).await.ok()
+    use tokio::runtime::{Handle, RuntimeFlavor};
+    if Handle::current().runtime_flavor() == RuntimeFlavor::MultiThread {
+        let f = std::panic::AssertUnwindSafe(|| tokio::task::block_in_place(f));
+        std::panic::catch_unwind(f).ok()
+    } else {
+        tokio::task::spawn_blocking(f).await.ok()
+    }
 }
 
 impl Conn<'_> {
@@ -247,7 +262,7 @@ impl Conn<'_> {
         let ctx = self.ctx;
         ctx.gets.fetch_add(1, Ordering::Relaxed);
         let (c, k) = (Arc::clone(ctx), key.to_vec());
-        // the lookup and the first chunk in one trip to the blocking pool
+        // the lookup and the first chunk in one blocking call
         let found = blocking(move || {
             c.store.get(&k).map(|mut v| {
                 let mut buf = Vec::new();
@@ -289,7 +304,7 @@ impl Conn<'_> {
     }
 
     /// `Store.Put` from the connection: validate, read the body (memory below 4 MiB, else an
-    /// unlinked spool in tier 0), then append on the blocking pool.
+    /// unlinked spool in tier 0), then append in a blocking call.
     async fn put(&mut self, key: &[u8], size: i64) -> Result<(), GoErr> {
         validate_put(key, size)?;
         let body = self.read_body(size).await?;
