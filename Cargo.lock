@@ -225,6 +225,7 @@ name = "jigd"
 version = "0.2.0"
 dependencies = [
  "jig-core",
+ "jig-testkit",
  "libc",
  "proptest",
  "rustix",
