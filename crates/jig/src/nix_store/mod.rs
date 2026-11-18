@@ -206,6 +206,50 @@ fn fetchurls(store: &mut Store) -> i32 {
 mod tests {
     use super::*;
 
+    /// `TestNixStore` (`legacy/jig/src/jig_test.cc:635`).
+    #[test]
+    fn test_nix_store() {
+        let hex = |d: &[u8]| String::from_utf8(jig_core::bytes::hex_encode(d)).unwrap();
+        // FIPS 180-4 vectors
+        assert_eq!(
+            hex(&hash::sha256(b"")),
+            "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        );
+        assert_eq!(
+            hex(&hash::sha256(b"abc")),
+            "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
+        );
+        assert_eq!(
+            hex(&hash::sha256(&[b'a'; 1000])),
+            "41edece42d63e8d9bf515a9ba6932e1c20cbc9f5a5d134645adb5db1b9737ea3"
+        );
+        // `nix hash convert --hash-algo sha256 --to nix32 <hex of sha256("abc")>`
+        assert_eq!(
+            hash::nix32(&hash::sha256(b"abc")),
+            b"1b8m03r63zqhnjf7l5wnldhh7c134ap5vpj0850ymkq1iyzicy5s"
+        );
+        // printf "" > e && nix store add --mode flat --hash-algo sha256 e
+        assert_eq!(
+            hash::fixed_output_path(
+                b"/nix/store",
+                b"e",
+                b"sha256",
+                b"e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+            ),
+            b"/nix/store/3hc40wwijh4im7g2i31nk75qappbjw9i-e"
+        );
+        // env sorted, inputSrcs sorted, output names sorted, quotes and newline escaped
+        let aterm = drv::derivation_to_aterm(
+            br#"{"name":"x","system":"x86_64-linux","builder":"/b","args":["-c","echo \"hi\"\n"],"env":{"out":"/o","b":"1","a":"2"},"inputSrcs":["/s2","/s1"],"inputDrvs":{"/d.drv":["out","dev"]},"outputs":{"out":{"hashAlgo":"r:sha256"}}}"#,
+        );
+        assert_eq!(
+            aterm.as_deref(),
+            Some(
+                &br#"Derive([("out","","r:sha256","")],[("/d.drv",["dev","out"])],["/s1","/s2"],"x86_64-linux","/b",["-c","echo \"hi\"\n"],[("a","2"),("b","1"),("out","/o")])"#[..]
+            )
+        );
+    }
+
     #[test]
     fn usage_bytes() {
         assert!(USAGE.ends_with("submit …".as_bytes()));

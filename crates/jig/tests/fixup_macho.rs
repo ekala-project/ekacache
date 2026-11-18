@@ -281,9 +281,10 @@ fn text(b: &[u8]) -> String {
     String::from_utf8_lossy(b).into_owned()
 }
 
-/// §Test vectors, *From TestMachOFixup*, and *Derived and confirmed: Mach-O re-signing*.
+/// §Test vectors, *From TestMachOFixup* (the port of `legacy/jig/src/jig_test.cc:570`), and
+/// *Derived and confirmed: Mach-O re-signing*.
 #[test]
-fn macho_vectors() {
+fn test_mach_o_fixup() {
     if !nix_store() {
         return;
     }

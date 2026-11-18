@@ -467,6 +467,22 @@ mod tests {
     use super::*;
     use jig_core::env::Env;
 
+    /// `TestGoCache` (`legacy/jig/src/jig_test.cc:483`): standard base64, decoded strictly now
+    /// (ADOPTED Q-GO-4), round-trips what Go encodes.
+    #[test]
+    fn test_go_cache() {
+        for bytes in [&b""[..], b"a", b"ab", b"abc", b"abcd", b"\0\xff\x10"] {
+            assert_eq!(
+                decode_b64(Some(&STANDARD.encode(bytes))).as_deref(),
+                Some(bytes)
+            );
+        }
+        assert_eq!(STANDARD.encode(b"abc"), "YWJj");
+        assert_eq!(STANDARD.encode(b"ab"), "YWI=");
+        assert_eq!(STANDARD.encode(b"a"), "YQ==");
+        assert_eq!(decode_b64(Some("YWI=")), Some(b"ab".to_vec()));
+    }
+
     fn parse(line: &str) -> Parsed {
         parse_request(line.as_bytes())
     }
