@@ -350,3 +350,132 @@ mod tests {
         assert_eq!(compare(b"/a", b"/a/b"), Ordering::Less);
     }
 }
+
+/// `std::filesystem::weakly_canonical(p, ec)` (libstdc++, `fs_ops.cc`). Unlike the functions
+/// above this one reads the file system.
+///
+/// If `p` exists, `canonical(p)` (`realpath`). Otherwise the longest leading run of `p`'s
+/// elements that exists is canonicalised (skipped when that run is empty), the remaining
+/// elements are appended, and the whole is `lexically_normal`ised. `None` where libstdc++
+/// reports an error and returns an empty path: a `stat` error other than "not found" (`ENOENT`,
+/// `ENOTDIR`), for example `EACCES` or `ELOOP`, or a failed `realpath`.
+///
+/// `/x/l/f` with `l -> d` gives `/x/d/f`; `/x/d/f/` with a file `f` gives `/x/d/f/`; `/x/l/m/../y`
+/// with `m` missing gives `/x/d/y`; a dangling symlink `/x/dl` stays `/x/dl`; `""` gives `""`.
+#[must_use]
+pub fn weakly_canonical(p: &[u8]) -> Option<Vec<u8>> {
+    match fs_status(p) {
+        FsStatus::Exists => return fs_canonical(p),
+        FsStatus::NotFound => {}
+        FsStatus::Unknown => return None,
+    }
+    let elements = elements(p);
+    let mut result = Vec::new();
+    let mut rest = elements.len();
+    for (i, e) in elements.iter().enumerate() {
+        let tmp = join(&result, e);
+        match fs_status(&tmp) {
+            FsStatus::Exists => result = tmp,
+            FsStatus::NotFound => {
+                rest = i;
+                break;
+            }
+            FsStatus::Unknown => return None,
+        }
+    }
+    if !result.is_empty() {
+        result = fs_canonical(&result)?;
+    }
+    for e in &elements[rest..] {
+        result = join(&result, e);
+    }
+    Some(normalize(&result))
+}
+
+/// What libstdc++'s `status(p, ec)` makes of `stat(p)`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum FsStatus {
+    /// Any file type, including `file_type::unknown` after `EOVERFLOW`.
+    Exists,
+    /// `file_type::not_found`: `ENOENT` or `ENOTDIR`.
+    NotFound,
+    /// `file_type::none`: any other error, the status is not known.
+    Unknown,
+}
+
+/// `EOVERFLOW`, which libstdc++ maps to `file_type::unknown` (a known status: it "exists").
+const EOVERFLOW: i32 = if cfg!(target_os = "macos") { 84 } else { 75 };
+
+fn fs_status(p: &[u8]) -> FsStatus {
+    use std::io::ErrorKind;
+    match std::fs::metadata(crate::bytes::os_path(p)) {
+        Ok(_) => FsStatus::Exists,
+        Err(e) if matches!(e.kind(), ErrorKind::NotFound | ErrorKind::NotADirectory) => {
+            FsStatus::NotFound
+        }
+        Err(e) if e.raw_os_error() == Some(EOVERFLOW) => FsStatus::Exists,
+        Err(_) => FsStatus::Unknown,
+    }
+}
+
+/// `canonical(p, ec)`: `realpath`, `None` on error.
+fn fs_canonical(p: &[u8]) -> Option<Vec<u8>> {
+    std::fs::canonicalize(crate::bytes::os_path(p))
+        .ok()
+        .map(|r| r.into_os_string().into_encoded_bytes())
+}
+
+#[cfg(test)]
+mod weakly_canonical_tests {
+    use super::weakly_canonical;
+    use std::os::unix::fs::{PermissionsExt, symlink};
+
+    /// Expected values checked against libstdc++ 14 (`std::filesystem::weakly_canonical` with an
+    /// `error_code`) on the same tree.
+    #[test]
+    fn table() {
+        let dir = tempfile::tempdir().unwrap();
+        let t = std::fs::canonicalize(dir.path()).unwrap();
+        std::fs::create_dir_all(t.join("d")).unwrap();
+        std::fs::write(t.join("d/f"), "").unwrap();
+        symlink("d", t.join("l")).unwrap();
+        symlink("nowhere", t.join("dl")).unwrap();
+        symlink("loop", t.join("loop")).unwrap();
+        let p = t.to_str().unwrap();
+        let wc = |s: &str| weakly_canonical(s.as_bytes()).map(|v| String::from_utf8(v).unwrap());
+        for (input, want) in [
+            (format!("{p}/d/f"), format!("{p}/d/f")),
+            (format!("{p}/l/f"), format!("{p}/d/f")),
+            (format!("{p}/l/x/../y"), format!("{p}/d/y")),
+            (format!("{p}/d/missing/"), format!("{p}/d/missing/")),
+            (format!("{p}/dl"), format!("{p}/dl")),
+            (format!("{p}/d/f/x"), format!("{p}/d/f/x")),
+            (format!("{p}/d/./f/"), format!("{p}/d/f/")),
+            (format!("{p}/d/../d/f"), format!("{p}/d/f")),
+            (format!("{p}/d//missing//a/./"), format!("{p}/d/missing/a/")),
+            (format!("{p}/l/"), format!("{p}/d")),
+            (format!("{p}/dl/x/.."), format!("{p}/dl/")),
+            (format!("{p}/d/missing/../.."), format!("{p}/")),
+            ("/".to_owned(), "/".to_owned()),
+            (String::new(), String::new()),
+            (
+                "jig-nonexistent-rel/a/../b".to_owned(),
+                "jig-nonexistent-rel/b".to_owned(),
+            ),
+        ] {
+            assert_eq!(wc(&input), Some(want), "weakly_canonical({input:?})");
+        }
+        // ELOOP is an error, not "not found"
+        assert_eq!(wc(&format!("{p}/loop")), None);
+        assert_eq!(wc(&format!("{p}/loop/x")), None);
+        // so is EACCES (root searches anyway: skipped there)
+        std::fs::create_dir(t.join("nx")).unwrap();
+        std::fs::write(t.join("nx/f"), "").unwrap();
+        std::fs::set_permissions(t.join("nx"), std::fs::Permissions::from_mode(0o600)).unwrap();
+        if std::fs::metadata(t.join("nx/f")).is_err() {
+            assert_eq!(wc(&format!("{p}/nx/f")), None);
+            assert_eq!(wc(&format!("{p}/nx/g")), None);
+        }
+        std::fs::set_permissions(t.join("nx"), std::fs::Permissions::from_mode(0o700)).unwrap();
+    }
+}
