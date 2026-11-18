@@ -1,5 +1,7 @@
 //! reloc-fixup through the `jig` binary against the spec's test vectors
-//! (`behaviors/jig-reloc-fixup.md §Test vectors`: CLI, deny check, ELF end to end).
+//! (`behaviors/jig-reloc-fixup.md §Test vectors`: CLI, deny check, ELF end to end). CLI and
+//! deny read `tests/vectors/jig-reloc-fixup.toml`; the ELF end-to-end binaries come from this
+//! machine's gcc, so those shapes stay here (the file has them as doc-only entries).
 #![allow(clippy::unwrap_used)]
 
 #[path = "fixtures/fixup/common.rs"]
@@ -8,6 +10,8 @@ mod common;
 use std::os::unix::fs::PermissionsExt;
 use std::path::Path;
 use std::time::Duration;
+
+use jig_testkit::vectors::VectorFile;
 
 use common::{DEST, Sink, arg, build_elf_set, copy_tree, gcc, nix_store, run_mode, scratch, write};
 
@@ -25,44 +29,43 @@ fn text(b: &[u8]) -> String {
     String::from_utf8_lossy(b).into_owned()
 }
 
-/// §Test vectors, *CLI*.
+fn vectors() -> VectorFile {
+    VectorFile::load("jig-reloc-fixup")
+}
+
+/// §Test vectors, *CLI*: the `cli` rows of `tests/vectors/jig-reloc-fixup.toml`.
 #[test]
 fn cli() {
     if !nix_store() {
         return;
     }
+    let file = vectors();
     let dir = scratch("v-cli");
     std::fs::create_dir_all(dir.join("d")).unwrap();
     let d = dir.join("d").to_str().unwrap().to_owned();
-    let usage = "usage: reloc-fixup <prefix> [--dest <store path>] [--sdk <dir>] [--deny <store path>]...\n";
-    let cases: [(&[&str], &str, i32); 6] = [
-        (&[], usage, 2),
-        (
-            &["/tmp/x"],
-            "reloc-fixup: /tmp/x is not under /nix/store\n",
-            2,
-        ),
-        (
-            &["/tmp/x", "--bogus", "1"],
-            "reloc-fixup: unknown argument --bogus\n",
-            2,
-        ),
-        (
-            &["/tmp/x", "--bogus"],
-            "reloc-fixup: /tmp/x is not under /nix/store\n",
-            2,
-        ),
-        (&["/tmp/nonexistent", "--dest", "/nix/store/abc"], "", 0),
-        (&[&d, "--dest", "/nix/store/abc", "--deny"], "", 0),
-    ];
-    for (argv, stderr, code) in cases {
-        let args: Vec<Vec<u8>> = argv.iter().map(arg).collect();
-        let r = fixup(&dir, &args);
-        assert_eq!(text(&r.stderr), stderr, "{argv:?}");
-        assert_eq!(r.code, Some(code), "{argv:?}");
-        assert!(r.stdout.is_empty());
-    }
+    let usage = format!("{}\n", file.top.str("usage"));
     assert_eq!(usage.as_bytes(), [jig::fixup::USAGE, b"\n"].concat());
+    for v in file.of_kind("cli", 6) {
+        let at = v.label();
+        let args: Vec<Vec<u8>> = v
+            .strs("args")
+            .iter()
+            .map(|a| arg(a.replace("<dir>", &d)))
+            .collect();
+        let want = if v.opt_bool("usage") == Some(true) {
+            usage.as_str()
+        } else {
+            v.str("stderr")
+        };
+        let r = fixup(&dir, &args);
+        assert_eq!(text(&r.stderr), want, "{at}: {:?}", v.strs("args"));
+        assert_eq!(
+            r.code,
+            Some(i32::try_from(v.int("status")).unwrap()),
+            "{at}"
+        );
+        assert!(r.stdout.is_empty(), "{at}");
+    }
     // the normalized dest is shown
     let r = fixup(
         &dir,
@@ -74,22 +77,22 @@ fn cli() {
     );
 }
 
-/// §Test vectors, *deny check*.
+/// §Test vectors, *deny check*: the `deny` rows over the file's `deny_files` tree.
 #[test]
 fn deny() {
     if !nix_store() {
         return;
     }
+    let file = vectors();
     let dir = scratch("v-deny");
     let p = dir.join("t");
-    write(&p.join("a.txt"), b"abc\ndef");
-    write(&p.join("sub/b.bin"), b"\x01xyz");
-    write(&p.join("etc/jig.json"), b"abc");
-    write(&p.join("y.debug"), b"abc");
-    let mut ab = vec![b'b'; 150];
-    ab[0] = b'a';
-    write(&p.join("long"), &ab);
-    let run = |needle: &str| {
+    let names = file.top.strs("deny_files");
+    let contents = file.top.byte_strs("deny_contents");
+    assert_eq!(names.len(), contents.len());
+    for (name, body) in names.iter().zip(&contents) {
+        write(&p.join(name), body);
+    }
+    for v in file.of_kind("deny", 3) {
         let r = fixup(
             &dir,
             &[
@@ -97,37 +100,21 @@ fn deny() {
                 arg("--dest"),
                 arg(DEST),
                 arg("--deny"),
-                arg(needle),
+                arg(v.str("needle")),
             ],
         );
-        assert_eq!(r.code, Some(1));
+        assert_eq!(
+            r.code,
+            Some(i32::try_from(v.int("status")).unwrap()),
+            "{}",
+            v.label()
+        );
         let mut lines: Vec<String> = text(&r.stderr).lines().map(str::to_owned).collect();
         lines.sort();
-        lines
-    };
-    // an empty needle hits offset 0 of every file but `etc/jig.json` and `*.debug` (Q-FIX-3)
-    assert_eq!(
-        run("/nix/store/foo/"),
-        [
-            "reloc-fixup: a.txt refers to build-platform abc".to_owned(),
-            format!(
-                "reloc-fixup: long refers to build-platform a{}",
-                "b".repeat(99)
-            ),
-            "reloc-fixup: sub/b.bin refers to build-platform ".to_owned(),
-        ]
-    );
-    assert_eq!(
-        run("x/bc"),
-        ["reloc-fixup: a.txt refers to build-platform bc"]
-    );
-    assert_eq!(
-        run("bb"),
-        [format!(
-            "reloc-fixup: long refers to build-platform {}",
-            "b".repeat(100)
-        )]
-    );
+        let mut want: Vec<String> = v.strs("stderr").iter().map(|s| (*s).to_owned()).collect();
+        want.sort();
+        assert_eq!(lines, want, "{}", v.label());
+    }
 }
 
 /// §Test vectors, *ELF end to end*, with this machine's glibc for `<G>`.

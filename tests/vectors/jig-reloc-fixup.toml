@@ -1,0 +1,403 @@
+# L1 spec vectors of behaviors/jig-reloc-fixup.md §Test vectors (implementation/12-testing.md
+# §L1: spec vectors). S = /nix/store throughout; the binary-run kinds skip when the store dir is
+# not /nix/store.
+#
+# kinds:
+#   binary-image  TestBinaryImage (crates/jig/src/fixup/image.rs test_binary_image): an image
+#                 of `image_hex` zero-padded to `image_len` bytes, then each step
+#                 "<op> <args...> -> <result>" in order; ops is_elf64_le, read_u16/u32/u64,
+#                 write_u32/u64, write_padded <at> <width> <text>, cstring <at>; results true,
+#                 false, none, a 0x number or a C string (empty after "-> ").
+#   macho         TestMachOFixup on the doc's 2048-byte image (crates/jig/tests/fixup_macho.rs
+#                 test_mach_o_fixup builds the image): stdout, stderr, status, file size, the
+#                 cmdsizes, sizeofcmds, NUL-terminated strings the file `contains` and `lacks`.
+#   macho-unresolvable  The image with one LC_LOAD_DYLIB `load`, run with --sdk: stderr and
+#                 status; the file is unchanged and stdout empty.
+#   macho-tight   The tight-header image: stderr and status; unchanged, stdout empty.
+#   macho-resign  The re-signing image with code signature hashType `hash_type`: stdout,
+#                 stderr, status, cmdsizes, sizeofcmds, ncmds; `slots_hash_pages` that each code
+#                 slot is the SHA-256 of its page; `unchanged` that the file is byte-identical.
+#   cli           `jig reloc-fixup args` (crates/jig/tests/fixup_vectors.rs cli): stderr and
+#                 status, stdout empty. <dir> is an existing empty directory; `usage` stands
+#                 for the usage line (the doc does not spell it; its text is the top-level
+#                 `usage`, checked against jig::fixup::USAGE).
+#   deny          `--deny needle` over the top-level deny_files/deny_contents tree
+#                 (fixup_vectors.rs deny): the stderr lines (compared sorted) and status.
+#   relative-to   RelativeTo(dir, target, anchor) == result (crates/jig/src/fixup/mod.rs).
+#   final         Final(path) == result with prefix/dest (mod.rs).
+#   on-disk       OnDisk(path) == result with prefix/dest (mod.rs).
+#   doc-only      not checked from here; `note` says why and where it is checked.
+
+doc = "behaviors/jig-reloc-fixup.md"
+usage = "usage: reloc-fixup <prefix> [--dest <store path>] [--sdk <dir>] [--deny <store path>]..."
+
+# The deny tree: the doc's a.txt and sub/b.bin, two files the check skips, and `long`, a plain
+# file standing for the doc's 100-byte RUNPATH hit (an `a` then 149 `b`s).
+deny_files = ["a.txt", "sub/b.bin", "etc/jig.json", "y.debug", "long"]
+deny_contents = ["abc\ndef", "\u0001xyz", "abc", "abc", "abbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"]
+
+# ---- From TestBinaryImage ----------------------------------------------------------------------
+
+[[vector]]
+id = "binary-image-elf"
+kind = "binary-image"
+section = "Test vectors > From `TestBinaryImage` (jig/src/jig_test.cc)"
+image_hex = "7f454c460201"
+image_len = 64
+steps = ["is_elf64_le -> true", "write_u32 16 0xdeadbeef -> true", "read_u32 16 -> 0xdeadbeef", "read_u64 60 -> none", "read_u16 1000 -> none", "write_u64 57 1 -> false", "write_padded 32 8 abc -> true", "cstring 32 -> abc", "write_padded 32 3 abc -> false", "write_padded 60 8 abc -> false", "cstring 5000 -> "]
+
+[[vector]]
+id = "binary-image-short"
+kind = "binary-image"
+section = "Test vectors > From `TestBinaryImage` (jig/src/jig_test.cc)"
+image_hex = "73686f7274"
+image_len = 5
+steps = ["is_elf64_le -> false"]
+
+# ---- From TestMachOFixup -----------------------------------------------------------------------
+
+[[vector]]
+id = "macho"
+kind = "macho"
+section = "Test vectors > From `TestMachOFixup` (jig/src/jig_test.cc)"
+stdout = "lib/libssl.3.dylib  /nix/store/9123456789abcdfghijklmnpqrsvwxyz-openssl/lib/libssl.3.dylib  @loader_path/libcrypto.3.dylib  @loader_path/../../7123456789abcdfghijklmnpqrsvwxyz-zlib/lib/libz.1.dylib\n"
+stderr = ""
+status = 0
+size = 2048
+cmdsizes = [152, 96, 56, 104, 56]
+sizeofcmds = 464
+contains = ["/nix/store/9123456789abcdfghijklmnpqrsvwxyz-openssl/lib/libssl.3.dylib\u0000", "@loader_path/libcrypto.3.dylib\u0000", "@loader_path/../../7123456789abcdfghijklmnpqrsvwxyz-zlib/lib/libz.1.dylib", "/usr/lib/libSystem.B.dylib\u0000"]
+lacks = ["/nix/store/7123456789abcdfghijklmnpqrsvwxyz-zlib/lib/libz.1.dylib"]
+note = "`lacks` the absolute ZLIB is the doc's \"remaining \u2026-zlib/ occurs only as ../../\u2026-zlib/\". The cmdsizes include the unchanged LC_SEGMENT_64 (152)."
+
+[[vector]]
+id = "unresolvable"
+kind = "macho-unresolvable"
+section = "Test vectors > From `TestMachOFixup` (jig/src/jig_test.cc)"
+load = "@rpath/libgone.dylib"
+stderr = "reloc-fixup: lib/libssl.3.dylib: links @rpath/libgone.dylib, which neither the package, a dependency nor the SDK has\n"
+status = 1
+
+[[vector]]
+id = "unresolvable"
+kind = "macho-unresolvable"
+section = "Test vectors > From `TestMachOFixup` (jig/src/jig_test.cc)"
+load = "@loader_path/libgone.dylib"
+stderr = "reloc-fixup: lib/libssl.3.dylib: links @loader_path/libgone.dylib, which neither the package, a dependency nor the SDK has\n"
+status = 1
+
+[[vector]]
+id = "unresolvable"
+kind = "macho-unresolvable"
+section = "Test vectors > From `TestMachOFixup` (jig/src/jig_test.cc)"
+load = "/usr/lib/libgone.dylib"
+stderr = "reloc-fixup: lib/libssl.3.dylib: links /usr/lib/libgone.dylib, which neither the package, a dependency nor the SDK has\n"
+status = 1
+
+[[vector]]
+id = "unresolvable"
+kind = "macho-unresolvable"
+section = "Test vectors > From `TestMachOFixup` (jig/src/jig_test.cc)"
+load = "/usr/lib/libSystem.B.dylib"
+stderr = ""
+status = 0
+
+[[vector]]
+id = "tight-header"
+kind = "macho-tight"
+section = "Test vectors > From `TestMachOFixup` (jig/src/jig_test.cc)"
+load_cmdsize = 96
+text_offset = 280
+stderr = "reloc-fixup: lib/libssl.3.dylib: load commands need 256 bytes, the header has room for 248 (-headerpad)\n"
+status = 1
+
+# ---- CLI ---------------------------------------------------------------------------------------
+
+[[vector]]
+id = "cli"
+kind = "cli"
+section = "Test vectors > Derived and confirmed: CLI (run against the built binary)"
+args = []
+usage = true
+status = 2
+
+[[vector]]
+id = "cli"
+kind = "cli"
+section = "Test vectors > Derived and confirmed: CLI (run against the built binary)"
+args = ["/tmp/x"]
+stderr = "reloc-fixup: /tmp/x is not under /nix/store\n"
+status = 2
+
+[[vector]]
+id = "cli"
+kind = "cli"
+section = "Test vectors > Derived and confirmed: CLI (run against the built binary)"
+args = ["/tmp/x", "--bogus", "1"]
+stderr = "reloc-fixup: unknown argument --bogus\n"
+status = 2
+
+[[vector]]
+id = "cli"
+kind = "cli"
+section = "Test vectors > Derived and confirmed: CLI (run against the built binary)"
+args = ["/tmp/x", "--bogus"]
+stderr = "reloc-fixup: /tmp/x is not under /nix/store\n"
+status = 2
+
+[[vector]]
+id = "cli"
+kind = "cli"
+section = "Test vectors > Derived and confirmed: CLI (run against the built binary)"
+args = ["/tmp/nonexistent", "--dest", "/nix/store/abc"]
+stderr = ""
+status = 0
+
+[[vector]]
+id = "cli"
+kind = "cli"
+section = "Test vectors > Derived and confirmed: CLI (run against the built binary)"
+args = ["<dir>", "--dest", "/nix/store/abc", "--deny"]
+stderr = ""
+status = 0
+
+# ---- deny check --------------------------------------------------------------------------------
+
+[[vector]]
+id = "deny-empty-needle"
+kind = "deny"
+section = "Test vectors > Derived and confirmed: deny check"
+needle = "/nix/store/foo/"
+status = 1
+stderr = ["reloc-fixup: a.txt refers to build-platform abc", "reloc-fixup: long refers to build-platform abbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", "reloc-fixup: sub/b.bin refers to build-platform "]
+
+[[vector]]
+id = "deny-bc"
+kind = "deny"
+section = "Test vectors > Derived and confirmed: deny check"
+needle = "x/bc"
+status = 1
+stderr = ["reloc-fixup: a.txt refers to build-platform bc"]
+
+[[vector]]
+id = "deny-100-bytes"
+kind = "deny"
+section = "Test vectors > Derived and confirmed: deny check"
+needle = "bb"
+status = 1
+stderr = ["reloc-fixup: long refers to build-platform bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"]
+note = "The doc's 100-byte cut, shown on a plain file instead of an ELF RUNPATH."
+
+# ---- path operations ---------------------------------------------------------------------------
+
+[[vector]]
+id = "relative-to"
+kind = "relative-to"
+section = "Test vectors > Derived and confirmed: path operations"
+dir = "/nix/store/y-foo/bin"
+target = "/nix/store/x-zlib/lib/."
+anchor = "$ORIGIN"
+result = "$ORIGIN/../../x-zlib/lib/"
+
+[[vector]]
+id = "relative-to"
+kind = "relative-to"
+section = "Test vectors > Derived and confirmed: path operations"
+dir = "/nix/store/y-foo/bin"
+target = "/nix/store/x-zlib/lib"
+anchor = "$ORIGIN"
+result = "$ORIGIN/../../x-zlib/lib"
+
+[[vector]]
+id = "relative-to"
+kind = "relative-to"
+section = "Test vectors > Derived and confirmed: path operations"
+dir = "/nix/store/y-foo/bin"
+target = "/nix/store/y-foo/bin/"
+anchor = "$ORIGIN"
+result = "$ORIGIN"
+
+[[vector]]
+id = "relative-to"
+kind = "relative-to"
+section = "Test vectors > Derived and confirmed: path operations"
+dir = "/nix/store/y-foo/bin"
+target = "/nix/store/y-foo/bin/.."
+anchor = "$ORIGIN"
+result = "$ORIGIN/../"
+
+[[vector]]
+id = "relative-to"
+kind = "relative-to"
+section = "Test vectors > Derived and confirmed: path operations"
+dir = "/nix/store/y-foo/bin"
+target = "/nix/store/g-glibc/lib/./././ld-linux-x86-64.so.2"
+anchor = ""
+result = "../../g-glibc/lib/ld-linux-x86-64.so.2"
+
+[[vector]]
+id = "relative-to"
+kind = "relative-to"
+section = "Test vectors > Derived and confirmed: path operations"
+dir = "/nix/store/y-foo/bin"
+target = "relative/x"
+anchor = "$ORIGIN"
+result = "$ORIGIN/"
+
+[[vector]]
+id = "relative-to"
+kind = "relative-to"
+section = "Test vectors > Derived and confirmed: path operations"
+dir = "/nix/store/y-foo/lib"
+target = "/nix/store/y-foo/lib/libz.dylib"
+anchor = "@loader_path"
+result = "@loader_path/libz.dylib"
+
+[[vector]]
+id = "final"
+kind = "final"
+section = "Test vectors > Derived and confirmed: path operations"
+prefix = "/tmp/out"
+dest = "/nix/store/y-foo"
+path = "/tmp/out/lib"
+result = "/nix/store/y-foo/lib"
+
+[[vector]]
+id = "final"
+kind = "final"
+section = "Test vectors > Derived and confirmed: path operations"
+prefix = "/tmp/out"
+dest = "/nix/store/y-foo"
+path = "/tmp/out"
+result = "/nix/store/y-foo/"
+
+[[vector]]
+id = "final"
+kind = "final"
+section = "Test vectors > Derived and confirmed: path operations"
+prefix = "/tmp/out"
+dest = "/nix/store/y-foo"
+path = "/tmp/out/lib/."
+result = "/nix/store/y-foo/lib/"
+
+[[vector]]
+id = "final"
+kind = "final"
+section = "Test vectors > Derived and confirmed: path operations"
+prefix = "/tmp/out"
+dest = "/nix/store/y-foo"
+path = "/tmp/outx/lib"
+result = "/tmp/outx/lib"
+
+[[vector]]
+id = "final"
+kind = "final"
+section = "Test vectors > Derived and confirmed: path operations"
+prefix = "/tmp/out"
+dest = "/nix/store/y-foo"
+path = "/nix/store/x/lib/."
+result = "/nix/store/x/lib/."
+
+[[vector]]
+id = "final"
+kind = "final"
+section = "Test vectors > Derived and confirmed: path operations"
+prefix = "/tmp/out"
+dest = "/nix/store/y-foo"
+path = "$ORIGIN/../lib"
+result = "$ORIGIN/../lib"
+
+[[vector]]
+id = "final"
+kind = "final"
+section = "Test vectors > Derived and confirmed: path operations"
+prefix = "/tmp/out"
+dest = "/nix/store/y-foo"
+path = "/tmp//out//lib"
+result = "/nix/store/y-foo/lib"
+
+[[vector]]
+id = "on-disk"
+kind = "on-disk"
+section = "Test vectors > Derived and confirmed: path operations"
+prefix = "/tmp/out"
+dest = "/nix/store/y-foo"
+path = "/nix/store/y-foo"
+result = "/tmp/out/"
+
+[[vector]]
+id = "on-disk"
+kind = "on-disk"
+section = "Test vectors > Derived and confirmed: path operations"
+prefix = "/tmp/out"
+dest = "/nix/store/y-foo"
+path = "/nix/store/x/lib"
+result = "/nix/store/x/lib"
+
+# ---- ELF end to end ----------------------------------------------------------------------------
+
+[[vector]]
+id = "elf-e2e"
+kind = "doc-only"
+section = "Test vectors > Derived and confirmed: ELF end to end (GNU ld output, gcc 14)"
+stdout_shape = "lib/libbar.so  RUNPATH $ORIGIN/../../<G>/lib/:\u2026\nbin/foo  RUNPATH $ORIGIN/../../<G>/lib/:\u2026  NEEDED $ORIGIN/../lib//libbar.so  INTERP ../../<G>/lib/ld-linux-x86-64.so.2 (PT_NULL, entry=__reloc_start)\n"
+note = "PT_INTERP becomes PT_NULL and e_entry = st_value(__reloc_start). The binaries come from this machine's gcc and glibc (<G> is its glibc), so crates/jig/tests/fixup_vectors.rs elf_end_to_end builds them and checks these shapes with the real names."
+
+[[vector]]
+id = "elf-e2e-idempotent"
+kind = "doc-only"
+section = "Test vectors > Derived and confirmed: ELF end to end (GNU ld output, gcc 14)"
+note = "A second run prints nothing (but WARN lines) and exits 0. The binaries come from this machine's gcc and glibc (<G> is its glibc), so crates/jig/tests/fixup_vectors.rs elf_end_to_end builds them and checks these shapes with the real names."
+
+[[vector]]
+id = "elf-e2e-relocated"
+kind = "doc-only"
+section = "Test vectors > Derived and confirmed: ELF end to end (GNU ld output, gcc 14)"
+contains = "  NEEDED $ORIGIN/../lib/libbar.so  "
+note = "Copied to run2: a single slash in NEEDED. The binaries come from this machine's gcc and glibc (<G> is its glibc), so crates/jig/tests/fixup_vectors.rs elf_end_to_end builds them and checks these shapes with the real names."
+
+[[vector]]
+id = "elf-e2e-no-stub"
+kind = "doc-only"
+section = "Test vectors > Derived and confirmed: ELF end to end (GNU ld output, gcc 14)"
+shape = "  INTERP /nix/store/<G>/lib/ld-linux-x86-64.so.2 kept (no stub)\n  WARN absolute store ref in bin/foo @0x318: /nix/store/<G>/lib/ld-linux-x86-64.so.2"
+note = "Checked on bin/plain. The binaries come from this machine's gcc and glibc (<G> is its glibc), so crates/jig/tests/fixup_vectors.rs elf_end_to_end builds them and checks these shapes with the real names."
+
+[[vector]]
+id = "elf-e2e-no-fit"
+kind = "doc-only"
+section = "Test vectors > Derived and confirmed: ELF end to end (GNU ld output, gcc 14)"
+shape = "<prefix>/lib/libbar.so: RUNPATH does not fit (192 > 183): $ORIGIN/../../<D1>/lib:\u2026"
+note = "Checked on lib/libnopad.so with this machine's lengths. The binaries come from this machine's gcc and glibc (<G> is its glibc), so crates/jig/tests/fixup_vectors.rs elf_end_to_end builds them and checks these shapes with the real names."
+
+[[vector]]
+id = "elf-e2e-write-back"
+kind = "doc-only"
+section = "Test vectors > Derived and confirmed: ELF end to end (GNU ld output, gcc 14)"
+shape = "<prefix>/bin/foo: cannot write back: No such file or directory"
+note = "Q-FIX-4, with a read-only bin/ in run3. The binaries come from this machine's gcc and glibc (<G> is its glibc), so crates/jig/tests/fixup_vectors.rs elf_end_to_end builds them and checks these shapes with the real names."
+
+# ---- Mach-O re-signing -------------------------------------------------------------------------
+
+[[vector]]
+id = "resign"
+kind = "macho-resign"
+section = "Test vectors > Derived and confirmed: Mach-O re-signing"
+hash_type = 2
+stdout = "lib/libssl.3.dylib  /nix/store/9123456789abcdfghijklmnpqrsvwxyz-openssl/lib/libssl.3.dylib  @loader_path/libcrypto.3.dylib  @loader_path/../../7123456789abcdfghijklmnpqrsvwxyz-zlib/lib/libz.1.dylib  @loader_path\n"
+status = 0
+cmdsizes = [152, 96, 56, 104, 56, 32, 32, 16]
+sizeofcmds = 544
+ncmds = 8
+slots_hash_pages = true
+note = "The doc gives the LC_RPATH cmdsizes (32, 32); the others are the TestMachOFixup ones and the unchanged LC_CODE_SIGNATURE (16)."
+
+[[vector]]
+id = "resign-hash-type-1"
+kind = "macho-resign"
+section = "Test vectors > Derived and confirmed: Mach-O re-signing"
+hash_type = 1
+stdout = ""
+stderr = "reloc-fixup: lib/libssl.3.dylib: code signature hash type 1 is not SHA-256\n"
+status = 1
+unchanged = true

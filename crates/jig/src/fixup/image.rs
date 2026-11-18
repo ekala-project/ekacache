@@ -128,24 +128,61 @@ impl Image {
 mod tests {
     use super::*;
 
-    /// `TestBinaryImage` (`legacy/jig/src/jig_test.cc:500`), §Test vectors.
+    fn num(s: &str) -> u64 {
+        match s.strip_prefix("0x") {
+            Some(h) => u64::from_str_radix(h, 16).unwrap(),
+            None => s.parse().unwrap(),
+        }
+    }
+
+    /// One step of a `binary-image` vector: what `op args` gives, spelled as the vectors spell
+    /// results.
+    fn step(img: &mut Image, op: &str, args: &[&str]) -> String {
+        let at = num(args[0]);
+        let read = |v: Option<u64>| v.map_or("none".to_owned(), |v| format!("{v:#x}"));
+        match op {
+            "is_elf64_le" => img.is_elf64_le().to_string(),
+            "read_u16" => read(img.read::<2>(at).map(|b| u16::from_le_bytes(b).into())),
+            "read_u32" => read(img.u32_le(at).map(u64::from)),
+            "read_u64" => read(img.u64_le(at)),
+            "write_u32" => img
+                .write_u32_le(at, u32::try_from(num(args[1])).unwrap())
+                .to_string(),
+            "write_u64" => img.write_u64_le(at, num(args[1])).to_string(),
+            "write_padded" => img
+                .write_padded(at, num(args[1]), args[2].as_bytes())
+                .to_string(),
+            "cstring" => String::from_utf8(img.cstring(at).to_vec()).unwrap(),
+            _ => panic!("unknown op {op}"),
+        }
+    }
+
+    /// `TestBinaryImage` (`legacy/jig/src/jig_test.cc:500`): the `binary-image` rows of
+    /// `tests/vectors/jig-reloc-fixup.toml` (§Test vectors, *From `TestBinaryImage`*).
     #[test]
     fn test_binary_image() {
-        let mut bytes = vec![0u8; 64];
-        bytes[..6].copy_from_slice(b"\x7fELF\x02\x01");
-        let mut elf = Image::new(bytes);
-        assert!(elf.is_elf64_le());
-        assert!(elf.write_u32_le(16, 0xdead_beef));
-        assert_eq!(elf.u32_le(16), Some(0xdead_beef));
-        assert_eq!(elf.u64_le(60), None); // would run past the end
-        assert_eq!(elf.read::<2>(1000), None);
-        assert!(!elf.write_u64_le(57, 1));
-        assert!(elf.write_padded(32, 8, b"abc"));
-        assert_eq!(elf.cstring(32), b"abc");
-        assert!(!elf.write_padded(32, 3, b"abc")); // no room for the NUL
-        assert!(!elf.write_padded(60, 8, b"abc"));
-        assert_eq!(elf.cstring(5000), b"");
-        assert!(!Image::new(b"short".to_vec()).is_elf64_le());
+        let file = jig_testkit::vectors::VectorFile::load("jig-reloc-fixup");
+        let mut steps = 0;
+        for v in file.of_kind("binary-image", 2) {
+            let mut bytes = v.hex("image_hex");
+            bytes.resize(v.usize("image_len"), 0);
+            let mut img = Image::new(bytes);
+            for s in v.strs("steps") {
+                let (call, want) = s.split_once(" ->").unwrap();
+                let mut words = call.split(' ');
+                let op = words.next().unwrap();
+                // `is_elf64_le` takes no offset
+                let args: Vec<&str> = words.chain(["0"]).collect();
+                assert_eq!(
+                    step(&mut img, op, &args),
+                    want.trim_start(),
+                    "{}: {s}",
+                    v.label()
+                );
+                steps += 1;
+            }
+        }
+        assert_eq!(steps, 12);
     }
 
     #[test]

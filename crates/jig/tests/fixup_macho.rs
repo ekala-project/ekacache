@@ -1,6 +1,7 @@
 //! The Mach-O fixup (A6) through the `jig` binary. First the spec's vectors
 //! (`behaviors/jig-reloc-fixup.md §Test vectors`, *From TestMachOFixup* and *Derived and
-//! confirmed: Mach-O re-signing*); then, gated on `JIG_LEGACY_JIG`, images compared with legacy
+//! confirmed: Mach-O re-signing*), whose expected values `test_mach_o_fixup` reads from
+//! `tests/vectors/jig-reloc-fixup.toml` while building the images here; then, gated on `JIG_LEGACY_JIG`, images compared with legacy
 //! (`implementation/12-testing.md`): a golden tree of load-command, header-room and signature
 //! cases under several invocations, the aborts, and mutants. The images are built here byte by
 //! byte, in the layout of `jig_test.cc`'s `macho` namespace; nothing needs macOS.
@@ -13,6 +14,8 @@ use std::path::Path;
 use std::time::Duration;
 
 use sha2::{Digest, Sha256};
+
+use jig_testkit::vectors::{Vector, VectorFile};
 
 use common::{
     DEST, Rng, Run, Sink, arg, chmod, difference, difftest, get, interesting, legacy, nix_store,
@@ -32,10 +35,9 @@ const LC_LOAD_UPWARD_DYLIB: u32 = 0x8000_0023;
 const EMBEDDED_SIGNATURE: u32 = 0xfade_0cc0;
 const CODE_DIRECTORY: u32 = 0xfade_0c02;
 
-/// The vectors' `OUT` and `ZLIB`.
+/// The vectors' `OUT` and `ZLIB` (the images are built from them).
 const OUT: &str = "/nix/store/9123456789abcdfghijklmnpqrsvwxyz-openssl";
 const ZLIB: &str = "/nix/store/7123456789abcdfghijklmnpqrsvwxyz-zlib/lib/libz.1.dylib";
-const ZLIB_REL: &str = "@loader_path/../../7123456789abcdfghijklmnpqrsvwxyz-zlib/lib/libz.1.dylib";
 const FILE_SIZE: usize = 2048;
 /// Where `__text` starts in a roomy image.
 const ROOMY: u32 = 1024;
@@ -300,90 +302,88 @@ fn test_mach_o_fixup() {
         (r, std::fs::read(&file_path).unwrap())
     };
 
+    let vectors = VectorFile::load("jig-reloc-fixup");
+    let status = |v: &Vector| Some(i32::try_from(v.int("status")).unwrap());
+    let sizes = |v: &Vector| -> Vec<u64> {
+        v.ints("cmdsizes")
+            .into_iter()
+            .map(|n| u64::try_from(n).unwrap())
+            .collect()
+    };
+
+    let v = vectors.one("macho");
     let file = dylib(ROOMY, &openssl_cmds());
+    assert_eq!(file.len(), v.usize("size"));
     let (r, after) = run(&file, &[]);
-    assert_eq!(
-        text(&r.stdout),
-        format!(
-            "lib/libssl.3.dylib  {OUT}/lib/libssl.3.dylib  @loader_path/libcrypto.3.dylib  {ZLIB_REL}\n"
-        )
-    );
-    assert_eq!(text(&r.stderr), "");
-    assert_eq!(r.code, Some(0));
-    assert_eq!(after.len(), FILE_SIZE);
-    assert_eq!(cmdsizes(&after), [152, 96, 56, 104, 56]);
-    assert_eq!(get(&after, 20, 4, false), 464);
+    assert_eq!(text(&r.stdout), v.str("stdout"));
+    assert_eq!(text(&r.stderr), v.str("stderr"));
+    assert_eq!(r.code, status(v));
+    assert_eq!(after.len(), v.usize("size"));
+    assert_eq!(cmdsizes(&after), sizes(v));
+    let sizeofcmds = v.usize("sizeofcmds");
+    assert_eq!(get(&after, 20, 4, false), sizeofcmds as u64);
     // zeroed from the end of the commands to the room bound, the rest untouched
-    assert!(after[32 + 464..1024].iter().all(|&c| c == 0));
+    assert!(after[32 + sizeofcmds..1024].iter().all(|&c| c == 0));
     assert_eq!(after[1024..], file[1024..]);
-    let has = |s: &str| after.windows(s.len()).any(|w| w == s.as_bytes());
-    assert!(has(&format!("{OUT}/lib/libssl.3.dylib\0")));
-    assert!(has("@loader_path/libcrypto.3.dylib\0"));
-    assert!(has(ZLIB_REL));
-    assert!(has("/usr/lib/libSystem.B.dylib\0"));
-    assert!(!has(ZLIB));
+    let has = |s: &[u8]| after.windows(s.len()).any(|w| w == s);
+    for s in v.byte_strs("contains") {
+        assert!(has(&s), "no {:?}", text(&s));
+    }
+    for s in v.byte_strs("lacks") {
+        assert!(!has(&s), "{:?}", text(&s));
+    }
 
     // loads dyld could not resolve; a system library the SDK has passes
     let sdk = dir.join("sdk");
     write(&sdk.join("usr/lib/libSystem.B.tbd"), b"");
-    for (load_path, error) in [
-        ("@rpath/libgone.dylib", true),
-        ("@loader_path/libgone.dylib", true),
-        ("/usr/lib/libgone.dylib", true),
-        ("/usr/lib/libSystem.B.dylib", false),
-    ] {
+    for v in vectors.of_kind("macho-unresolvable", 4) {
+        let load_path = v.str("load");
         let lost = dylib(ROOMY, &[load(load_path)]);
         let (r, after) = run(&lost, &[arg("--sdk"), arg(&sdk)]);
-        let want = if error {
-            format!(
-                "reloc-fixup: lib/libssl.3.dylib: links {load_path}, which neither the package, a dependency nor the SDK has\n"
-            )
-        } else {
-            String::new()
-        };
-        assert_eq!(text(&r.stderr), want, "{load_path}");
-        assert_eq!(r.code, Some(i32::from(error)));
+        assert_eq!(text(&r.stderr), v.str("stderr"), "{load_path}");
+        assert_eq!(r.code, status(v), "{load_path}");
         assert!(r.stdout.is_empty());
         assert_eq!(after, lost);
     }
 
     // __text right behind the commands: the longer zlib spelling does not fit
+    let v = vectors.one("macho-tight");
     let grows = load(ZLIB);
-    assert_eq!(grows.len(), 96);
-    let tight = dylib(32 + 72 + 80 + 96, &[grows]);
+    assert_eq!(grows.len(), v.usize("load_cmdsize"));
+    let text_offset = 32 + 72 + 80 + 96;
+    assert_eq!(text_offset, v.int("text_offset"));
+    let tight = dylib(u32::try_from(text_offset).unwrap(), &[grows]);
     let (r, after) = run(&tight, &[]);
-    assert_eq!(
-        text(&r.stderr),
-        "reloc-fixup: lib/libssl.3.dylib: load commands need 256 bytes, the header has room for 248 (-headerpad)\n"
-    );
-    assert_eq!(r.code, Some(1));
+    assert_eq!(text(&r.stderr), v.str("stderr"));
+    assert_eq!(r.code, status(v));
     assert!(r.stdout.is_empty());
     assert_eq!(after, tight);
 
     // re-signing
-    let (file, cd) = signed_openssl(2);
-    assert!(!slots_hash_pages(&file, cd, 3, 512, SIG_OFF));
-    let (r, after) = run(&file, &[]);
-    assert_eq!(
-        text(&r.stdout),
-        format!(
-            "lib/libssl.3.dylib  {OUT}/lib/libssl.3.dylib  @loader_path/libcrypto.3.dylib  {ZLIB_REL}  @loader_path\n"
-        )
-    );
-    assert_eq!(r.code, Some(0));
-    assert_eq!(cmdsizes(&after), [152, 96, 56, 104, 56, 32, 32, 16]);
-    assert_eq!(get(&after, 20, 4, false), 544);
-    assert_eq!(get(&after, 16, 4, false), 8);
-    assert!(slots_hash_pages(&after, cd, 3, 512, SIG_OFF));
-    let (file, _) = signed_openssl(1);
-    let (r, after) = run(&file, &[]);
-    assert_eq!(
-        text(&r.stderr),
-        "reloc-fixup: lib/libssl.3.dylib: code signature hash type 1 is not SHA-256\n"
-    );
-    assert_eq!(r.code, Some(1));
-    assert!(r.stdout.is_empty());
-    assert_eq!(after, file);
+    for v in vectors.of_kind("macho-resign", 2) {
+        let at = v.label();
+        let (file, cd) = signed_openssl(u8::try_from(v.int("hash_type")).unwrap());
+        assert!(!slots_hash_pages(&file, cd, 3, 512, SIG_OFF));
+        let (r, after) = run(&file, &[]);
+        assert_eq!(text(&r.stdout), v.str("stdout"), "{at}");
+        assert_eq!(text(&r.stderr), v.opt_str("stderr").unwrap_or(""), "{at}");
+        assert_eq!(r.code, status(v), "{at}");
+        if v.get("cmdsizes").is_some() {
+            assert_eq!(cmdsizes(&after), sizes(v), "{at}");
+            assert_eq!(
+                get(&after, 20, 4, false),
+                v.usize("sizeofcmds") as u64,
+                "{at}"
+            );
+            assert_eq!(get(&after, 16, 4, false), v.usize("ncmds") as u64, "{at}");
+        }
+        if v.opt_bool("slots_hash_pages") == Some(true) {
+            assert!(slots_hash_pages(&after, cd, 3, 512, SIG_OFF), "{at}");
+        }
+        if v.opt_bool("unchanged") == Some(true) {
+            assert_eq!(after, file, "{at}");
+        }
+    }
 
     // Q-FIX-10: a page size shift legacy cannot compute is refused like a foreign hash type;
     // without code slots nothing needs the page size and the image is re-signed as before

@@ -212,71 +212,43 @@ mod tests {
         }
     }
 
-    /// `(dir, target, anchor, result)`.
-    type Case<'a> = (&'a [u8], &'a [u8], &'a [u8], &'a [u8]);
+    fn vectors() -> jig_testkit::vectors::VectorFile {
+        jig_testkit::vectors::VectorFile::load("jig-reloc-fixup")
+    }
 
-    /// §Test vectors, *path operations*.
+    /// §Test vectors, *path operations*: the `relative-to` rows of
+    /// `tests/vectors/jig-reloc-fixup.toml`.
     #[test]
     fn relative_to_vectors() {
-        let here: &[u8] = b"/nix/store/y-foo/bin";
-        let cases: [Case; 7] = [
-            (
-                here,
-                b"/nix/store/x-zlib/lib/.",
-                b"$ORIGIN",
-                b"$ORIGIN/../../x-zlib/lib/",
-            ),
-            (
-                here,
-                b"/nix/store/x-zlib/lib",
-                b"$ORIGIN",
-                b"$ORIGIN/../../x-zlib/lib",
-            ),
-            (here, b"/nix/store/y-foo/bin/", b"$ORIGIN", b"$ORIGIN"),
-            (here, b"/nix/store/y-foo/bin/..", b"$ORIGIN", b"$ORIGIN/../"),
-            (
-                here,
-                b"/nix/store/g-glibc/lib/./././ld-linux-x86-64.so.2",
-                b"",
-                b"../../g-glibc/lib/ld-linux-x86-64.so.2",
-            ),
-            (here, b"relative/x", b"$ORIGIN", b"$ORIGIN/"),
-            (
-                b"/nix/store/y-foo/lib",
-                b"/nix/store/y-foo/lib/libz.dylib",
-                b"@loader_path",
-                b"@loader_path/libz.dylib",
-            ),
-        ];
-        for (dir, target, anchor, want) in cases {
+        for v in vectors().of_kind("relative-to", 7) {
             assert_eq!(
-                relative_to(dir, target, anchor),
-                want,
-                "{}",
-                String::from_utf8_lossy(target)
+                relative_to(v.bytes("dir"), v.bytes("target"), v.bytes("anchor")),
+                v.bytes("result"),
+                "{}: {}",
+                v.label(),
+                v.str("target")
             );
         }
     }
 
-    /// §Test vectors, *path operations*, with `prefix=/tmp/out`, `dest=/nix/store/y-foo`.
+    /// §Test vectors, *path operations*: the `final` and `on-disk` rows.
     #[test]
     fn final_and_on_disk_vectors() {
-        let f = fx(b"/tmp/out", b"/nix/store/y-foo");
-        let finals: [(&[u8], &[u8]); 7] = [
-            (b"/tmp/out/lib", b"/nix/store/y-foo/lib"),
-            (b"/tmp/out", b"/nix/store/y-foo/"),
-            (b"/tmp/out/lib/.", b"/nix/store/y-foo/lib/"),
-            (b"/tmp/outx/lib", b"/tmp/outx/lib"),
-            (b"/nix/store/x/lib/.", b"/nix/store/x/lib/."),
-            (b"$ORIGIN/../lib", b"$ORIGIN/../lib"),
-            (b"/tmp//out//lib", b"/nix/store/y-foo/lib"),
-        ];
-        for (p, want) in finals {
-            assert_eq!(f.final_path(p), want, "{}", String::from_utf8_lossy(p));
+        let file = vectors();
+        for (kind, min) in [("final", 7), ("on-disk", 2)] {
+            for v in file.of_kind(kind, min) {
+                let f = fx(v.bytes("prefix"), v.bytes("dest"));
+                let p = v.bytes("path");
+                let got = if kind == "final" {
+                    f.final_path(p)
+                } else {
+                    f.on_disk(p)
+                };
+                assert_eq!(got, v.bytes("result"), "{}: {}", v.label(), v.str("path"));
+            }
         }
-        assert_eq!(f.on_disk(b"/nix/store/y-foo"), b"/tmp/out/");
-        assert_eq!(f.on_disk(b"/nix/store/x/lib"), b"/nix/store/x/lib");
         // Q-FIX-9: `..data` directly under the prefix is "outside"
+        let f = fx(b"/tmp/out", b"/nix/store/y-foo");
         assert_eq!(f.final_path(b"/tmp/out/..data/x"), b"/tmp/out/..data/x");
     }
 }
