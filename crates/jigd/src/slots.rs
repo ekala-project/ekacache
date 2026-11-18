@@ -192,7 +192,7 @@ mod tests {
     /// `TestSlotsFewestHeldFirst`: with the pool exhausted, the build holding fewer tokens is
     /// woken first, whatever the arrival order.
     #[test]
-    fn fewest_held_first() {
+    fn slots_fewest_held_first() {
         let s = Slots::new(2);
         assert!(matches!(s.acquire(b"big"), Acquire::Granted));
         assert!(matches!(s.acquire(b"big"), Acquire::Granted));
