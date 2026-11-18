@@ -275,6 +275,7 @@ pub fn exec<A: AsRef<[u8]>>(program: &[u8], args: &[A], env: &ProcEnv) -> i32 {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::os::unix::ffi::OsStrExt;
 
     fn env() -> ProcEnv {
         ProcEnv::new(Env::capture())
@@ -369,8 +370,22 @@ mod tests {
         e.set("JIG_SLOT", "1");
         e.set("A", "new");
         e.remove("B");
-        // env(1) prints `environ` as it is: order kept, the first duplicate replaced
-        let r = run(b"/usr/bin/env", &[] as &[&[u8]], Capture::Stdout, &e);
+        // env(1) prints `environ` as it is: order kept, the first duplicate replaced. Found
+        // through the test's own PATH (the Nix build sandbox has no /usr/bin/env).
+        let Some(env_bin) = std::env::var_os("PATH").and_then(|path| {
+            std::env::split_paths(&path)
+                .map(|d| d.join("env"))
+                .find(|p| p.is_file())
+        }) else {
+            eprintln!("no env(1) on PATH: skipped");
+            return;
+        };
+        let r = run(
+            env_bin.as_os_str().as_bytes(),
+            &[] as &[&[u8]],
+            Capture::Stdout,
+            &e,
+        );
         let out = String::from_utf8(r.captured).unwrap();
         assert_eq!(out, "PATH=/usr/bin:/bin\nA=new\nA=second\nJIG_SLOT=1\n");
         assert_eq!(e.get("A"), Some(&b"new"[..]));

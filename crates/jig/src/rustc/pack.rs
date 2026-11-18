@@ -87,6 +87,16 @@ mod tests {
         std::fs::metadata(p).unwrap().permissions().mode() & 0o7777
     }
 
+    /// Whether this host lets the tests set a setuid bit (the Nix build sandbox does not).
+    fn setuid_allowed(dir: &Path) -> bool {
+        let probe = dir.join(".setuid-probe");
+        std::fs::write(&probe, "").unwrap();
+        let ok = std::fs::set_permissions(&probe, std::fs::Permissions::from_mode(0o4755)).is_ok()
+            && mode_of(&probe) == 0o4755;
+        std::fs::remove_file(&probe).unwrap();
+        ok
+    }
+
     #[test]
     fn pack_format() {
         let dir = tempfile::tempdir().unwrap();
@@ -95,7 +105,13 @@ mod tests {
         std::fs::set_permissions(&rlib, std::fs::Permissions::from_mode(0o644)).unwrap();
         let d = dir.path().join("foo-abcd.d");
         std::fs::write(&d, "").unwrap();
-        std::fs::set_permissions(&d, std::fs::Permissions::from_mode(0o4755)).unwrap();
+        // the setuid bit is masked off on the way in, where the host allows setting it
+        let d_mode = if setuid_allowed(dir.path()) {
+            0o4755
+        } else {
+            0o755
+        };
+        std::fs::set_permissions(&d, std::fs::Permissions::from_mode(d_mode)).unwrap();
         let blob = pack_files(&[b(&rlib), b(&dir.path().join("gone")), b(&d)], b"-abcd");
         assert_eq!(blob, b"libfoo@.rlib 644 5\nhellofoo@.d 755 0\n");
         // no stem: names unchanged
@@ -146,7 +162,9 @@ mod tests {
         let dir = b(dst.path());
         // the setuid bit passes (perms::mask is 07777); higher bits are masked off
         assert!(unpack_files(b"s 4755 0\nt 1000640 0\n", &dir, b""));
-        assert_eq!(mode_of(&dst.path().join("s")), 0o4755);
+        if setuid_allowed(dst.path()) {
+            assert_eq!(mode_of(&dst.path().join("s")), 0o4755);
+        }
         assert_eq!(mode_of(&dst.path().join("t")), 0o640);
         // a tab around a number is trimmed by ParseUint
         assert!(unpack_files(b"u 600\t 2\nab", &dir, b""));
