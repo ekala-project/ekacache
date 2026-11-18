@@ -20,6 +20,25 @@ fn s(p: &[u8]) -> String {
     String::from_utf8_lossy(p).into_owned()
 }
 
+/// `behaviors/jigd-identities.md §The identity value` test vectors, from
+/// `tests/vectors/jigd-identities.toml` (`implementation/12-testing.md §L1: spec vectors`).
+#[test]
+fn identity_value_vectors() {
+    let file = jig_testkit::vectors::VectorFile::load("jigd-identities");
+    let store = tempfile::tempdir().unwrap();
+    let ids = Identities::new(&b(store.path()));
+    for (i, v) in file.of_kind("identity", 2).into_iter().enumerate() {
+        let path = store.path().join(format!("f{i}"));
+        std::fs::write(&path, v.bytes("contents")).unwrap();
+        let got = ids.of(&b(&path));
+        assert_eq!(s(&got), v.str("identity"), "{}", v.label());
+        assert_eq!(got.len(), 34, "{}", v.label());
+    }
+    // the L2 ports below spell the same two values
+    let all: Vec<&str> = file.vectors.iter().map(|v| v.str("identity")).collect();
+    assert_eq!(all, [s(ABC), s(EMPTY)]);
+}
+
 /// `TestIdentityMatchesJigAndTracksRewrites`.
 #[test]
 fn identity_matches_jig_and_tracks_rewrites() {
