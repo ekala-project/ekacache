@@ -23,7 +23,7 @@ recommendation of "change, needs sign-off" is a proposal, not part of the contra
 adopted below.
 
 Conventions: MUST/SHOULD/MAY follow RFC 2119; `file:line` cites the C++/Go source at commit
-`4cfc796`; byte layouts are tables.
+`4cfc796` (since moved under `legacy/`: `jig/src/x.cc` means `legacy/jig/src/x.cc`); byte layouts are tables.
 
 ## Documents
 

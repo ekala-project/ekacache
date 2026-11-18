@@ -6,7 +6,8 @@ half (byte layouts, messages, exit codes, environment) is in [`../behaviors/`](.
 Where the two disagree, `behaviors/` is authoritative about bytes and these models are
 authoritative about which interleavings must stay safe.
 
-Checked with Quint 0.33.1. Commands are run from the repository root.
+Checked with Quint 0.33.1. Commands are run from the repository root. Source paths below are relative to
+`legacy/`, where the C++ and Go implementation now lives.
 
 | Module | Models | Source of truth | Behaviour doc |
 |---|---|---|---|
