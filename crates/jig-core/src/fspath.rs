@@ -203,6 +203,15 @@ pub fn stem(p: &[u8]) -> &[u8] {
     &f[..f.len() - e.len()]
 }
 
+/// `replace_extension(ext)` for an `ext` that starts with `.`: `extension()` removed from the
+/// end, `ext` appended (`out/x.o` → `out/x.d`, `x` → `x.d`, `.a` → `.a.d`, `dir/` → `dir/.d`).
+#[must_use]
+pub fn replace_extension(p: &[u8], ext: &[u8]) -> Vec<u8> {
+    let mut out = p[..p.len() - extension(p).len()].to_vec();
+    out.extend_from_slice(ext);
+    out
+}
+
 /// Path comparison (`operator<=>`): lexicographic over element lists, elements compared
 /// bytewise; a proper prefix sorts first. `/a//b == /a/b`, `/a/b != /a/b/`.
 #[must_use]
@@ -235,6 +244,28 @@ pub fn absolute_in(p: &[u8], cwd: &[u8]) -> Option<Vec<u8>> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn replace_extension_like_libstdcxx() {
+        for (p, want) in [
+            ("out/x.o", "out/x.d"),
+            ("x", "x.d"),
+            (".a", ".a.d"),
+            ("..a", "..d"),
+            ("a.", "a.d"),
+            ("dir/", "dir/.d"),
+            ("..", "...d"),
+            ("/tmp/jig1.i", "/tmp/jig1.d"),
+            ("a.b/c", "a.b/c.d"),
+            ("", ".d"),
+        ] {
+            assert_eq!(
+                replace_extension(p.as_bytes(), b".d"),
+                want.as_bytes(),
+                "{p}"
+            );
+        }
+    }
 
     fn s(v: Vec<u8>) -> String {
         String::from_utf8(v).unwrap()

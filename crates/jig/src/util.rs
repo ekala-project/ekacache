@@ -5,6 +5,7 @@ use jig_core::bytes::{is_c_space, os_path, split};
 use jig_core::fspath;
 
 use crate::process::ProcEnv;
+use crate::sys;
 
 /// `ReadFile(path)`: the whole file, or `None` when it cannot be opened or a read fails (a
 /// directory opens and then fails with `EISDIR`).
@@ -18,6 +19,14 @@ pub fn read_file(path: &[u8]) -> Option<Vec<u8>> {
 /// returns `false` and leaves the temp file (legacy does not remove it either).
 #[must_use]
 pub fn write_file(path: &[u8], data: &[u8]) -> bool {
+    write_file_errno(path, data).is_ok()
+}
+
+/// `WriteFile`, and on failure the `errno` legacy's `jig: cannot write <path>: <strerror>`
+/// message reports: after a failed open or write, `fs::remove(tmp)` runs first, so a failed
+/// `remove(3)` (usually `ENOENT`: the temp file was never created) replaces the write's error;
+/// after a failed rename, rename's.
+pub fn write_file_errno(path: &[u8], data: &[u8]) -> Result<(), i32> {
     use std::io::Write;
     let mut name = format!(".jig{}.", std::process::id()).into_bytes();
     name.extend_from_slice(fspath::filename(path));
@@ -28,11 +37,15 @@ pub fn write_file(path: &[u8], data: &[u8]) -> bool {
         .truncate(true)
         .open(os_path(&tmp))
         .and_then(|mut f| f.write_all(data));
-    if written.is_err() {
-        let _ = std::fs::remove_file(os_path(&tmp));
-        return false;
+    if let Err(e) = written {
+        let write_errno = e.raw_os_error().unwrap_or(libc::EIO);
+        return Err(if sys::remove(&tmp) {
+            write_errno
+        } else {
+            sys::errno()
+        });
     }
-    std::fs::rename(os_path(&tmp), os_path(path)).is_ok()
+    std::fs::rename(os_path(&tmp), os_path(path)).map_err(|e| e.raw_os_error().unwrap_or(libc::EIO))
 }
 
 /// `OnPath(name)`: for a name without `/`, the first `<dir>/<name>` that exists for a non-empty
@@ -159,6 +172,19 @@ mod tests {
         assert_eq!(read_file(pb).as_deref(), Some(&b"two"[..]));
         assert_eq!(std::fs::read_dir(dir.path()).unwrap().count(), 1);
         assert!(!write_file(b"/nonexistent/dir/x", b""));
+        assert_eq!(
+            write_file_errno(b"/nonexistent/dir/x", b""),
+            Err(libc::ENOENT)
+        );
+        // the target is a non-empty directory: the rename fails, the temp file stays
+        let sub = dir.path().join("sub");
+        std::fs::create_dir(&sub).unwrap();
+        std::fs::write(sub.join("f"), "").unwrap();
+        let sb = sub.as_os_str().as_encoded_bytes();
+        assert!(matches!(
+            write_file_errno(sb, b"x"),
+            Err(libc::EISDIR | libc::ENOTEMPTY | libc::EEXIST)
+        ));
         assert_eq!(read_file(b"/nonexistent"), None);
         assert_eq!(read_file(dir.path().as_os_str().as_encoded_bytes()), None);
     }

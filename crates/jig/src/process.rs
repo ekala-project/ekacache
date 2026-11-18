@@ -200,13 +200,29 @@ pub fn run<A: AsRef<[u8]>>(
     RunResult { status, captured }
 }
 
-/// `Deterministic(run)`: not killed by a signal, and the driver does not report a crashed child.
+/// ADOPTED Q-CC-5 (`behaviors/jig-cc-mode.md`): resource errors that say nothing about the
+/// inputs. A failure whose stderr mentions one is not stored.
+const TRANSIENT: [&[u8]; 9] = [
+    b"No space left on device",
+    b"Disk quota exceeded",
+    b"Cannot allocate memory",
+    b"virtual memory exhausted",
+    b"out of memory",
+    b"Too many open files",
+    b"Input/output error",
+    b"Read-only file system",
+    b"Resource temporarily unavailable",
+];
+
+/// `Deterministic(run)`: not killed by a signal, the driver does not report a crashed child,
+/// and (ADOPTED Q-CC-5) no resource error is mentioned.
 #[must_use]
 pub fn deterministic(r: &RunResult) -> bool {
     use jig_core::bytes::contains;
     r.status < SIGNAL_BASE
         && !contains(&r.captured, b"unable to execute command")
         && !contains(&r.captured, b"PLEASE submit a bug report")
+        && !TRANSIENT.iter().any(|t| contains(&r.captured, t))
 }
 
 /// Launcher `Exec` (`launcher.cc:43-55`): `execv(program, [program, args...])`, no `PATH`
@@ -379,5 +395,13 @@ mod tests {
             b"clang: error: unable to execute command: Segmentation fault"
         ));
         assert!(!ok(1, b"PLEASE submit a bug report to ..."));
+        // ADOPTED Q-CC-5
+        for t in TRANSIENT {
+            let mut text = b"a.c:1: fatal error: ".to_vec();
+            text.extend_from_slice(t);
+            assert!(!ok(1, &text));
+        }
+        assert!(!ok(1, b"cc1: out of memory allocating 65536 bytes"));
+        assert!(ok(1, b"error: Out Of Memory is not a type"));
     }
 }

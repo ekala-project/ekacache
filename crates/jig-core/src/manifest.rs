@@ -228,8 +228,81 @@ pub fn validate(
     Ok(ResultKey::new(&hasher.finish()))
 }
 
+/// `ParseDepfile(text)` (`manifest.cc:23-62`): the prerequisites of the **first** rule of a
+/// make-style depfile (compiler `-MD` output, lld's `--dependency-file`). `\`+newline continues a
+/// line, `\`+space is a space inside a path; the target ends at a `:` followed by space, newline
+/// or `\` (or at a token ending in `:`); the first newline after the target ends the rule.
+#[must_use]
+pub fn parse_depfile(text: &[u8]) -> Vec<Vec<u8>> {
+    let mut deps = Vec::new();
+    let mut token = Vec::new();
+    let mut after_colon = false;
+    let flush = |token: &mut Vec<u8>, after_colon: &mut bool, deps: &mut Vec<Vec<u8>>| {
+        if token.is_empty() {
+            return;
+        }
+        if *after_colon {
+            deps.push(std::mem::take(token));
+        } else if token.last() == Some(&b':') {
+            *after_colon = true;
+        }
+        token.clear();
+    };
+    let mut i = 0;
+    while i < text.len() {
+        let cur = text[i];
+        let next = text.get(i + 1).copied().unwrap_or(b'\n');
+        if cur == b'\\' && next == b'\n' {
+            i += 1; // line continuation
+        } else if cur == b'\\' && next == b' ' {
+            token.push(b' '); // escaped space in a path
+            i += 1;
+        } else if cur == b'\n' {
+            flush(&mut token, &mut after_colon, &mut deps);
+            if after_colon {
+                break; // first rule complete
+            }
+        } else if cur == b' ' || cur == b'\t' {
+            flush(&mut token, &mut after_colon, &mut deps);
+        } else if cur == b':' && !after_colon && matches!(next, b' ' | b'\n' | b'\\') {
+            after_colon = true;
+            token.clear();
+        } else {
+            token.push(cur);
+        }
+        i += 1;
+    }
+    flush(&mut token, &mut after_colon, &mut deps);
+    deps
+}
+
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn depfiles() {
+        // jig_test.cc TestDepfile
+        let v = |items: &[&str]| -> Vec<Vec<u8>> {
+            items.iter().map(|s| s.as_bytes().to_vec()).collect()
+        };
+        let text = b"out/foo.o: foo.c \\\n  /inc/a.h /inc/b.h \\\n /inc/sp\\ ace.h\n/inc/a.h:\n/inc/b.h:\n";
+        assert_eq!(
+            parse_depfile(text),
+            v(&["foo.c", "/inc/a.h", "/inc/b.h", "/inc/sp ace.h"])
+        );
+        assert_eq!(parse_depfile(b"x: \\\n a.c\n"), v(&["a.c"]));
+        assert!(parse_depfile(b"").is_empty());
+        assert_eq!(
+            parse_depfile(b"conftest: \\\n /s/lib/Scrt1.o \\\n /tmp/conftest-1.o \\\n /s/lib/libc.so\n\n/s/lib/libc.so:\n"),
+            v(&["/s/lib/Scrt1.o", "/tmp/conftest-1.o", "/s/lib/libc.so"])
+        );
+        // the plain-assembly pseudo depfile, a drive-letter-like colon, a target ending in ':'
+        assert_eq!(parse_depfile(b"o: a.s"), v(&["a.s"]));
+        assert_eq!(parse_depfile(b"c:x.o: a.c"), v(&["a.c"]));
+        assert_eq!(parse_depfile(b"t:\ta b\nc"), v(&["a", "b"]));
+        assert_eq!(parse_depfile(b"t:"), Vec::<Vec<u8>>::new());
+        assert_eq!(parse_depfile(b"no colon here\n"), Vec::<Vec<u8>>::new());
+    }
+
     use super::*;
     use crate::env::Env;
     use crate::hasher::hash_of;

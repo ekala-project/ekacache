@@ -8,6 +8,7 @@ pub mod cache_cmd;
 pub mod cc;
 pub mod client;
 pub mod dispatch;
+pub mod driver;
 pub mod fixup;
 pub mod gocache;
 pub mod launcher;
