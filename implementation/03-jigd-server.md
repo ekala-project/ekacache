@@ -23,16 +23,21 @@ main (sync)
   is pure blocking I/O. Doing it before `Runtime::new` keeps the startup order (steps 1–12 of
   `jigd-daemon.md §Startup order`) literal, and makes "SIGTERM before step 11 kills without
   sealing" automatic.
+- **As built (signed off 2026-11-18):** store calls and IDS hashing run with
+  `tokio::task::block_in_place` on the worker thread, not `spawn_blocking`. The hand-off to the
+  blocking pool made each GET and PUT about 1.5× slower than Go; with `block_in_place` the
+  Rust jigd is faster than Go on every jigd benchmark (STATUS.md §Performance). The other
+  workers keep serving connections while one blocks, so a slow call still holds up no other
+  connection. Read `spawn_blocking` below as "a blocking store call".
 - Worker threads: tokio's default (one per core). The blocking pool serves store calls and
   IDS hashing. Cap it at 512 (tokio's default), because a build of 1 000 parallel compiles
   sending PUTs must not spawn 1 000 threads; queued blocking calls wait instead.
 - **SIGPIPE:** Rust ignores it at startup (std sets `SIG_IGN`), and tokio writes return
   `EPIPE`. This matches the requirement.
 - Other signals keep their defaults (SIGHUP terminates without sealing, as in Go). SIGQUIT in
-  Go dumps goroutines and exits 2. Rust's default action is core-and-terminate. **Flag:**
-  exit-by-signal vs exit 2 on SIGQUIT is an observable difference. Proposal: leave the Rust
-  default (no handler). Ask before P10 whether anything depends on SIGQUIT → exit 2 (it is
-  almost certainly only for debugging).
+  Go dumps goroutines and exits 2. Rust's default action is core-and-terminate. Exit-by-signal
+  vs exit 2 on SIGQUIT is an observable difference. **Decided (2026-11-18):** keep the Rust
+  default, no handler; the core dump serves the same debugging purpose.
 
 ## Connection task
 

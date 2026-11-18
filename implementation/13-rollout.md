@@ -38,6 +38,9 @@ needs converting in either direction.
 - One derivation builds `jig` and `jigd` (01 §Nix packaging), with the symlink farm for jig
   modes. Binary names, symlink names and the default socket path are unchanged, so the
   consumer side (`sandbox-paths`, `RUSTC_WRAPPER`, launcher wrappers) needs no edits.
+- The symlink farm is in `libexec/jig/` (signed off 2026-11-18), so installing the package
+  does not put `cc`, `gcc` and the other mode names on `PATH`. **Check before cutover** that
+  the ekapkgs wrappers point at `libexec/jig/<name>`, not at a farm of their own.
 - `legacy` stays as a separate attribute until step 5, for rollback and for the difftest CI.
 
 ## Legacy removal

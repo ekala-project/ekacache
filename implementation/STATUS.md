@@ -105,9 +105,9 @@ the runs found:
 - Before `2ab5f67`, jigd ran its store calls through `spawn_blocking`, as 03 §Runtime shape
   says. That made it about 1.5× slower than Go per GET or PUT (22 µs). See decision 6.
 
-## Decisions awaiting sign-off
+## Decisions signed off (2026-11-18)
 
-These are defaults I chose. Each can be reversed.
+Each was a default chosen during the port. All twelve were confirmed as built:
 
 1. **SIGQUIT** (03 §Runtime shape asks for this before P10). The Rust jigd installs no handler,
    so SIGQUIT terminates it with a core dump. Go dumps its goroutines and exits 2.
@@ -127,7 +127,8 @@ These are defaults I chose. Each can be reversed.
    deliberate deviation.
 9. **The nixbld group lookup goes through `getgrnam_r` (NSS)**, as the cgo-built Go jigd does.
 10. **The packaging puts the mode symlinks in `libexec/jig/`.** Legacy's symlink farm comes from
-    the ekapkgs packaging, not this repository. Check that ekapkgs uses the same place.
+    the ekapkgs packaging, not this repository. Checking that ekapkgs points there is a
+    cutover step (13 §Packaging).
 11. **Aborts with no message are kept from legacy**: Q-DRV-10, Q-DIR-4, Q-FIX-10, and a
     `getcwd` failure in rustc mode. Where libstdc++ printed a `terminate` message, the port
     aborts with no text or a short one.
@@ -203,7 +204,7 @@ These quirks are kept, though they look unreasonable:
 
 ## Not built, or not run
 
-- **CI has not run.** `.github/workflows/ci.yml` has every job from 01 §CI, but it has never
+- **CI has not run.** The branch stays local until it is pushed by hand. `.github/workflows/ci.yml` has every job from 01 §CI, but it has never
   run on GitHub. Expect first-run fixes. Things to check:
   - the runner labels (`ubuntu-24.04-arm`, `macos-15`, `macos-13`);
   - the nixpkgs pin, `8fd9daa3db09ced9700431c5b7ad0e8ba199b575` (the archive exists);
@@ -211,9 +212,10 @@ These quirks are kept, though they look unreasonable:
 
   The bench and fuzz jobs are nightly only.
 - **Testing infrastructure from 12 that was not built as specified:**
-  - The `jig-testkit` harness (TOML scenarios, recording proxy, fakes) was not built. Each
-    phase has its own Rust difftest harness, with proxies and fakes where it needs them.
-    `jig-testkit` holds the ITF reader, the vector reader and the `ETXTBSY` retry.
+  - The `jig-testkit` harness (TOML scenarios, recording proxy, fakes) will not be built
+    (decided 2026-11-18; 12 §Harness now says so). Each phase has its own Rust difftest
+    harness, with proxies and fakes where it needs them. `jig-testkit` holds the ITF reader,
+    the vector reader and the `ETXTBSY` retry.
   - `tests/difftest/allow.toml` lists one rule per adopted change, with the tests that pin it,
     and `scripts/check-allow-list.sh` keeps it in step with `behaviors/README.md`. The
     harnesses apply the rules in code, at the `ADOPTED Q-…` lines; nothing reads the file at

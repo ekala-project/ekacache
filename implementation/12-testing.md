@@ -43,6 +43,16 @@ on both sides and lists the missing ones.
 
 ### Harness (`crates/jig-testkit`)
 
+**As built (2026-11-18):** the shared TOML-scenario harness below was not built, and will not
+be. Each phase has its own Rust difftest harness under `crates/*/tests/` (for example
+`cc_mode.rs`, `cache_cmd.rs`, `rustc_difftest.rs`, `gocache_difftest.rs`, `fixup_difftest.rs`,
+`difftest_wire.rs`), with the recording proxies and fakes it needs (`fixtures/rustc/harness.rs`,
+`fake-rustc.sh`, the fake compilers and daemons in each file). They follow the rules below: an
+empty environment, the same absolute paths for both implementations, HELLO normalised out of
+transcripts, and comparison of bytes, exit status and log lines. `jig-testkit` holds what they
+share: the ITF reader, the L1 vector reader and the `ETXTBSY` spawn retry. The design below is
+kept as the description of what those harnesses do.
+
 - **Builds:** CI builds `legacy` (meson + go, from `legacy/`, via the Nix expression from 01)
   and the Rust workspace. Binaries: `legacy-jig`, `legacy-jigd`, `jig`, `jigd`.
 - **Scenario:** a TOML file listing: the files to create, the env (an explicit allow-list
