@@ -458,6 +458,7 @@ fn read_chunk(v: &mut ValueReader, buf: &mut Vec<u8>) -> io::Result<()> {
 
 /// A Unix socket address as Go's `syscall.anyToSockaddr` names it: the path up to its first NUL,
 /// or `@` and the abstract name up to its first NUL, or `@` for an unnamed socket.
+#[cfg(target_os = "linux")]
 fn go_unix_name(addr: &rustix::net::SocketAddrAny) -> Vec<u8> {
     let Ok(unix) = rustix::net::SocketAddrUnix::try_from(addr.clone()) else {
         return b"@".to_vec();
@@ -471,4 +472,15 @@ fn go_unix_name(addr: &rustix::net::SocketAddrAny) -> Vec<u8> {
         out.extend_from_slice(&upto_nul(a));
     }
     out
+}
+
+/// `syscall_bsd.go` `anyToSockaddr`: the path up to its first NUL; empty for an unnamed socket
+/// (no abstract namespace).
+#[cfg(target_vendor = "apple")]
+fn go_unix_name(addr: &rustix::net::SocketAddrAny) -> Vec<u8> {
+    let Ok(unix) = rustix::net::SocketAddrUnix::try_from(addr.clone()) else {
+        return Vec::new();
+    };
+    let p = unix.path_bytes().unwrap_or_default();
+    p[..p.iter().position(|&c| c == 0).unwrap_or(p.len())].to_vec()
 }

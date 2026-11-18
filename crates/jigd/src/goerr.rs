@@ -45,6 +45,11 @@ pub enum GoErr {
 
 /// Go's text for an errno: the `syscall` table entry, or `errno <n>`.
 pub fn errno_text(errno: i32) -> String {
+    // darwin/amd64's table is darwin/arm64's without 106 (`gen/goerrno/darwin.sh`)
+    #[cfg(all(target_vendor = "apple", target_arch = "x86_64"))]
+    if errno == 106 {
+        return format!("errno {errno}");
+    }
     match usize::try_from(errno).ok().and_then(|i| ERRNO.get(i)) {
         Some(s) if !s.is_empty() => (*s).to_owned(),
         _ => format!("errno {errno}"),
@@ -192,10 +197,14 @@ mod tests {
         assert_eq!(errno_text(2), "no such file or directory");
         assert_eq!(errno_text(17), "file exists");
         assert_eq!(errno_text(28), "no space left on device");
-        assert_eq!(errno_text(98), "address already in use");
+        assert_eq!(errno_text(libc::EADDRINUSE), "address already in use");
         assert_eq!(errno_text(13), "permission denied");
         assert_eq!(errno_text(0), "errno 0");
+        // a hole in the table: Linux has no errno 41 (darwin's is EPROTOTYPE)
+        #[cfg(target_os = "linux")]
         assert_eq!(errno_text(41), "errno 41");
+        #[cfg(target_vendor = "apple")]
+        assert_eq!(errno_text(41), "protocol wrong type for socket");
         assert_eq!(errno_text(4000), "errno 4000");
         assert_eq!(errno_text(-1), "errno -1");
     }
@@ -211,7 +220,7 @@ mod tests {
             addr: Some(b"/run/s".to_vec()),
             err: Box::new(GoErr::Syscall {
                 name: "bind",
-                errno: 98,
+                errno: libc::EADDRINUSE,
             }),
         };
         assert_eq!(

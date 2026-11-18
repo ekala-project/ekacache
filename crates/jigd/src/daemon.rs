@@ -92,11 +92,32 @@ fn budget(name: &str, default: i64) -> i64 {
 }
 
 /// `runtime.NumCPU()`: the CPUs in the affinity mask, 1 if it cannot be read (Q-DAEMON-13).
+#[cfg(target_os = "linux")]
 pub fn num_cpu() -> i64 {
     match rustix::thread::sched_getaffinity(None) {
         Ok(set) if set.count() > 0 => i64::from(set.count()),
         _ => 1,
     }
+}
+
+/// `runtime.NumCPU()` on darwin (`getncpu`, `runtime/os_darwin.go`): `sysctl hw.ncpu` when it
+/// succeeds with a positive count, else 1 (`implementation/11-macos.md` §Inventory).
+#[cfg(target_vendor = "apple")]
+#[allow(unsafe_code)]
+pub fn num_cpu() -> i64 {
+    let mut n: libc::c_int = 0;
+    let mut len = std::mem::size_of::<libc::c_int>();
+    // SAFETY: the name is NUL-terminated; `n` is valid for `len` bytes of output; no new value.
+    let rc = unsafe {
+        libc::sysctlbyname(
+            c"hw.ncpu".as_ptr(),
+            (&raw mut n).cast(),
+            &raw mut len,
+            std::ptr::null_mut(),
+            0,
+        )
+    };
+    if rc >= 0 && n > 0 { i64::from(n) } else { 1 }
 }
 
 /// `log.Fatal(err)`: one log line, exit 1.
@@ -106,8 +127,10 @@ fn fatal(log: &Logger, msg: &[u8]) -> ! {
 }
 
 /// `net.ListenUnix("unix", sock)`: `socket` (non-blocking, close-on-exec), `SO_REUSEADDR`,
-/// `bind` with Go's address conversion (a leading `@` is abstract, a name of 108 bytes or more
-/// is `EINVAL`, an empty one autobinds), `listen` with the `somaxconn` backlog.
+/// `bind` with Go's address conversion, `listen` with the `somaxconn` backlog. On Linux a
+/// leading `@` is abstract, a name of 108 bytes or more is `EINVAL` and an empty one autobinds.
+/// On macOS (`syscall_bsd.go`) `@` is an ordinary path (Q-DAEMON-10 is Linux only), and an
+/// empty name or one of 104 bytes or more is `EINVAL`.
 #[allow(unsafe_code)]
 pub fn listen_unix(sock: &[u8]) -> Result<std::os::unix::net::UnixListener, GoErr> {
     let op = |err: GoErr| GoErr::Op {
@@ -121,19 +144,40 @@ pub fn listen_unix(sock: &[u8]) -> Result<std::os::unix::net::UnixListener, GoEr
         let errno = std::io::Error::last_os_error().raw_os_error().unwrap_or(0);
         op(GoErr::Syscall { name, errno })
     };
+    #[cfg(target_os = "linux")]
+    let flags = libc::SOCK_STREAM | libc::SOCK_NONBLOCK | libc::SOCK_CLOEXEC;
+    #[cfg(target_vendor = "apple")]
+    let flags = libc::SOCK_STREAM;
     // SAFETY: plain syscall with constant arguments.
-    let fd = unsafe {
-        libc::socket(
-            libc::AF_UNIX,
-            libc::SOCK_STREAM | libc::SOCK_NONBLOCK | libc::SOCK_CLOEXEC,
-            0,
-        )
-    };
+    let fd = unsafe { libc::socket(libc::AF_UNIX, flags, 0) };
     if fd < 0 {
         return Err(syscall("socket"));
     }
     // SAFETY: `fd` is a socket we just created and own.
     let fd = unsafe { OwnedFd::from_raw_fd(fd) };
+    // Go's darwin `sysSocket`: `socket`, then `CloseOnExec` and `SetNonblock`, whose errors it
+    // reports as `setnonblock`
+    #[cfg(target_vendor = "apple")]
+    {
+        rustix::io::fcntl_setfd(&fd, rustix::io::FdFlags::CLOEXEC).map_err(|e| {
+            op(GoErr::Syscall {
+                name: "setnonblock",
+                errno: e.raw_os_error(),
+            })
+        })?;
+        let fl = rustix::fs::fcntl_getfl(&fd).map_err(|e| {
+            op(GoErr::Syscall {
+                name: "setnonblock",
+                errno: e.raw_os_error(),
+            })
+        })?;
+        rustix::fs::fcntl_setfl(&fd, fl | rustix::fs::OFlags::NONBLOCK).map_err(|e| {
+            op(GoErr::Syscall {
+                name: "setnonblock",
+                errno: e.raw_os_error(),
+            })
+        })?;
+    }
     let one: libc::c_int = 1;
     // SAFETY: `one` is a valid c_int for the duration of the call.
     let rc = unsafe {
@@ -151,7 +195,11 @@ pub fn listen_unix(sock: &[u8]) -> Result<std::os::unix::net::UnixListener, GoEr
     // SAFETY: an all-zero sockaddr_un is valid.
     let mut sa: libc::sockaddr_un = unsafe { std::mem::zeroed() };
     let cap = sa.sun_path.len();
-    if sock.len() > cap || (sock.len() == cap && sock.first() != Some(&b'@')) {
+    #[cfg(target_os = "linux")]
+    let bad = sock.len() > cap || (sock.len() == cap && sock.first() != Some(&b'@'));
+    #[cfg(target_vendor = "apple")]
+    let bad = sock.is_empty() || sock.len() >= cap;
+    if bad {
         return Err(op(GoErr::Syscall {
             name: "bind",
             errno: libc::EINVAL,
@@ -162,12 +210,20 @@ pub fn listen_unix(sock: &[u8]) -> Result<std::os::unix::net::UnixListener, GoEr
         *d = s as libc::c_char;
     }
     // family, name, NUL
-    let mut len = 2 + if sock.is_empty() { 0 } else { sock.len() + 1 };
-    if sock.first() == Some(&b'@') {
-        // abstract: the leading NUL is the marker, and the trailing NUL is not counted
+    #[cfg(target_os = "linux")]
+    let len = if sock.first() == Some(&b'@') {
+        // Q-DAEMON-10: abstract; the leading NUL is the marker, and no trailing NUL is counted
         sa.sun_path[0] = 0;
-        len -= 1;
-    }
+        2 + sock.len()
+    } else {
+        2 + if sock.is_empty() { 0 } else { sock.len() + 1 }
+    };
+    // `sun_len`, family, name, NUL (`raw.Len = 3 + n`)
+    #[cfg(target_vendor = "apple")]
+    let len = {
+        sa.sun_len = (3 + sock.len()) as u8;
+        3 + sock.len()
+    };
     // SAFETY: `sa` is a valid sockaddr_un and `len` does not exceed its size.
     let rc = unsafe {
         libc::bind(
@@ -187,7 +243,31 @@ pub fn listen_unix(sock: &[u8]) -> Result<std::os::unix::net::UnixListener, GoEr
     Ok(std::os::unix::net::UnixListener::from(fd))
 }
 
+/// Go's `maxListenerBacklog` on darwin (`sock_bsd.go`): `sysctl kern.ipc.somaxconn`, else
+/// `SOMAXCONN` when it fails or is 0; capped at 65535.
+#[cfg(target_vendor = "apple")]
+#[allow(unsafe_code)]
+fn listen_backlog() -> i32 {
+    let mut n: u32 = 0;
+    let mut len = std::mem::size_of::<u32>();
+    // SAFETY: the name is NUL-terminated; `n` is valid for `len` bytes of output; no new value.
+    let rc = unsafe {
+        libc::sysctlbyname(
+            c"kern.ipc.somaxconn".as_ptr(),
+            (&raw mut n).cast(),
+            &raw mut len,
+            std::ptr::null_mut(),
+            0,
+        )
+    };
+    if rc < 0 || n == 0 {
+        return libc::SOMAXCONN;
+    }
+    n.min(0xffff) as i32
+}
+
 /// Go's `maxListenerBacklog`: the first number in `/proc/sys/net/core/somaxconn`, else 128.
+#[cfg(target_os = "linux")]
 fn listen_backlog() -> i32 {
     let Ok(text) = std::fs::read("/proc/sys/net/core/somaxconn") else {
         return libc::SOMAXCONN;
@@ -342,6 +422,8 @@ async fn serve(
             _ = int.recv() => {}
             _ = term.recv() => {}
         }
+        // Go's `UnixListener.close` skips a name starting with `@` on every OS, so on macOS,
+        // where `@x` is an ordinary file, it stays until the next startup removes it
         if path.first() != Some(&b'@') {
             let _ = std::fs::remove_file(
                 crate::gofs::nul_free(&path).unwrap_or(std::path::Path::new("")),

@@ -12,7 +12,7 @@ use std::io::Write;
 use std::time::{Duration, Instant};
 
 use common::{Client, End, InProc, eventually, put_req, show};
-use jigd::peer::{AUTO_COUNT, AUTO_UIDS, Auth};
+use jigd::peer::Auth;
 
 fn path(srv: &InProc, name: &str) -> Vec<u8> {
     [
@@ -509,12 +509,30 @@ fn short_pack_hangs_up() {
     assert_eq!(end, End::Eof);
 }
 
+/// Q-DAEMON-8: off Linux every peer is served (`peer_other.go`), whatever its uid.
+#[cfg(not(target_os = "linux"))]
+#[test]
+fn every_peer_is_served_off_linux() {
+    let me = rustix::process::getuid().as_raw();
+    let srv = InProc::with_auth(
+        1,
+        Auth {
+            uid: me.wrapping_add(1),
+            nixbld: -1,
+        },
+    );
+    assert!(srv.connect().stats().starts_with("gets=0 "));
+}
+
 /// H1: a peer that is neither the daemon's user, root, nixbld nor an auto-allocated uid is
 /// closed on without a byte read.
+#[cfg(target_os = "linux")]
 #[test]
 fn foreign_peer_is_refused() {
     let me = rustix::process::getuid().as_raw();
-    if me == 0 || (AUTO_UIDS..AUTO_UIDS + AUTO_COUNT).contains(&me) {
+    if me == 0
+        || (jigd::peer::AUTO_UIDS..jigd::peer::AUTO_UIDS + jigd::peer::AUTO_COUNT).contains(&me)
+    {
         eprintln!("note: running as uid {me}, which is always allowed; skipping");
         return;
     }

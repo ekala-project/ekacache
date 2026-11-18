@@ -6,6 +6,10 @@
 
 pub mod daemon;
 pub mod goerr;
+#[cfg(target_os = "linux")]
+mod goerr_table;
+#[cfg(target_vendor = "apple")]
+#[path = "goerr_table_darwin.rs"]
 mod goerr_table;
 pub mod gofs;
 pub mod gopath;

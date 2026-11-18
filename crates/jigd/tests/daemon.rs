@@ -240,18 +240,23 @@ fn socket_and_sigterm() {
     );
 }
 
-/// The process umask (the daemon inherits it), from `/proc/self/status`.
+/// The process umask (the daemon inherits it): the bits it clears from a file created 0777.
 fn umask() -> u32 {
-    let status = std::fs::read_to_string("/proc/self/status").unwrap();
-    let mask = status
-        .lines()
-        .find_map(|l| l.strip_prefix("Umask:"))
-        .unwrap()
-        .trim();
-    u32::from_str_radix(mask, 8).unwrap()
+    use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
+    let dir = tempfile::tempdir().unwrap();
+    let probe = dir.path().join("umask");
+    std::fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .mode(0o777)
+        .open(&probe)
+        .unwrap();
+    !std::fs::metadata(&probe).unwrap().permissions().mode() & 0o777
 }
 
-/// Q-DAEMON-10: `@name` binds an abstract socket, and the chmod of the path then fails.
+/// Q-DAEMON-10: `@name` binds an abstract socket, and the chmod of the path then fails. Linux
+/// only: on macOS `@name` is an ordinary path.
+#[cfg(target_os = "linux")]
 #[test]
 fn abstract_socket_fails_at_chmod() {
     let bin = rust_jigd();

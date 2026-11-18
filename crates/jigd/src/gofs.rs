@@ -157,7 +157,9 @@ pub fn truncate(file: &File, path: &[u8], size: i64) -> Result<(), GoErr> {
         .map_err(|e| GoErr::path("truncate", path, &e))
 }
 
-/// `(*File).Sync()`.
+/// `(*File).Sync()`. On macOS `sync_all` is `fcntl(F_FULLFSYNC)`, as Go's `Sync` is there: plain
+/// `fsync` does not flush the drive cache, and the adopted Q-STORE-7 intends a sealed pack to
+/// survive power loss (P9 decision 3, `implementation/11-macos.md`; not yet confirmed).
 pub fn fsync(file: &File, path: &[u8]) -> Result<(), GoErr> {
     file.sync_all().map_err(|e| GoErr::path("sync", path, &e))
 }
@@ -194,6 +196,7 @@ pub fn write_all_at(file: &File, path: &[u8], buf: &[u8], off: u64) -> (u64, Res
 /// kernel cannot do it at all. Returns the bytes copied and the error, worded as Go wraps it:
 /// `write <dst>: copy_file_range: <errno>` from the fast path, plain `read <src>: …` /
 /// `write <dst>: …` from the fallback.
+#[cfg(target_os = "linux")]
 pub fn copy_file(
     dst: &File,
     dst_path: &[u8],
@@ -243,6 +246,20 @@ pub fn copy_file(
             }
         }
     }
+}
+
+/// `dst.ReadFrom(src)` off Linux: Go's darwin build has no `copy_file_range` (`zero_copy_stub.go`),
+/// so `io.Copy` is the generic read/write loop.
+#[cfg(not(target_os = "linux"))]
+pub fn copy_file(
+    dst: &File,
+    dst_path: &[u8],
+    dst_off: u64,
+    src: &File,
+    src_path: &[u8],
+    src_off: u64,
+) -> (u64, Result<(), GoErr>) {
+    generic_copy(dst, dst_path, dst_off, src, src_path, src_off)
 }
 
 fn generic_copy(

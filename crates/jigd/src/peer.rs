@@ -31,7 +31,11 @@ impl Auth {
     pub fn from_system() -> Auth {
         Auth {
             uid: rustix::process::getuid().as_raw(),
+            // the lookup lives in `peer_linux.go`: off Linux Go never makes it
+            #[cfg(target_os = "linux")]
             nixbld: nixbld(),
+            #[cfg(not(target_os = "linux"))]
+            nixbld: -1,
         }
     }
 
@@ -61,6 +65,7 @@ impl Auth {
 
 /// `user.LookupGroup("nixbld")` with cgo, then `strconv.Atoi(g.Gid)`: the gid, or -1 when the
 /// lookup fails or finds nothing. (cgo formats the gid itself, so the `Atoi` cannot fail here.)
+#[cfg(target_os = "linux")]
 #[allow(unsafe_code)]
 fn nixbld() -> i64 {
     const MAX_BUFFER: usize = 1 << 20;
