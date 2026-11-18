@@ -76,9 +76,3 @@ impl Ctx {
             .unwrap_or_default()
     }
 }
-
-/// Placeholder for a mode of a later phase.
-fn not_yet(mode: &str) -> i32 {
-    eprintln!("jig: {mode} is not implemented yet");
-    1
-}

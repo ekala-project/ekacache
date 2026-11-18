@@ -51,57 +51,8 @@ pub fn parse_dep_info(text: &[u8], cwd: &[u8]) -> DepInfo {
     info
 }
 
-/// `ParseDepfile(text)` (`manifest.cc:23-62`, `behaviors/jig-keys.md §ParseDepfile`): the
-/// prerequisites of the first rule. `\` + newline continues a line, `\` + space is a space in a
-/// path; a `:` followed by a space, newline or `\` ends the targets.
-///
-/// A private copy: cc mode ports the same function, and the two should become one shared helper
-/// once both exist.
-#[must_use]
-pub fn parse_depfile(text: &[u8]) -> Vec<Vec<u8>> {
-    let mut deps = Vec::new();
-    let mut token = Vec::new();
-    let mut after_colon = false;
-    let flush = |token: &mut Vec<u8>, after_colon: &mut bool, deps: &mut Vec<Vec<u8>>| {
-        if token.is_empty() {
-            return;
-        }
-        if *after_colon {
-            deps.push(std::mem::take(token));
-            return;
-        }
-        if token.last() == Some(&b':') {
-            *after_colon = true;
-        }
-        token.clear();
-    };
-    let mut i = 0;
-    while i < text.len() {
-        let cur = text[i];
-        let next = text.get(i + 1).copied().unwrap_or(b'\n');
-        if cur == b'\\' && next == b'\n' {
-            i += 1; // line continuation
-        } else if cur == b'\\' && next == b' ' {
-            token.push(b' '); // escaped space in a path
-            i += 1;
-        } else if cur == b'\n' {
-            flush(&mut token, &mut after_colon, &mut deps);
-            if after_colon {
-                break; // first rule complete
-            }
-        } else if cur == b' ' || cur == b'\t' {
-            flush(&mut token, &mut after_colon, &mut deps);
-        } else if cur == b':' && !after_colon && matches!(next, b' ' | b'\n' | b'\\') {
-            after_colon = true;
-            token.clear();
-        } else {
-            token.push(cur);
-        }
-        i += 1;
-    }
-    flush(&mut token, &mut after_colon, &mut deps);
-    deps
-}
+/// `ParseDepfile(text)` (`manifest.cc:23-62`), shared with cc mode.
+pub use jig_core::manifest::parse_depfile;
 
 #[cfg(test)]
 mod tests {
