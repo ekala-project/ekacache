@@ -1,14 +1,14 @@
-//! reloc-fixup (`behaviors/jig-reloc-fixup.md`; `fixup_mode.cc`, `elf_fixup.cc`;
-//! `implementation/10-jig-reloc-fixup.md`). Phase P8a: the ELF half; Mach-O images (A6) are
-//! left alone for now.
+//! reloc-fixup (`behaviors/jig-reloc-fixup.md`; `fixup_mode.cc`, `elf_fixup.cc`,
+//! `macho_fixup.cc`; `implementation/10-jig-reloc-fixup.md`). Phase P8a, and the
+//! host-independent Mach-O half of P9.
 //!
-//! The mode rewrites every ELF64-LE image under `<prefix>` in place so the
+//! The mode rewrites every ELF64-LE and 64-bit Mach-O image under `<prefix>` in place so the
 //! tree still loads after it is copied to `--dest`, and checks every file for `--deny` hashes.
 //! The output is legacy's, byte for byte, including the quirks the spec keeps or has not yet
 //! decided (each marked `Q-FIX-n` where it is reproduced):
 //!
 //! - §Invocation: [`run`].
-//! - A1/A3: [`run`] and [`fix_one`]; A2: [`walk`]; A4: [`deny`]; A5: [`elf`];
+//! - A1/A3: [`run`] and [`fix_one`]; A2: [`walk`]; A4: [`deny`]; A5: [`elf`]; A6: [`macho`];
 //!   A7: [`writeback`].
 //! - §Conventions: *Image primitives* in [`image`]; the lexical path operations are
 //!   `jig_core::fspath`, with `Final`, `OnDisk` and `RelativeTo` here and `rel(p)` and `exists`
@@ -25,6 +25,7 @@ mod deny;
 mod elf;
 mod fsops;
 mod image;
+mod macho;
 mod output;
 mod walk;
 mod writeback;
@@ -56,6 +57,8 @@ struct Fixup {
     own_lib_dirs: Vec<Vec<u8>>,
     /// The `--deny` needles, in order.
     denied: Vec<Vec<u8>>,
+    /// `--sdk`, verbatim.
+    sdk: Vec<u8>,
     errors: u64,
     out: Out,
 }
@@ -124,8 +127,9 @@ fn fix_one(fx: &mut Fixup, path: &[u8]) {
         deny::check(fx, &rel, &data);
     }
     let mut img = Image::new(data);
-    // "not mine" (not ELF64-LE) is where the Mach-O fixup goes
-    elf::fix_elf(fx, path, &rel, &mut img);
+    if !elf::fix_elf(fx, path, &rel, &mut img) {
+        macho::fix_macho(fx, path, &rel, &mut img);
+    }
 }
 
 /// §Invocation and A1, with output through `out`.
@@ -137,14 +141,14 @@ fn fixup_mode(args: &[Vec<u8>], out: Out) -> (i32, Out) {
     };
     let prefix = fspath::normalize(first);
     let mut dest = prefix.clone();
+    let mut sdk = Vec::new();
     let mut denied = Vec::new();
     // Q-FIX-2: flags at odd positions only, the last unpaired argument ignored
     for pair in rest.chunks_exact(2) {
         let (flag, value) = (&pair[0], &pair[1]);
         match flag.as_slice() {
             b"--dest" => dest = fspath::normalize(value),
-            // the SDK only matters to Mach-O loads
-            b"--sdk" => {}
+            b"--sdk" => sdk.clone_from(value),
             b"--deny" => {
                 // Q-FIX-3: the last component only; `…/` gives an empty needle
                 let name = fspath::filename(value);
@@ -171,6 +175,7 @@ fn fixup_mode(args: &[Vec<u8>], out: Out) -> (i32, Out) {
         dest,
         own_lib_dirs: tree.own_lib_dirs,
         denied,
+        sdk,
         errors: 0,
         out,
     };
@@ -201,6 +206,7 @@ mod tests {
             dest: dest.to_vec(),
             own_lib_dirs: Vec::new(),
             denied: Vec::new(),
+            sdk: Vec::new(),
             errors: 0,
             out: Out::default(),
         }

@@ -40,6 +40,27 @@ impl Image {
         self.bytes.get(r)?.try_into().ok()
     }
 
+    #[must_use]
+    pub fn u8(&self, off: u64) -> Option<u8> {
+        self.read::<1>(off).map(|b| b[0])
+    }
+
+    #[must_use]
+    pub fn u32_le(&self, off: u64) -> Option<u32> {
+        self.read(off).map(u32::from_le_bytes)
+    }
+
+    #[must_use]
+    pub fn u64_le(&self, off: u64) -> Option<u64> {
+        self.read(off).map(u64::from_le_bytes)
+    }
+
+    /// A big-endian u32 (code-signature blobs; `Big32` in `macho_fixup.cc`).
+    #[must_use]
+    pub fn u32_be(&self, off: u64) -> Option<u32> {
+        self.read(off).map(u32::from_be_bytes)
+    }
+
     /// `Write<T>(off, v)` and `Overwrite(off, data)`: the same rule, `false` on failure.
     pub fn overwrite(&mut self, off: u64, data: &[u8]) -> bool {
         let Some(r) = self.span(off, data.len() as u64) else {
@@ -115,8 +136,8 @@ mod tests {
         let mut elf = Image::new(bytes);
         assert!(elf.is_elf64_le());
         assert!(elf.write_u32_le(16, 0xdead_beef));
-        assert_eq!(elf.read(16).map(u32::from_le_bytes), Some(0xdead_beef));
-        assert_eq!(elf.read::<8>(60), None); // would run past the end
+        assert_eq!(elf.u32_le(16), Some(0xdead_beef));
+        assert_eq!(elf.u64_le(60), None); // would run past the end
         assert_eq!(elf.read::<2>(1000), None);
         assert!(!elf.write_u64_le(57, 1));
         assert!(elf.write_padded(32, 8, b"abc"));
@@ -135,7 +156,7 @@ mod tests {
         assert_eq!(img.read::<2>(4), None);
         assert_eq!(img.read::<0>(5), Some([]));
         assert_eq!(img.read::<0>(6), None);
-        assert_eq!(img.read::<8>(u64::MAX), None);
+        assert_eq!(img.u64_le(u64::MAX), None);
         assert_eq!(img.cstring(0), &[1, 2, 3]);
         assert_eq!(img.cstring(4), &[5]); // no NUL: to the end
         assert_eq!(img.cstring(5), b"");

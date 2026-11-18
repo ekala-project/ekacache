@@ -1,9 +1,11 @@
 //! The `std::filesystem` calls reloc-fixup makes that touch the disk, with libstdc++'s error
-//! semantics (`behaviors/jig-reloc-fixup.md §Conventions` `rel(p)`, A5.5; Q-FIX-10).
+//! semantics (`behaviors/jig-reloc-fixup.md §Conventions` `rel(p)`, A5.5, A6.3 `Resolve`;
+//! Q-FIX-10).
 //!
 //! - `fs::exists(p)` (throwing) is `true` for an existing path, `false` for `ENOENT`/`ENOTDIR`,
 //!   and throws, so the process aborts, for any other `stat` error (`EACCES`, `ELOOP`,
 //!   `ENAMETOOLONG`, …).
+//! - `fs::exists(p, ec)` treats every such error as "does not exist".
 //! - `fs::relative(p, base)` is `weakly_canonical(p).lexically_relative(weakly_canonical(base))`
 //!   and throws (aborts) when either canonicalisation fails.
 //!
@@ -35,6 +37,11 @@ pub fn exists_or_abort(p: &[u8]) -> bool {
         // Q-FIX-10: `fs::exists` without an error code throws on EACCES/ELOOP/…
         Err(()) => abort_now(),
     }
+}
+
+/// `fs::exists(p, ec)`: errors count as not existing.
+pub fn exists_quiet(p: &[u8]) -> bool {
+    status(p).unwrap_or(false)
 }
 
 /// `fs::canonical(p, ec)` (libstdc++ with `realpath`): `realpath(absolute(p))`. libstdc++ falls
@@ -128,5 +135,6 @@ mod tests {
         let mut under_file = f.clone();
         under_file.extend_from_slice(b"/x");
         assert!(!exists_or_abort(&under_file)); // ENOTDIR
+        assert!(!exists_quiet(b"/nonexistent/x"));
     }
 }
