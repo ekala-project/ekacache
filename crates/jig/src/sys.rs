@@ -36,6 +36,16 @@ pub fn cstring(bytes: &[u8]) -> CString {
     CString::new(&bytes[..end]).unwrap_or_default()
 }
 
+/// `std::filesystem::remove(path, ec)`: the C library's `remove(3)` (a file, a symlink, or an
+/// empty directory). `false` when nothing was removed, including when `path` did not exist.
+pub fn remove(path: &[u8]) -> bool {
+    let c = cstring(path);
+    // SAFETY: `c` is a valid NUL-terminated string for the duration of the call.
+    #[allow(unsafe_code)]
+    let rc = unsafe { libc::remove(c.as_ptr()) };
+    rc == 0
+}
+
 /// A NULL-terminated `char*` array over `strings`, which must outlive it.
 #[must_use]
 pub fn ptr_array(strings: &[CString]) -> Vec<*const c_char> {
@@ -97,6 +107,19 @@ mod tests {
         assert_eq!(strerror(libc::ENOENT), b"No such file or directory");
         assert_eq!(strerror(libc::EACCES), b"Permission denied");
         assert_eq!(strerror(99999), b"Unknown error 99999");
+    }
+
+    #[test]
+    fn remove_files_links_and_empty_dirs() {
+        let dir = tempfile::tempdir().unwrap();
+        let p = |n: &str| dir.path().join(n).into_os_string().into_encoded_bytes();
+        std::fs::write(dir.path().join("f"), "").unwrap();
+        std::os::unix::fs::symlink("/nonexistent", dir.path().join("l")).unwrap();
+        std::fs::create_dir(dir.path().join("d")).unwrap();
+        std::fs::create_dir_all(dir.path().join("full/x")).unwrap();
+        assert!(remove(&p("f")) && remove(&p("l")) && remove(&p("d")));
+        assert!(!remove(&p("full")) && !remove(&p("missing")));
+        assert_eq!(std::fs::read_dir(dir.path()).unwrap().count(), 1);
     }
 
     #[test]

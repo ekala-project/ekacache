@@ -1,6 +1,10 @@
 //! The `jig` binary end to end: dispatch, usage, launcher, signal disposition
 //! (`behaviors/jig-dispatch.md`, `implementation/05-jig-foundation.md §Tests`).
-#![allow(clippy::unwrap_used, clippy::many_single_char_names, clippy::items_after_statements)]
+#![allow(
+    clippy::unwrap_used,
+    clippy::many_single_char_names,
+    clippy::items_after_statements
+)]
 
 use std::os::unix::process::ExitStatusExt;
 use std::process::{Command, Output};

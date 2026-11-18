@@ -1,63 +1,21 @@
 //! The client against real daemons (`implementation/05-jig-foundation.md §Tests`): the Go jigd
 //! (`$JIG_LEGACY_JIGD`, HELLO falls back to version 0) and the Rust jigd (version 1). Each test
 //! is skipped when its daemon binary is not given.
-#![allow(clippy::unwrap_used, clippy::many_single_char_names, clippy::items_after_statements)]
+#![allow(
+    clippy::unwrap_used,
+    clippy::many_single_char_names,
+    clippy::items_after_statements
+)]
 
-use std::path::{Path, PathBuf};
-use std::process::{Child, Command};
-use std::time::{Duration, Instant};
+use std::time::Instant;
 
 use jig::client::Client;
 
-struct Daemon {
-    child: Child,
-    sock: PathBuf,
-    _dir: tempfile::TempDir,
-}
-
-impl Drop for Daemon {
-    fn drop(&mut self) {
-        let _ = self.child.kill();
-        let _ = self.child.wait();
-    }
-}
-
-fn start(bin: &Path) -> Daemon {
-    let dir = tempfile::Builder::new()
-        .prefix("jc")
-        .tempdir_in("/tmp")
-        .unwrap();
-    let sock = dir.path().join("s");
-    let child = Command::new(bin)
-        .arg(&sock)
-        .env("XDG_CACHE_HOME", dir.path().join("cache"))
-        .env("JIGD_SLOTS", "2")
-        .stderr(std::process::Stdio::null())
-        .spawn()
-        .unwrap();
-    let t = Instant::now();
-    while !sock.exists() {
-        assert!(t.elapsed() < Duration::from_secs(20), "jigd did not start");
-        std::thread::sleep(Duration::from_millis(20));
-    }
-    // the socket file exists before listen() returns in some daemons; wait until it accepts
-    while std::os::unix::net::UnixStream::connect(&sock).is_err() {
-        std::thread::sleep(Duration::from_millis(20));
-    }
-    Daemon {
-        child,
-        sock,
-        _dir: dir,
-    }
-}
-
-fn daemon(var: &str) -> Option<Daemon> {
-    let bin = std::env::var_os(var)?;
-    Some(start(Path::new(&bin)))
-}
+mod common;
+use common::{Daemon, daemon};
 
 fn round_trips(d: &Daemon, version: u32) {
-    let sock = d.sock.as_os_str().as_encoded_bytes();
+    let sock = d.sock_bytes();
     let mut c = Client::connected_to(sock).expect("connect");
     assert_eq!(c.version(), version);
     assert_eq!(c.get(b"o/none"), None);
@@ -109,7 +67,7 @@ fn rust_jigd() {
 fn hello_cost() {
     for var in ["JIG_LEGACY_JIGD", "JIG_RUST_JIGD"] {
         let Some(d) = daemon(var) else { continue };
-        let sock = d.sock.as_os_str().as_encoded_bytes();
+        let sock = d.sock_bytes();
         let n = 2000;
         let t = Instant::now();
         for _ in 0..n {
