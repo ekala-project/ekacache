@@ -32,6 +32,8 @@ pub struct Tree {
     pub own_lib_dirs: Vec<Vec<u8>>,
 }
 
+// macOS's `DirEntry` holds a whole `dirent` (about 1 KiB); a `Step` lives for one `readdir`
+#[allow(clippy::large_enum_variant)]
 enum Step {
     Entry(DirEntry),
     End,
