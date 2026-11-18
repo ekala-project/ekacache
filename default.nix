@@ -93,10 +93,19 @@ let
     };
   };
 
+  # The C++ jig needs P2718 (lifetime extension in range-for initialisers, GCC 15 / Clang 19).
+  # Without it, add-drv, fetchurls and jig_test's TestNixStore crash on a dangling temporary in
+  # DerivationToATerm (behaviors Q-NIX-1).
+  legacyStdenv =
+    if pkgs.stdenv.cc.isGNU && lib.versionOlder pkgs.stdenv.cc.version "15" then
+      pkgs.gcc15Stdenv
+    else
+      pkgs.stdenv;
+
   # legacy/ exactly as it builds today (legacy/README.md §Building); it stays until legacy removal
   # (13-rollout.md §Legacy removal step 1)
   legacy = {
-    jig = pkgs.stdenv.mkDerivation {
+    jig = legacyStdenv.mkDerivation {
       pname = "jig-legacy";
       version = "0.1.0";
       src = fs.toSource {
@@ -118,9 +127,7 @@ let
         pkgs.nlohmann_json
       ];
       mesonFlags = [ "-Dstore_dir=${builtins.storeDir}" ];
-      # jig_test segfaults in TestNixStore (a std::map compare under DerivationToATerm) with
-      # GCC/libstdc++; the Rust port of those vectors (nix_store::tests::test_nix_store) passes
-      doCheck = false;
+      doCheck = true;
       meta.mainProgram = "jig";
     };
 
