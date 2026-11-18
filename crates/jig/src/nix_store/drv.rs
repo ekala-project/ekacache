@@ -216,12 +216,17 @@ mod tests {
         derivation_to_aterm(json.as_bytes()).map(|v| String::from_utf8(v).unwrap())
     }
 
-    /// `§Test vectors` `### ATerm [test]`.
+    fn vectors() -> jig_testkit::vectors::VectorFile {
+        jig_testkit::vectors::VectorFile::load("jig-nix-store")
+    }
+
+    /// `§Test vectors` `### ATerm [test]`: the `aterm` row of
+    /// `tests/vectors/jig-nix-store.toml`.
     #[test]
     fn aterm_vector() {
-        let input = r#"{"name":"x","system":"x86_64-linux","builder":"/b","args":["-c","echo \"hi\"\n"],"env":{"out":"/o","b":"1","a":"2"},"inputSrcs":["/s2","/s1"],"inputDrvs":{"/d.drv":["out","dev"]},"outputs":{"out":{"hashAlgo":"r:sha256"}}}"#;
-        let want = r#"Derive([("out","","r:sha256","")],[("/d.drv",["dev","out"])],["/s1","/s2"],"x86_64-linux","/b",["-c","echo \"hi\"\n"],[("a","2"),("b","1"),("out","/o")])"#;
-        assert_eq!(aterm_of(input).as_deref(), Some(want));
+        let file = vectors();
+        let v = file.one("aterm");
+        assert_eq!(aterm_of(v.str("json")).as_deref(), Some(v.str("aterm")));
     }
 
     #[test]
@@ -274,12 +279,14 @@ mod tests {
     /// `§Test vectors` `### fetchurls`: the ATerm of `foo-1.0.tar.gz.drv`.
     #[test]
     fn fetchurl_vector() {
-        let file = json::parse(br#"{"name":"foo-1.0.tar.gz","url":"https://example.org/foo-1.0.tar.gz","algo":"sha256","hex":"e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855","sri":"sha256-47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU="}"#).unwrap();
-        let out = b"/nix/store/hq2j18s54yzc9ahyw79v8zdn5pya2ca9-foo-1.0.tar.gz";
-        let want = r#"Derive([("out","/nix/store/hq2j18s54yzc9ahyw79v8zdn5pya2ca9-foo-1.0.tar.gz","sha256","e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855")],[],[],"builtin","builtin:fetchurl",[],[("builder","builtin:fetchurl"),("executable",""),("impureEnvVars","http_proxy https_proxy ftp_proxy all_proxy no_proxy"),("name","foo-1.0.tar.gz"),("out","/nix/store/hq2j18s54yzc9ahyw79v8zdn5pya2ca9-foo-1.0.tar.gz"),("outputHash","sha256-47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU="),("outputHashAlgo",""),("outputHashMode","flat"),("preferLocalBuild","1"),("system","builtin"),("unpack",""),("url","https://example.org/foo-1.0.tar.gz"),("urls","https://example.org/foo-1.0.tar.gz")])"#;
+        let vectors = vectors();
+        let v = vectors.one("fetchurls");
+        // the one entry of the stdin array
+        let entry = v.bytes("stdin").strip_prefix(b"[").unwrap();
+        let file = json::parse(entry.strip_suffix(b"]").unwrap()).unwrap();
         assert_eq!(
-            String::from_utf8(fetchurl_derivation(&file, out)).unwrap(),
-            want
+            String::from_utf8(fetchurl_derivation(&file, v.bytes("out"))).unwrap(),
+            v.str("aterm")
         );
         // `outputHashAlgo` is `algo` when `sri` does not start with `algo-`; absent fields are ""
         let file = json::parse(br#"{"algo":"sha512","sri":"sha256-x"}"#).unwrap();

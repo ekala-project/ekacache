@@ -20,6 +20,8 @@ use std::sync::{Arc, OnceLock};
 use std::thread::JoinHandle;
 use std::time::{Duration, Instant};
 
+use jig_testkit::vectors::VectorFile;
+
 pub const JIG: &str = env!("CARGO_BIN_EXE_jig");
 
 pub const MAGIC_1: u64 = 0x6e69_7863;
@@ -33,17 +35,62 @@ pub const STOP_ACTIVITY: u64 = 0x5354_4f50;
 pub const RESULT: u64 = 0x5253_4c54;
 pub const MAX_STRING: u64 = 64 << 20;
 
-// ---- messages and vectors (`behaviors/jig-nix-store.md §Errors and messages`, `§Test vectors`)
+// ---- messages and vectors (`behaviors/jig-nix-store.md §Errors and messages`, `§Test vectors`),
+// read from `tests/vectors/jig-nix-store.toml`
 
-pub const USAGE: &[u8] = "usage: jig nix-store add-text|add-drv|fetchurls|submit …".as_bytes();
-pub const BAD_ARGUMENTS: &[u8] = b"jig nix-store: bad arguments";
-pub const DID_NOT_PARSE: &[u8] = b"jig nix-store: derivation JSON did not parse";
-pub const NOT_AN_ARRAY: &[u8] = b"jig nix-store fetchurls: expected a JSON array";
-pub const ATERM_JSON: &[u8] = br#"{"name":"x","system":"x86_64-linux","builder":"/b","args":["-c","echo \"hi\"\n"],"env":{"out":"/o","b":"1","a":"2"},"inputSrcs":["/s2","/s1"],"inputDrvs":{"/d.drv":["out","dev"]},"outputs":{"out":{"hashAlgo":"r:sha256"}}}"#;
-pub const ATERM: &[u8] = br#"Derive([("out","","r:sha256","")],[("/d.drv",["dev","out"])],["/s1","/s2"],"x86_64-linux","/b",["-c","echo \"hi\"\n"],[("a","2"),("b","1"),("out","/o")])"#;
-pub const FETCH_ONE: &[u8] = br#"[{"name":"foo-1.0.tar.gz","url":"https://example.org/foo-1.0.tar.gz","algo":"sha256","hex":"e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855","sri":"sha256-47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU="}]"#;
-pub const FETCH_ONE_OUT: &[u8] = br#"[{"drv":"/nix/store/6ymfza6jbp5h9vha2mza1c5fkr9xgpwb-foo-1.0.tar.gz.drv","out":"/nix/store/hq2j18s54yzc9ahyw79v8zdn5pya2ca9-foo-1.0.tar.gz"}]"#;
-pub const FETCH_ONE_ATERM: &[u8] = br#"Derive([("out","/nix/store/hq2j18s54yzc9ahyw79v8zdn5pya2ca9-foo-1.0.tar.gz","sha256","e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855")],[],[],"builtin","builtin:fetchurl",[],[("builder","builtin:fetchurl"),("executable",""),("impureEnvVars","http_proxy https_proxy ftp_proxy all_proxy no_proxy"),("name","foo-1.0.tar.gz"),("out","/nix/store/hq2j18s54yzc9ahyw79v8zdn5pya2ca9-foo-1.0.tar.gz"),("outputHash","sha256-47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU="),("outputHashAlgo",""),("outputHashMode","flat"),("preferLocalBuild","1"),("system","builtin"),("unpack",""),("url","https://example.org/foo-1.0.tar.gz"),("urls","https://example.org/foo-1.0.tar.gz")])"#;
+/// `tests/vectors/jig-nix-store.toml`, loaded once.
+fn vectors() -> &'static VectorFile {
+    static FILE: OnceLock<VectorFile> = OnceLock::new();
+    FILE.get_or_init(|| VectorFile::load("jig-nix-store"))
+}
+
+/// The stderr line of the first `cli` vector run with `args` that has one.
+fn cli_stderr(args: &[&str]) -> &'static [u8] {
+    vectors()
+        .of_kind("cli", 1)
+        .into_iter()
+        .find(|v| v.strs("args") == args && v.get("stderr").is_some())
+        .unwrap_or_else(|| panic!("no cli vector for {args:?} with a stderr"))
+        .bytes("stderr")
+}
+
+pub fn usage() -> &'static [u8] {
+    cli_stderr(&[])
+}
+
+pub fn bad_arguments() -> &'static [u8] {
+    cli_stderr(&["bogus"])
+}
+
+pub fn did_not_parse() -> &'static [u8] {
+    cli_stderr(&["add-drv", "x.drv"])
+}
+
+pub fn not_an_array() -> &'static [u8] {
+    cli_stderr(&["fetchurls"])
+}
+
+/// §ATerm [test]: the derivation JSON and its ATerm.
+pub fn aterm_json() -> &'static [u8] {
+    vectors().one("aterm").bytes("json")
+}
+
+pub fn aterm() -> &'static [u8] {
+    vectors().one("aterm").bytes("aterm")
+}
+
+/// §fetchurls: the one-entry stdin, its stdout and the derivation's ATerm.
+pub fn fetch_one() -> &'static [u8] {
+    vectors().one("fetchurls").bytes("stdin")
+}
+
+pub fn fetch_one_out() -> &'static [u8] {
+    vectors().one("fetchurls").bytes("stdout")
+}
+
+pub fn fetch_one_aterm() -> &'static [u8] {
+    vectors().one("fetchurls").bytes("aterm")
+}
 
 /// How long a client may run before the test gives up on it.
 const CLIENT_DEADLINE: Duration = Duration::from_secs(60);

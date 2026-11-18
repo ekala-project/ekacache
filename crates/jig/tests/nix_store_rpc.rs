@@ -8,14 +8,16 @@
 
 mod nix_store_support;
 
+use jig_testkit::vectors::VectorFile;
+
 use std::time::Duration;
 
 use nix_store_support::{
-    BAD_ARGUMENTS, DID_NOT_PARSE, FETCH_ONE, FETCH_ONE_ATERM, Inv, JIG, LAST, MAX_STRING, NEXT,
-    NOT_AN_ARRAY, Outcome, RESULT, Remote, Row, Running, START_ACTIVITY, STOP_ACTIVITY, Script,
-    Step, USAGE, V1_38, add_reply, cat, check, client_add, client_features, client_handshake,
-    client_hello, client_post, client_submit, daemon_hello, daemon_info, error, handshake,
-    handshake_with, legacy, next, path_info, strace, string, strings, word,
+    Inv, JIG, LAST, MAX_STRING, NEXT, Outcome, RESULT, Remote, Row, Running, START_ACTIVITY,
+    STOP_ACTIVITY, Script, Step, V1_38, add_reply, bad_arguments, cat, check, client_add,
+    client_features, client_handshake, client_hello, client_post, client_submit, daemon_hello,
+    daemon_info, did_not_parse, error, fetch_one, fetch_one_aterm, handshake, handshake_with,
+    legacy, next, not_an_array, path_info, strace, string, strings, usage, word,
 };
 
 const BAD_MAGIC: &[u8] = b"jig nix-store: bad daemon magic";
@@ -64,7 +66,7 @@ fn assert_sent(o: &Outcome, want: &[u8]) {
 #[test]
 fn row_start() {
     let o = check(&Inv::new::<&[u8]>(&[]), &handshake());
-    o.assert_fails(2, &[USAGE]);
+    o.assert_fails(2, &[usage()]);
     assert!(!o.connected);
 }
 
@@ -355,7 +357,7 @@ fn row_ready() {
     ];
     for args in rows {
         let o = check(&Inv::new(args).held_open(), &handshake());
-        o.assert_fails(2, &[BAD_ARGUMENTS]);
+        o.assert_fails(2, &[bad_arguments()]);
         assert_sent(&o, &client_handshake());
     }
     // an unreachable daemon: the connection error, exit 1, never "bad arguments"
@@ -370,14 +372,14 @@ fn row_ready() {
 #[test]
 fn row_read_input() {
     let rows: &[Row<'_>] = &[
-        (&[b"add-drv", b"x.drv"], b"abc", DID_NOT_PARSE),
+        (&[b"add-drv", b"x.drv"], b"abc", did_not_parse()),
         (
             &[b"add-drv", b"x.drv"],
             br#"{"env":{"a":1}}"#,
-            DID_NOT_PARSE,
+            did_not_parse(),
         ),
-        (&[b"fetchurls"], b"{}", NOT_AN_ARRAY),
-        (&[b"fetchurls"], b"", NOT_AN_ARRAY),
+        (&[b"fetchurls"], b"{}", not_an_array()),
+        (&[b"fetchurls"], b"", not_an_array()),
     ];
     for (args, stdin, msg) in rows {
         let o = check(&Inv::new(args).stdin(stdin), &handshake());
@@ -557,8 +559,12 @@ fn row_await_submit_result() {
 /// `dump()` (escaped; invalid UTF-8 aborts).
 #[test]
 fn row_done() {
-    let two = cat(&[&FETCH_ONE[..FETCH_ONE.len() - 1], b",", &FETCH_ONE[1..]]);
-    let request = client_add(b"foo-1.0.tar.gz.drv", &[], FETCH_ONE_ATERM);
+    let two = cat(&[
+        &fetch_one()[..fetch_one().len() - 1],
+        b",",
+        &fetch_one()[1..],
+    ]);
+    let request = client_add(b"foo-1.0.tar.gz.drv", &[], fetch_one_aterm());
     let out = b"/nix/store/hq2j18s54yzc9ahyw79v8zdn5pya2ca9-foo-1.0.tar.gz";
     let script = |d1: &[u8], d2: &[u8]| {
         let mut s = add_reply(request.len(), &ok_reply(d1));
@@ -588,8 +594,12 @@ fn row_done() {
 /// Q-NIX-17: a failure on element k prints nothing; the earlier ops were sent and completed.
 #[test]
 fn fetchurls_partial_failure() {
-    let two = cat(&[&FETCH_ONE[..FETCH_ONE.len() - 1], b",", &FETCH_ONE[1..]]);
-    let request = client_add(b"foo-1.0.tar.gz.drv", &[], FETCH_ONE_ATERM);
+    let two = cat(&[
+        &fetch_one()[..fetch_one().len() - 1],
+        b",",
+        &fetch_one()[1..],
+    ]);
+    let request = client_add(b"foo-1.0.tar.gz.drv", &[], fetch_one_aterm());
     let mut s = add_reply(request.len(), &ok_reply(b"/d/1.drv"));
     s.push(Step::Recv(request.len()));
     s.push(Step::Send(error(b"no")));
@@ -597,7 +607,7 @@ fn fetchurls_partial_failure() {
     o.assert_fails(1, &[b"nix-daemon: no"]);
     assert_sent(&o, &cat(&[&client_handshake(), &request, &request]));
     // an abort on the second element, after the first op
-    let json = cat(&[&FETCH_ONE[..FETCH_ONE.len() - 1], b",1]"]);
+    let json = cat(&[&fetch_one()[..fetch_one().len() - 1], b",1]"]);
     let o = check(
         &Inv::new(&[b"fetchurls"]).stdin(&json),
         &add_reply(request.len(), &ok_reply(b"/d/1.drv")),
@@ -852,40 +862,43 @@ fn drain_huge_fields_count_loops() {
 
 #[test]
 fn wire_examples() {
-    assert_eq!(client_hello(), {
-        let mut v = vec![0x63, 0x78, 0x69, 0x6e, 0, 0, 0, 0];
-        v.extend_from_slice(&[0x26, 0x01, 0, 0, 0, 0, 0, 0]);
-        v
-    });
-    assert_eq!(client_features().len(), 136);
-    assert_eq!(client_post(), [0u8; 16]);
+    let file = VectorFile::load("jig-nix-store");
+    for v in file.of_kind("wire", 8) {
+        let words: Vec<&str> = v.str("message").split(' ').collect();
+        let got = match words[..] {
+            ["client_hello"] => client_hello(),
+            ["client_features"] => client_features(),
+            ["client_post"] => client_post(),
+            ["add_text", name] => client_add(name.as_bytes(), &[], b""),
+            ["add_text", name, contents] => client_add(name.as_bytes(), &[], contents.as_bytes()),
+            ["submit", path, output] => client_submit(path.as_bytes(), output.as_bytes()),
+            ["daemon_hello"] => daemon_hello(V1_38),
+            ["stderr_last"] => word(LAST),
+            _ => panic!("{}: unknown message", v.label()),
+        };
+        assert_eq!(hex(&got), hex(&v.hex("wire_hex")), "{}", v.label());
+    }
+    // the client sends exactly these on the socket
     let request = hello_request();
-    assert_eq!(request.len(), 93);
     let o = check(&add_hello(), &hello_script(&ok_reply(DAEMON_PATH)));
     o.assert_prints(DAEMON_PATH);
     assert_sent(&o, &cat(&[&client_handshake(), &request]));
     // Q-NIX-6: empty contents send a zero-length chunk and the terminator
     let empty = client_add(b"e", &[], b"");
-    assert_eq!(empty.len(), 80);
-    assert!(empty.ends_with(&[0; 16]));
     let o = check(
         &Inv::new(&[&b"add-text"[..], b"e"]),
-        &add_reply(80, &ok_reply(DAEMON_PATH)),
+        &add_reply(empty.len(), &ok_reply(DAEMON_PATH)),
     );
     o.assert_prints(DAEMON_PATH);
     assert_sent(&o, &cat(&[&client_handshake(), &empty]));
-    // SubmitOutput (64 bytes)
-    let submit_bytes = client_submit(b"/nix/store/abc-x.drv", b"out");
-    assert_eq!(submit_bytes.len(), 64);
-    assert_eq!(&submit_bytes[..8], &[0xe8_u8, 0x03, 0, 0, 0, 0, 0, 0]);
-    // the daemon side the client accepts
-    assert_eq!(
-        daemon_hello(V1_38),
-        [
-            0x6f_u8, 0x69, 0x78, 0x64, 0, 0, 0, 0, 0x26, 0x01, 0, 0, 0, 0, 0, 0
-        ]
-    );
-    assert_eq!(word(LAST), [0x73_u8, 0x74, 0x6c, 0x61, 0, 0, 0, 0]);
+}
+
+fn hex(b: &[u8]) -> String {
+    use std::fmt::Write;
+    b.iter().fold(String::new(), |mut out, x| {
+        write!(out, "{x:02x}").unwrap();
+        out
+    })
 }
 
 /// Q-NIX-5: the references go out sorted with duplicates; Q-NIX-13: add-drv sends the ATerm
@@ -905,11 +918,11 @@ fn add_requests() {
     let request = client_add(
         b"x.drv",
         &[b"/d.drv", b"/s1", b"/s2"],
-        nix_store_support::ATERM,
+        nix_store_support::aterm(),
     );
     let o = check(
         &Inv::new(&[&b"add-drv"[..], b"x.drv", b"/s2", b"/s1", b"/d.drv"])
-            .stdin(nix_store_support::ATERM_JSON),
+            .stdin(nix_store_support::aterm_json()),
         &add_reply(request.len(), &ok_reply(DAEMON_PATH)),
     );
     o.assert_prints(DAEMON_PATH);
@@ -951,7 +964,7 @@ fn sigpipe() {
         (add_hello(), &post),
         (add_hello(), &op),
         (submit(), &op),
-        (Inv::new(&[b"fetchurls"]).stdin(FETCH_ONE), &op),
+        (Inv::new(&[b"fetchurls"]).stdin(fetch_one()), &op),
     ] {
         check(&inv, s).assert_killed(libc::SIGPIPE);
         check(&inv.sigpipe_ignored(), s).assert_fails(1, &[]);
@@ -964,8 +977,12 @@ fn sigpipe() {
 /// exit 0, seven writes.
 #[test]
 fn quint_fetch_two() {
-    let two = cat(&[&FETCH_ONE[..FETCH_ONE.len() - 1], b",", &FETCH_ONE[1..]]);
-    let request = client_add(b"foo-1.0.tar.gz.drv", &[], FETCH_ONE_ATERM);
+    let two = cat(&[
+        &fetch_one()[..fetch_one().len() - 1],
+        b",",
+        &fetch_one()[1..],
+    ]);
+    let request = client_add(b"foo-1.0.tar.gz.drv", &[], fetch_one_aterm());
     let activity = cat(&[&word(STOP_ACTIVITY), &word(1)]);
     let mut s = handshake_with(&next(b"hello"));
     s.push(Step::Recv(request.len()));
@@ -1011,7 +1028,7 @@ fn quint_daemon_error() {
 #[test]
 fn quint_bad_verb_after_handshake() {
     let o = check(&Inv::new(&[b"bogus"]), &handshake_with(&next(b"hello")));
-    o.assert_fails(2, &[b"hello", BAD_ARGUMENTS]);
+    o.assert_fails(2, &[b"hello", bad_arguments()]);
     assert_sent(&o, &client_handshake());
 }
 

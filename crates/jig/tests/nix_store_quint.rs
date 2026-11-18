@@ -15,9 +15,9 @@ mod nix_store_support;
 use serde_json::Value;
 
 use nix_store_support::{
-    ATERM, ATERM_JSON, FETCH_ONE, FETCH_ONE_ATERM, Inv, LAST, MAGIC_1, MAGIC_2, RESULT,
-    START_ACTIVITY, STOP_ACTIVITY, Script, Step, V1_38, cat, check, client_add, client_features,
-    client_submit, daemon_info, error, next, path_info, strace, string, strings, word,
+    Inv, LAST, MAGIC_1, MAGIC_2, RESULT, START_ACTIVITY, STOP_ACTIVITY, Script, Step, V1_38, aterm,
+    aterm_json, cat, check, client_add, client_features, client_submit, daemon_info, error,
+    fetch_one, fetch_one_aterm, next, path_info, strace, string, strings, word,
 };
 
 const DAEMON_PATH: &[u8] = b"/nix/store/00000000000000000000000000000000-from-daemon";
@@ -124,17 +124,17 @@ fn replay(trace: &Value) -> Replay {
         ),
         "AddDrv" => (
             &[b"add-drv", b"x.drv"],
-            ATERM_JSON.to_vec(),
-            client_add(b"x.drv", &[], ATERM),
+            aterm_json().to_vec(),
+            client_add(b"x.drv", &[], aterm()),
         ),
         "Fetchurls" => {
             let n = usize::try_from(int(&first["fetchLeft"])).unwrap();
-            let element = &FETCH_ONE[1..FETCH_ONE.len() - 1];
+            let element = &fetch_one()[1..fetch_one().len() - 1];
             let elements = vec![element; n].join(&b","[..]);
             (
                 &[b"fetchurls"],
                 cat(&[b"[", &elements, b"]"]),
-                client_add(b"foo-1.0.tar.gz.drv", &[], FETCH_ONE_ATERM),
+                client_add(b"foo-1.0.tar.gz.drv", &[], fetch_one_aterm()),
             )
         }
         "Submit" => (

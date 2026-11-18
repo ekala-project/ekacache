@@ -5,56 +5,29 @@
 
 mod nix_store_support;
 
+use jig_testkit::vectors::VectorFile;
+
 use nix_store_support::{
-    ATERM, ATERM_JSON, BAD_ARGUMENTS, DID_NOT_PARSE, FETCH_ONE, FETCH_ONE_ATERM, FETCH_ONE_OUT,
-    Inv, NOT_AN_ARRAY, Outcome, Remote, Row, USAGE, check, check_offline,
+    Inv, Outcome, Remote, aterm, aterm_json, bad_arguments, check, check_offline, did_not_parse,
+    fetch_one, fetch_one_aterm, fetch_one_out, not_an_array, usage,
 };
 
 fn offline(args: &[&[u8]], stdin: &[u8]) -> Outcome {
     check_offline(&Inv::new(args).stdin(stdin))
 }
 
-const A: &[u8] = b"/nix/store/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-a";
-const B: &[u8] = b"/nix/store/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb-b";
+fn vectors() -> VectorFile {
+    VectorFile::load("jig-nix-store")
+}
 
-/// §Text paths [bin].
+/// §Text paths [bin]: the `text-path` rows of `tests/vectors/jig-nix-store.toml`.
 #[test]
 fn text_path_vectors() {
-    let rows: &[Row<'_>] = &[
-        (
-            &[b"add-text", b"hello"],
-            b"",
-            b"/nix/store/56wfjivf3kjkp4zhj4xz7722hgg01bdn-hello",
-        ),
-        (
-            &[b"add-text", b"hello.txt"],
-            b"hello",
-            b"/nix/store/q790zdjk75hm2cn42nh77pqw4gbv1b88-hello.txt",
-        ),
-        (
-            &[b"add-text", b"hello.txt", B, A],
-            b"hello",
-            b"/nix/store/ib8bp90l2c4w69hgv1c1s3xd4rifpd1f-hello.txt",
-        ),
-        (
-            &[b"add-text", b"hello.txt", A],
-            b"hello",
-            b"/nix/store/wyzya2mj8n7qzknk6pzcw6ls86nxhcir-hello.txt",
-        ),
-        // Q-NIX-5: the duplicate is kept
-        (
-            &[b"add-text", b"hello.txt", A, A],
-            b"hello",
-            b"/nix/store/0f7wh5bl25mnb8di6vr02zm0pl7r4sf9-hello.txt",
-        ),
-        (
-            &[b"add-text", b""],
-            b"",
-            b"/nix/store/9ip48nkc9rfy0a4yaw98lp6gipqlib1a-",
-        ),
-    ];
-    for (args, stdin, path) in rows {
-        offline(args, stdin).assert_prints(path);
+    for v in vectors().of_kind("text-path", 6) {
+        let mut args: Vec<&[u8]> = vec![b"add-text", v.bytes("name")];
+        let refs = v.byte_strs("refs");
+        args.extend(refs.iter().map(Vec::as_slice));
+        offline(&args, v.bytes("stdin")).assert_prints(v.bytes("path"));
     }
 }
 
@@ -70,42 +43,61 @@ fn text_paths_take_anything() {
     for args in rows {
         let o = offline(args, &binary);
         if args[0] == b"add-drv" {
-            o.assert_fails(1, &[DID_NOT_PARSE]);
+            o.assert_fails(1, &[did_not_parse()]);
         } else {
             assert_eq!(o.code, Some(0), "{o:?}");
         }
     }
 }
 
-/// §CLI behavior [bin, offline].
+/// §CLI behavior [bin, offline]: the `cli` rows, then cases beyond the doc's table.
 #[test]
 fn cli_behaviour() {
-    offline(&[], b"").assert_fails(2, &[USAGE]);
+    for v in vectors().of_kind("cli", 12) {
+        let at = v.label();
+        let args: Vec<&[u8]> = v.strs("args").into_iter().map(str::as_bytes).collect();
+        let mut inv = Inv::new(&args).stdin(v.opt_bytes("stdin").unwrap_or(b""));
+        let env = v.opt_strs("env").unwrap_or_default();
+        for kv in &env {
+            let (k, val) = kv.split_once('=').unwrap();
+            inv = inv.env(k, val.as_bytes());
+        }
+        let o = if env.is_empty() {
+            check_offline(&inv)
+        } else {
+            check(&inv, &[])
+        };
+        assert!(!o.connected, "{at}");
+        let line = |key: &str| {
+            v.opt_bytes(key)
+                .map(|l| [l, b"\n"].concat())
+                .unwrap_or_default()
+        };
+        assert_eq!(
+            o.code,
+            Some(i32::try_from(v.int("status")).unwrap()),
+            "{at}: {o:?}"
+        );
+        assert_eq!(o.stderr, line("stderr"), "{at}: {o:?}");
+        assert_eq!(o.stdout, line("stdout"), "{at}: {o:?}");
+    }
     let rows: &[&[&[u8]]] = &[
-        &[b"bogus"],
-        &[b"add-text"],
         &[b"add-drv"],
         &[b"submit"],
-        &[b"submit", b"/nix/store/x"],
         &[b"submit", b"a", b"b", b"c"],
-        &[b"fetchurls", b"x"],
         &[b"--help"],
         &[b"-h"],
         &[b"ADD-TEXT", b"x"],
     ];
     for args in rows {
-        offline(args, b"").assert_fails(2, &[BAD_ARGUMENTS]);
+        offline(args, b"").assert_fails(2, &[bad_arguments()]);
     }
     // Q-NIX-14
-    let o = offline(&[b"submit", b"/nix/store/x", b"out"], b"");
-    o.assert_fails(0, &[]);
     let o = offline(&[b"submit", b"", b""], b"");
     o.assert_fails(0, &[]);
-    offline(&[b"add-drv", b"x.drv"], b"abc").assert_fails(1, &[DID_NOT_PARSE]);
-    for stdin in [&b"[1,2"[..], b"{}", b"[] x", b"", b"null", b"\"[]\""] {
-        offline(&[b"fetchurls"], stdin).assert_fails(1, &[NOT_AN_ARRAY]);
+    for stdin in [&b""[..], b"null", b"\"[]\""] {
+        offline(&[b"fetchurls"], stdin).assert_fails(1, &[not_an_array()]);
     }
-    offline(&[b"fetchurls"], b"[]").assert_prints(b"[]");
     offline(&[b"fetchurls"], b" \t\r\n[ ]\n").assert_prints(b"[]");
 }
 
@@ -118,7 +110,7 @@ fn usage_reads_nothing() {
         Remote::Value(b"daemon".to_vec()),
     ] {
         let o = check(&Inv::new::<&[u8]>(&[]).remote(remote), &[]);
-        o.assert_fails(2, &[USAGE]);
+        o.assert_fails(2, &[usage()]);
         assert!(!o.connected);
     }
 }
@@ -166,19 +158,16 @@ fn assert_aterm(json: &[u8], aterm: &[u8]) {
 /// §ATerm [test]: the paths of the vector, with and without references (Q-NIX-13: from argv).
 #[test]
 fn aterm_vector() {
-    offline(&[b"add-drv", b"x.drv"], ATERM_JSON)
-        .assert_prints(b"/nix/store/8brqylbyfhqj84mbvsqdh01391dvhcj0-x.drv");
-    offline(
-        &[b"add-drv", b"x.drv", b"/s2", b"/s1", b"/d.drv"],
-        ATERM_JSON,
-    )
-    .assert_prints(b"/nix/store/yvkb55mkif6rlrm6h2lgk6l1amh5xa5i-x.drv");
-    assert_eq!(
-        text_path(b"x.drv", &[], ATERM),
-        b"/nix/store/8brqylbyfhqj84mbvsqdh01391dvhcj0-x.drv"
-    );
+    let file = vectors();
+    let v = file.one("aterm");
+    offline(&[b"add-drv", b"x.drv"], aterm_json()).assert_prints(v.bytes("drv_path"));
+    let mut args: Vec<&[u8]> = vec![b"add-drv", b"x.drv"];
+    let refs = v.byte_strs("refs");
+    args.extend(refs.iter().map(Vec::as_slice));
+    offline(&args, aterm_json()).assert_prints(v.bytes("drv_path_with_refs"));
+    assert_eq!(text_path(b"x.drv", &[], aterm()), v.bytes("drv_path"));
     // the JSON "name" is ignored: the store name is the argument
-    offline(&[b"add-drv", b"y"], ATERM_JSON).assert_prints(&text_path(b"y", &[], ATERM));
+    offline(&[b"add-drv", b"y"], aterm_json()).assert_prints(&text_path(b"y", &[], aterm()));
 }
 
 /// §JSON decoding and §add-drv input → ATerm: shapes that encode.
@@ -253,7 +242,7 @@ fn aterm_deep_nesting() {
     assert_aterm(&json, br#"Derive([],[],[],"s","",[],[])"#);
     // unbalanced at depth: a parse error
     let cut = &json[..json.len() - 20];
-    offline(&[b"add-drv", b"x.drv"], cut).assert_fails(1, &[DID_NOT_PARSE]);
+    offline(&[b"add-drv", b"x.drv"], cut).assert_fails(1, &[did_not_parse()]);
 }
 
 /// Parse failures, a non-object top level and non-string `env` values: the clean failure.
@@ -303,7 +292,7 @@ fn aterm_failures() {
         br#"{"env":{"a":1},"outputs":{"o":1}}"#,
     ];
     for json in rows {
-        offline(&[b"add-drv", b"x.drv"], json).assert_fails(1, &[DID_NOT_PARSE]);
+        offline(&[b"add-drv", b"x.drv"], json).assert_fails(1, &[did_not_parse()]);
     }
 }
 
@@ -348,17 +337,29 @@ fn aterm_aborts() {
 /// §fetchurls [derived].
 #[test]
 fn fetchurls_vector() {
-    offline(&[b"fetchurls"], FETCH_ONE).assert_prints(FETCH_ONE_OUT);
+    let file = vectors();
+    let v = file.one("fetchurls");
+    offline(&[b"fetchurls"], fetch_one()).assert_prints(fetch_one_out());
     assert_eq!(
-        text_path(b"foo-1.0.tar.gz.drv", &[], FETCH_ONE_ATERM),
-        b"/nix/store/6ymfza6jbp5h9vha2mza1c5fkr9xgpwb-foo-1.0.tar.gz.drv"
+        text_path(v.bytes("drv_name"), &[], fetch_one_aterm()),
+        v.bytes("drv")
+    );
+    assert!(
+        fetch_one_out()
+            .windows(v.bytes("drv").len())
+            .any(|w| w == v.bytes("drv"))
     );
     // duplicates give duplicate entries, in order
-    let two = [&FETCH_ONE[..FETCH_ONE.len() - 1], b",", &FETCH_ONE[1..]].concat();
-    let out = [
-        &FETCH_ONE_OUT[..FETCH_ONE_OUT.len() - 1],
+    let two = [
+        &fetch_one()[..fetch_one().len() - 1],
         b",",
-        &FETCH_ONE_OUT[1..],
+        &fetch_one()[1..],
+    ]
+    .concat();
+    let out = [
+        &fetch_one_out()[..fetch_one_out().len() - 1],
+        b",",
+        &fetch_one_out()[1..],
     ]
     .concat();
     offline(&[b"fetchurls"], &two).assert_prints(&out);
