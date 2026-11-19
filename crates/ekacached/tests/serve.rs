@@ -333,8 +333,14 @@ fn line_limit() {
     req.extend_from_slice(b"\nHAS k\n");
     let (got, end) = transcript(&srv, &req);
     assert_eq!(show(&got), "");
-    // the newline and HAS were never read
-    assert_eq!(end, End::Reset);
+    // the newline and HAS were never read: Linux reports that as ECONNRESET, while macOS
+    // drops the unread bytes and gives a plain EOF
+    let unread = if cfg!(target_os = "linux") {
+        End::Reset
+    } else {
+        End::Eof
+    };
+    assert_eq!(end, unread);
 
     // a partial line before EOF is discarded (Q-PROTO-11)
     assert_eq!(

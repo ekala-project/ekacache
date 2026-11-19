@@ -121,7 +121,12 @@ impl Fixture {
             (b"bin\xff", b"q"),
             (b"h.h\r", b"cr"),
         ] {
-            std::fs::write(store.join(std::ffi::OsStr::from_bytes(name)), body).unwrap();
+            match std::fs::write(store.join(std::ffi::OsStr::from_bytes(name)), body) {
+                // APFS refuses names that are not UTF-8: `/bin\xff` is then a missing file to
+                // both daemons alike
+                Err(e) if e.raw_os_error() == Some(libc::EILSEQ) => {}
+                r => r.unwrap(),
+            }
         }
         let big: Vec<u8> = (0..300_000u32).map(|i| (i % 249) as u8).collect();
         std::fs::write(store.join("big"), big).unwrap();

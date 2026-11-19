@@ -79,7 +79,9 @@ impl Client {
         if self.closed.is_some() {
             return false;
         }
-        self.s.set_read_timeout(Some(wait)).unwrap();
+        // macOS fails setsockopt with EINVAL once the peer has hung up; the read below then
+        // returns at once with what is left, so the timeouts are best effort
+        let _ = self.s.set_read_timeout(Some(wait));
         let mut chunk = vec![0u8; 1 << 16];
         let got = loop {
             match self.s.read(&mut chunk) {
@@ -105,7 +107,7 @@ impl Client {
                 }
             }
         };
-        self.s.set_read_timeout(Some(PATIENCE)).unwrap();
+        let _ = self.s.set_read_timeout(Some(PATIENCE));
         got
     }
 
