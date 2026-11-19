@@ -117,6 +117,14 @@ fn deny() {
     }
 }
 
+/// The loader gcc links `bin/plain` against (it has no `--dynamic-linker`; `bin/foo` takes
+/// the driver's, which is x86-64's on every host, as in legacy).
+const HOST_LD: &str = if cfg!(target_arch = "aarch64") {
+    "ld-linux-aarch64.so.1"
+} else {
+    "ld-linux-x86-64.so.2"
+};
+
 /// §Test vectors, *ELF end to end*, with this machine's glibc for `<G>`.
 #[test]
 fn elf_end_to_end() {
@@ -166,14 +174,24 @@ fn elf_end_to_end() {
     assert_eq!(
         line_of(&all, "bin/plain"),
         format!(
-            "bin/plain  RUNPATH {gr}  NEEDED $ORIGIN/../lib/libbar.so  INTERP {}/ld-linux-x86-64.so.2 kept (no stub)",
+            "bin/plain  RUNPATH {gr}  NEEDED $ORIGIN/../lib/libbar.so  INTERP {}/{HOST_LD} kept (no stub)",
             g.g()
         )
     );
-    assert!(all.contains(&format!(
-        "  WARN absolute store ref in bin/plain @0x318: {}/ld-linux-x86-64.so.2",
-        g.g()
-    )));
+    // `.interp` is at 0x318 on x86-64; the offset follows the target's section layout
+    let warn_tail = format!(": {}/{HOST_LD}", g.g());
+    assert!(
+        all.iter().any(|l| {
+            l.strip_prefix("  WARN absolute store ref in bin/plain @0x")
+                .and_then(|rest| rest.strip_suffix(warn_tail.as_str()))
+                .is_some_and(|off| {
+                    !off.is_empty()
+                        && off.bytes().all(|b| b.is_ascii_hexdigit())
+                        && (cfg!(not(target_arch = "x86_64")) || off == "318")
+                })
+        }),
+        "no WARN line for bin/plain in {all:?}"
+    );
     // the RELOCSTB header makes e_entry itself the stub
     assert!(line_of(&all, "bin/relocstb").ends_with(" (PT_NULL, entry=__reloc_start)"));
     let stderr = text(&r.stderr);
