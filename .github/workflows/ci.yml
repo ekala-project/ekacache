@@ -151,4 +151,6 @@ jobs:
       - name: build the Go jigd
         run: echo "JIG_LEGACY_JIGD=$(nix-build --no-out-link -A legacy.jigd)/bin/jigd" >>"$GITHUB_ENV"
       - name: test and difftest
+        # a hang must fail the job, not use up the runner's six hours
+        timeout-minutes: 60
         run: nix-shell --run 'cargo build -p ekacached --locked && EC_RUST_ECD=$PWD/target/debug/ecd cargo test --workspace --locked --no-fail-fast'
