@@ -51,7 +51,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: cachix/install-nix-action@v31
       - name: cargo test (unit, vectors, ported legacy tests)
-        run: nix-shell --run 'cargo test --workspace --locked'
+        run: nix-shell --run 'cargo test --workspace --locked --no-fail-fast'
 
   quint:
     runs-on: ubuntu-24.04
@@ -105,9 +105,9 @@ jobs:
           echo "JIG_TEST_GCC=$(nix-build --no-out-link '<nixpkgs>' -A gcc15)/bin/gcc" >>"$GITHUB_ENV"
           echo "JIG_TEST_CLANG=$(nix-build --no-out-link '<nixpkgs>' -A clang_20)/bin/clang" >>"$GITHUB_ENV"
       - name: Rust jig + Rust jigd, against legacy
-        run: nix-shell --run 'cargo build -p jigd --locked && JIG_RUST_JIGD=$PWD/target/debug/jigd cargo test --workspace --locked'
+        run: nix-shell --run 'cargo build -p jigd --locked && JIG_RUST_JIGD=$PWD/target/debug/jigd cargo test --workspace --locked --no-fail-fast'
       - name: Rust jig + Go jigd
-        run: nix-shell --run 'cargo test -p jig --locked'
+        run: nix-shell --run 'cargo test -p jig --locked --no-fail-fast'
 
   bench:
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
@@ -141,14 +141,14 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        runner: [macos-15, macos-13] # aarch64, x86_64
+        runner: [macos-15, macos-15-intel] # aarch64, x86_64
     runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v4
       - uses: cachix/install-nix-action@v31
-      - name: build legacy
-        run: |
-          echo "JIG_LEGACY_JIG=$(nix-build --no-out-link -A legacy.jig)/bin/jig" >>"$GITHUB_ENV"
-          echo "JIG_LEGACY_JIGD=$(nix-build --no-out-link -A legacy.jigd)/bin/jigd" >>"$GITHUB_ENV"
+      # the C++ jig does not build on macOS (SOCK_CLOEXEC, environ), so only the Go jigd is
+      # compared against here
+      - name: build the Go jigd
+        run: echo "JIG_LEGACY_JIGD=$(nix-build --no-out-link -A legacy.jigd)/bin/jigd" >>"$GITHUB_ENV"
       - name: test and difftest
-        run: nix-shell --run 'cargo build -p jigd --locked && JIG_RUST_JIGD=$PWD/target/debug/jigd cargo test --workspace --locked'
+        run: nix-shell --run 'cargo build -p jigd --locked && JIG_RUST_JIGD=$PWD/target/debug/jigd cargo test --workspace --locked --no-fail-fast'

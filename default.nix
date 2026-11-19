@@ -128,7 +128,11 @@ let
       ];
       mesonFlags = [ "-Dstore_dir=${builtins.storeDir}" ];
       doCheck = true;
-      meta.mainProgram = "jig";
+      meta = {
+        mainProgram = "jig";
+        # SOCK_CLOEXEC, environ without a declaration: the C++ jig builds only on Linux
+        platforms = lib.platforms.linux;
+      };
     };
 
     jigd = pkgs.buildGoModule {
