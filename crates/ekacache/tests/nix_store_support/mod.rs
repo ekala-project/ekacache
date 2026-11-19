@@ -497,6 +497,20 @@ impl Outcome {
         assert!(self.stdout.is_empty(), "{self:?}");
         assert!(self.stderr.is_empty(), "{self:?}");
     }
+
+    /// A write after the fake daemon's `ShutRd`, with SIGPIPE at its default: killed by
+    /// SIGPIPE (Q-NIX-7). Linux fails the write with EPIPE once the peer has shut its read
+    /// side. Darwin does not reliably do so for a peer that only shut down reading, and the
+    /// client then reads the hang-up instead: the "silent, exit 1" the state table allows
+    /// beside SIGPIPE (`behaviors/jig-nix-store.md §Client state-transition table`).
+    #[track_caller]
+    pub fn assert_hung_up(&self) {
+        if cfg!(target_os = "linux") || self.signal.is_some() {
+            self.assert_killed(libc::SIGPIPE);
+        } else {
+            self.assert_fails(1, &[]);
+        }
+    }
 }
 
 /// A client running against a fake daemon.

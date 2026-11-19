@@ -284,6 +284,18 @@ fn tv37_end_to_end() {
             .map(|kv| kv.split_once('=').unwrap())
             .collect();
         let r = root.run(v.str("tool"), &v.strs("args"), &env);
+        // Q-DRV-2: `etc/jig.json` is found only through /proc/self/exe, so on a host without
+        // procfs a conf is never read and, without `JIG_CC`, cc mode stops before the compiler
+        if !cfg!(target_os = "linux") {
+            if v.opt_str("conf").is_some() && !env.iter().any(|(k, _)| *k == "JIG_CC") {
+                assert_eq!(r.status, Some(1), "{at}: {r:?}");
+                assert_eq!(
+                    r.stderr, "jig: no etc/jig.json next to the binary and JIG_CC unset\n",
+                    "{at}"
+                );
+            }
+            continue;
+        }
         let mut checked = 0;
         if v.get("status").is_some() {
             assert_eq!(
@@ -596,7 +608,7 @@ fn adopted_rules() {
     assert_eq!(log, row("uncacheable", "go-build123/b001/x.c"));
     // rule C before lookup: the source itself
     w.write("data.bin", "DATA");
-    w.write("inc.S", ".section .rodata\n.incbin \"data.bin\"\n");
+    w.write("inc.S", ".data\n.incbin \"data.bin\"\n");
     let (out, log) = w.jig(rust(), &compiler, &["-c", "inc.S"]);
     assert!(out.status.success(), "{out:?}");
     assert_eq!(log, row("uncacheable", "inc.S"));

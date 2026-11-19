@@ -767,6 +767,28 @@ fn cargo_workspace_twice() {
             .all(|(o, s)| o == "cached" || (o == "linked" && s.starts_with("app")) || o == "query"),
         "{l2:?}"
     );
+    // macOS defaults to `split-debuginfo=unpacked`, which leaves each crate's object files next
+    // to its rlib. rustc does not name them in dep-info, and only dep-info outputs are stored
+    // (behaviors/jig-rustc.md §Output blob), so a hit does not bring them back. The linked binary
+    // is still identical.
+    let mut plain = plain;
+    if cfg!(target_vendor = "apple") {
+        let dropped: Vec<String> = plain
+            .keys()
+            .filter(|k| !second.contains_key(*k))
+            .cloned()
+            .collect();
+        assert_eq!(dropped.len(), 2, "{dropped:?}");
+        assert!(
+            dropped
+                .iter()
+                .all(|k| (k.starts_with("a-") || k.starts_with("b-")) && k.ends_with(".rcgu.o")),
+            "{dropped:?}"
+        );
+        for k in dropped {
+            plain.remove(&k);
+        }
+    }
     assert_eq!(second, plain);
     let out = Command::new(w.join("target/debug/app")).output().unwrap();
     assert_eq!(out.stdout, b"42 a\n");

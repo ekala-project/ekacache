@@ -106,7 +106,13 @@ mod tests {
     fn strerror_is_the_c_text() {
         assert_eq!(strerror(libc::ENOENT), b"No such file or directory");
         assert_eq!(strerror(libc::EACCES), b"Permission denied");
-        assert_eq!(strerror(99999), b"Unknown error 99999");
+        // the C library's own text: glibc and Apple's libc spell an unknown errno differently
+        let unknown: &[u8] = if cfg!(target_vendor = "apple") {
+            b"Unknown error: 99999"
+        } else {
+            b"Unknown error 99999"
+        };
+        assert_eq!(strerror(99999), unknown);
     }
 
     #[test]

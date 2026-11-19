@@ -143,10 +143,15 @@ fn self_path_is_absolute_not_resolved() {
         .env_remove("GOCACHEPROG")
         .output_busy()
         .unwrap();
-    let exe = std::fs::canonicalize(JIG).unwrap();
+    // without procfs (macOS) the readlink fails and `self` is "" (behaviors/jig-dispatch.md)
+    let exe = if cfg!(target_os = "linux") {
+        std::fs::canonicalize(JIG).unwrap().display().to_string()
+    } else {
+        String::new()
+    };
     assert_eq!(
         String::from_utf8(o.stdout).unwrap(),
-        format!("{} gocacheprog\n", exe.display())
+        format!("{exe} gocacheprog\n")
     );
 }
 

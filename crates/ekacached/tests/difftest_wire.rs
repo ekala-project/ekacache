@@ -707,7 +707,7 @@ fn startup_matches_go() {
     let rust = rust_jigd();
     let mut failed = Vec::new();
     let abs = format!("@jigd-difftest-{}", std::process::id());
-    let cases: Vec<Case> = vec![
+    let mut cases: Vec<Case> = vec![
         ("--help", vec![b"--help"], vec![]),
         ("-h", vec![b"-h"], vec![]),
         ("no args", vec![], vec![]),
@@ -715,12 +715,20 @@ fn startup_matches_go() {
         ("--help x", vec![b"--help", b"x"], vec![]),
         ("no home", vec![b"$ROOT/sock"], vec![]),
         ("empty home", vec![b"$ROOT/sock"], vec![("HOME", b""), ("XDG_CACHE_HOME", b"")]),
-        ("abstract", vec![abs.as_bytes()], vec![("XDG_CACHE_HOME", b"$ROOT/cache")]),
         ("long socket", vec![b"$ROOT/xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"], vec![("XDG_CACHE_HOME", b"$ROOT/cache")]),
         ("socket under a file", vec![b"$ROOT/file/sock"], vec![("XDG_CACHE_HOME", b"$ROOT/cache")]),
         ("cache under a file", vec![b"$ROOT/sock"], vec![("XDG_CACHE_HOME", b"$ROOT/file/cache")]),
         ("cold under a file", vec![b"$ROOT/sock"], vec![("XDG_CACHE_HOME", b"$ROOT/cache"), ("JIGD_COLD", b"$ROOT/file/cold")]),
     ];
+    // Q-DAEMON-10: the abstract namespace is Linux's. On macOS `@…` is a plain socket file, the
+    // chmod succeeds and both daemons serve, so there is no startup to compare.
+    if cfg!(target_os = "linux") {
+        cases.push((
+            "abstract",
+            vec![abs.as_bytes()],
+            vec![("XDG_CACHE_HOME", b"$ROOT/cache")],
+        ));
+    }
     for (name, args, env) in &cases {
         let mut outs = Vec::new();
         for (bin, is_rust) in [(&go, false), (&rust, true)] {

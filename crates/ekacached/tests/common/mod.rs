@@ -472,20 +472,42 @@ pub struct Run {
     pub stderr: Vec<u8>,
 }
 
-/// Run `bin args` to its exit with only `env` in the environment.
+/// How long [`run`] waits for the binary to exit. Every caller expects an exit (usage, a startup
+/// failure), so a binary still running after this is a failure, not a slow machine.
+const RUN_LIMIT: Duration = Duration::from_secs(60);
+
+/// Run `bin args` to its exit with only `env` in the environment. Panics, after killing it, if
+/// it has not exited within [`RUN_LIMIT`].
 pub fn run(bin: &Path, args: &[&[u8]], env: &[(&str, &[u8])]) -> Run {
     use std::os::unix::ffi::OsStrExt;
     let mut cmd = Command::new(bin);
-    cmd.env_clear().stdin(Stdio::null());
+    cmd.env_clear()
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
     for a in args {
         cmd.arg(std::ffi::OsStr::from_bytes(a));
     }
     for (k, v) in env {
         cmd.env(k, std::ffi::OsStr::from_bytes(v));
     }
-    let out = cmd
-        .output()
+    let child = cmd
+        .spawn()
         .unwrap_or_else(|e| panic!("run {}: {e}", bin.display()));
+    let pid = rustix::process::Pid::from_child(&child);
+    let (tx, rx) = std::sync::mpsc::channel();
+    std::thread::spawn(move || {
+        let _ = tx.send(child.wait_with_output());
+    });
+    let Ok(out) = rx.recv_timeout(RUN_LIMIT) else {
+        let _ = rustix::process::kill_process(pid, rustix::process::Signal::KILL);
+        let shown: Vec<_> = args.iter().map(|a| String::from_utf8_lossy(a)).collect();
+        panic!(
+            "{} {shown:?} did not exit within {RUN_LIMIT:?}",
+            bin.display()
+        );
+    };
+    let out = out.unwrap_or_else(|e| panic!("run {}: {e}", bin.display()));
     Run {
         code: out.status.code(),
         stdout: out.stdout,

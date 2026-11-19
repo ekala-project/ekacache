@@ -387,7 +387,17 @@ mod tests {
             &e,
         );
         let out = String::from_utf8(r.captured).unwrap();
-        assert_eq!(out, "PATH=/usr/bin:/bin\nA=new\nA=second\nJIG_SLOT=1\n");
+        // macOS adds `__CF_USER_TEXT_ENCODING` to every process it starts
+        let lines: Vec<&str> = out
+            .lines()
+            .filter(|l| {
+                !(cfg!(target_vendor = "apple") && l.starts_with("__CF_USER_TEXT_ENCODING="))
+            })
+            .collect();
+        assert_eq!(
+            lines,
+            ["PATH=/usr/bin:/bin", "A=new", "A=second", "JIG_SLOT=1"]
+        );
         assert_eq!(e.get("A"), Some(&b"new"[..]));
         assert_eq!(e.get("B"), None);
     }

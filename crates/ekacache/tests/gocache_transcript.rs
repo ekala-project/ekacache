@@ -647,6 +647,12 @@ fn non_utf8_disk_path_is_raw() {
     let mut d = s.tmp.path().as_os_str().as_bytes().to_vec();
     d.extend_from_slice(b"/x\xff\"y");
     let dir = OsStr::from_bytes(&d);
+    // APFS refuses names that are not UTF-8 (EILSEQ): there is no such directory to write to
+    if std::fs::create_dir(dir).is_err() {
+        eprintln!("skipped: this filesystem refuses non-UTF-8 names");
+        return;
+    }
+    std::fs::remove_dir(dir).unwrap();
     let out = Run::new(OsStr::new(JIG), Some(&s.fake.sock))
         .env("GOCACHEPROG_DIR", dir)
         .stdin(format!("{}{}", put(1, ACT, OUT, b"xyz"), get(2, ACT)).as_bytes());

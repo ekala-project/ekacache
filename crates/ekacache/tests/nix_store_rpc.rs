@@ -122,7 +122,8 @@ fn row_parse_remote() {
 /// `CheckPath`: a path of `sizeof(sun_path)` bytes or more fails silently (Q-NIX-9).
 #[test]
 fn row_check_path() {
-    for len in [108, 109, 4096] {
+    let sun_path = ekacache::client::sun_path_len();
+    for len in [sun_path, sun_path + 1, 4096] {
         let path = cat(&[b"/", &vec![b'x'; len - 1]]);
         let o = check(
             &add_hello().remote(Remote::Value(cat(&[b"unix://", &path]))),
@@ -131,7 +132,7 @@ fn row_check_path() {
         o.assert_fails(1, &[]);
     }
     // one shorter: tried, and the connection fails
-    let path = cat(&[b"/", &[b'x'; 106]]);
+    let path = cat(&[b"/", &vec![b'x'; sun_path - 2]]);
     let o = check(
         &add_hello().remote(Remote::Value(cat(&[b"unix://", &path]))),
         &[],
@@ -249,7 +250,7 @@ fn row_send_features() {
         Step::ShutRd,
         Step::Send(daemon_hello(V1_38)),
     ];
-    check(&add_hello(), &s).assert_killed(libc::SIGPIPE);
+    check(&add_hello(), &s).assert_hung_up();
     let o = check(&add_hello().sigpipe_ignored(), &s);
     o.assert_fails(1, &[]);
     assert_sent(&o, &client_hello());
@@ -297,7 +298,7 @@ fn row_send_post() {
         Step::ShutRd,
         Step::Send(strings(&[])),
     ];
-    check(&add_hello(), &s).assert_killed(libc::SIGPIPE);
+    check(&add_hello(), &s).assert_hung_up();
     let o = check(&add_hello().sigpipe_ignored(), &s);
     o.assert_fails(1, &[]);
     assert_sent(&o, &cat(&[&client_hello(), &client_features()]));
@@ -407,7 +408,7 @@ fn row_read_input() {
 #[test]
 fn row_send_add() {
     let s = shut_before_last_send(handshake());
-    check(&add_hello(), &s).assert_killed(libc::SIGPIPE);
+    check(&add_hello(), &s).assert_hung_up();
     let o = check(&add_hello().sigpipe_ignored(), &s);
     o.assert_fails(1, &[]);
     assert_sent(&o, &client_handshake());
@@ -500,7 +501,7 @@ fn submit_script(reply: &[u8]) -> Script {
 #[test]
 fn row_send_submit() {
     let s = shut_before_last_send(handshake());
-    check(&submit(), &s).assert_killed(libc::SIGPIPE);
+    check(&submit(), &s).assert_hung_up();
     let o = check(&submit().sigpipe_ignored(), &s);
     o.assert_fails(1, &[]);
     assert_sent(&o, &client_handshake());
@@ -966,7 +967,7 @@ fn sigpipe() {
         (submit(), &op),
         (Inv::new(&[b"fetchurls"]).stdin(fetch_one()), &op),
     ] {
-        check(&inv, s).assert_killed(libc::SIGPIPE);
+        check(&inv, s).assert_hung_up();
         check(&inv.sigpipe_ignored(), s).assert_fails(1, &[]);
     }
 }

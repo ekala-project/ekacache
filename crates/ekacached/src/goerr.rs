@@ -232,7 +232,7 @@ mod tests {
             net: "unix",
             source: Some(b"/run/s".to_vec()),
             addr: Some(b"@".to_vec()),
-            err: Box::new(GoErr::Errno(104)),
+            err: Box::new(GoErr::Errno(libc::ECONNRESET)),
         };
         assert_eq!(
             read.text(),
