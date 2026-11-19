@@ -1,15 +1,35 @@
-# Development shell: `meson setup build && meson test -C build` for jig, `go test ./...` in jigd/.
+# Development shell for the Rust workspace and the legacy C++/Go build (differential tests).
+#
+#   nix-shell --run 'cargo test --workspace'
+#   nix-shell --run 'meson setup build legacy && ninja -C build'   # legacy jig
+#   nix-shell --run '(cd legacy/jigd && go build -o ../../build/jigd .)'
+#
+# quint 0.33.1 (spec/ trace generation) is expected on PATH; nixpkgs may carry an older one.
 {
   pkgs ? import <nixpkgs> { },
 }:
 pkgs.mkShell {
   packages = [
+    # Rust (MSRV = this rustc; see rust-toolchain.toml)
+    pkgs.rustc
+    pkgs.cargo
+    pkgs.clippy
+    pkgs.rustfmt
+    pkgs.pkg-config
+    pkgs.zstd
+    # legacy build inputs (difftest)
     pkgs.meson
     pkgs.ninja
-    pkgs.pkg-config
     pkgs.go
     pkgs.libblake3
-    pkgs.zstd
     pkgs.nlohmann_json
-  ];
+    # test tools
+    pkgs.cargo-deny # check job (deny.toml)
+    pkgs.cargo-fuzz # scripts/fuzz.sh
+    pkgs.hyperfine # scripts/bench.sh
+    pkgs.python3 # scripts/bench.sh
+  ]
+  ++ pkgs.lib.optional pkgs.stdenv.isLinux pkgs.strace;
+  # the ec store dir is a build-time constant; keep the default explicit
+  JIG_STORE_DIR = builtins.storeDir;
 }

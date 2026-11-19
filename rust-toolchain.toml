@@ -1,0 +1,5 @@
+# The rustc of the pinned nixpkgs/ekapkgs (see implementation/01-workspace.md §Toolchain).
+# shell.nix provides exactly this toolchain; rustup users get it from here.
+[toolchain]
+channel = "1.91.1"
+components = ["rustfmt", "clippy"]

@@ -1,0 +1,17 @@
+# L1 spec vectors of behaviors/jig-cache-client.md (implementation/12-testing.md §L1: spec
+# vectors). The doc has no vector heading; its inline vector sits in §Value encoding. Read by
+# crates/ekacache-core/tests/spec_vectors.rs.
+#
+# kinds:
+#   frame  `value` wrapped for PUT/GET is `wire` (hex). Decoding `wire` must give `value`
+#          everywhere; encoding must give `wire` byte for byte only with libzstd
+#          `exact_with_zstd` (the doc requires a valid frame, not identical bytes).
+
+doc = "behaviors/jig-cache-client.md"
+
+[[vector]]
+kind = "frame"
+section = "Value encoding"
+value = "hello"
+wire = "05 00 00 00  28 b5 2f fd 20 05 29 00 00 68 65 6c 6c 6f"
+exact_with_zstd = "1.5.7"

@@ -1,0 +1,37 @@
+# cargo deny (implementation/01-workspace.md §Toolchain and lints: MIT-compatible licenses, no
+# duplicate major versions of tokio/serde). Run by the CI `check` job.
+
+[graph]
+all-features = false
+
+[advisories]
+version = 2
+yanked = "deny"
+
+[licenses]
+version = 2
+# MIT-compatible permissive licenses only
+allow = [
+  "MIT",
+  "Apache-2.0",
+  "Apache-2.0 WITH LLVM-exception",
+  "BSD-2-Clause",
+  "BSD-3-Clause",
+  "Unicode-3.0",
+  "CC0-1.0",
+]
+confidence-threshold = 0.9
+
+[bans]
+# No crate in two versions, which covers the duplicate-major rule for tokio and serde. The
+# exemption is a leaf helper that blake3 and sha2 pin to different minors.
+multiple-versions = "deny"
+skip = [
+  { crate = "cpufeatures", reason = "blake3 and sha2 pin different minors" },
+]
+# the workspace crates depend on each other by path, without a version
+wildcards = "allow"
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"

@@ -1,0 +1,438 @@
+# L1 spec vectors of behaviors/jig-keys.md (implementation/12-testing.md §L1: spec vectors).
+# Read by crates/ekacache-core/tests/spec_vectors.rs. Extracted by hand; keep in step with the doc.
+#
+# kinds:
+#   digest            `Hasher` ops -> digest. `fields` = one Field call each, `hash_of` = HashOf
+#                     (no framing), `repeat`/`count` = one Field of `count` copies of `repeat`.
+#                     `framed` = the bytes fed to BLAKE3, checked with HashOf as well.
+#   key               `Key(arg)` in `mode` (path unless given); `default_store_only` vectors
+#                     spell /nix/store and hold only for the default JIG_STORE_DIR.
+#   composite         a cc k1 from `fields`; `k1` the cc text, `rs_text` the rustc text.
+#   manifest-k2       a k2 from the k1 text and the manifest lines (pure Hasher).
+#   manifest-scenario BuildManifest/ValidateManifest over the /tmp/jigprobe/t setup.
+#   manifest-validate ValidateManifest of `text` in `mode` alone; /nix/store in `text` stands
+#                     for the store dir.
+#   doc-only          not checked; `note` says why.
+
+doc = "behaviors/jig-keys.md"
+
+# ---- Digest test vectors ------------------------------------------------------------------
+
+[[vector]]
+kind = "digest"
+section = "Digest test vectors"
+fields = []
+digest = "af1349b9f5f9a1a6a0404dea36dcc949"
+framed = ""
+
+[[vector]]
+kind = "digest"
+section = "Digest test vectors"
+fields = [""]
+framed = "0:"
+digest = "6dbf06cfd24126fcb3b1e039350b8ead"
+
+[[vector]]
+kind = "digest"
+section = "Digest test vectors"
+fields = ["a"]
+framed = "1:a"
+digest = "ceb3ce7a40070f320aa78d363dd9da34"
+
+[[vector]]
+kind = "digest"
+section = "Digest test vectors"
+fields = ["ab", "c"]
+framed = "2:ab1:c"
+digest = "eafe26c443108bf8d097e6f3af8473a6"
+
+[[vector]]
+kind = "digest"
+section = "Digest test vectors"
+fields = ["a", "bc"]
+framed = "1:a2:bc"
+digest = "a41516ff4f6e8e7b4f0534c112fc79e3"
+
+[[vector]]
+kind = "digest"
+section = "Digest test vectors"
+repeat = "x"
+count = 1000
+digest = "3f38432ebb6f115e1b974b087518b603"
+
+[[vector]]
+kind = "digest"
+section = "Digest test vectors"
+hash_of = "hello"
+digest = "ea8f163db38682925e4491c5e58d4bb3"
+
+[[vector]]
+kind = "digest"
+section = "Digest test vectors"
+hash_of = "int a;\n"
+digest = "0d937065826369d51c16019b838d8932"
+
+# ---- Key test vectors (path mode unless noted) --------------------------------------------
+
+[[vector]]
+kind = "key"
+section = "Key test vectors (path mode unless noted)"
+arg = "-I./include//sub/../"
+key = "-Iinclude"
+
+[[vector]]
+kind = "key"
+section = "Key test vectors (path mode unless noted)"
+arg = "./src/../src/a.c"
+key = "src/a.c"
+
+[[vector]]
+kind = "key"
+section = "Key test vectors (path mode unless noted)"
+arg = "--sysroot=/a/b/../c/"
+key = "--sysroot=/a/c"
+
+[[vector]]
+kind = "key"
+section = "Key test vectors (path mode unless noted)"
+arg = "-DFOO=./a//b"
+key = "-DFOO=./a//b"
+
+[[vector]]
+kind = "key"
+section = "Key test vectors (path mode unless noted)"
+arg = "-Ufoo/../bar"
+key = "-Ufoo/../bar"
+
+[[vector]]
+kind = "key"
+section = "Key test vectors (path mode unless noted)"
+arg = "-O2"
+key = "-O2"
+
+[[vector]]
+kind = "key"
+section = "Key test vectors (path mode unless noted)"
+arg = "-I"
+key = "-I"
+
+[[vector]]
+kind = "key"
+section = "Key test vectors (path mode unless noted)"
+arg = "-D"
+key = "-D"
+
+[[vector]]
+kind = "key"
+section = "Key test vectors (path mode unless noted)"
+arg = "--param=x"
+key = "--param=x"
+
+[[vector]]
+kind = "key"
+section = "Key test vectors (path mode unless noted)"
+arg = "foo.c"
+key = "foo.c"
+
+[[vector]]
+kind = "key"
+section = "Key test vectors (path mode unless noted)"
+arg = ".hidden"
+key = ".hidden"
+
+[[vector]]
+kind = "key"
+section = "Key test vectors (path mode unless noted)"
+arg = "."
+key = "."
+
+[[vector]]
+kind = "key"
+section = "Key test vectors (path mode unless noted)"
+arg = "./"
+key = "."
+
+[[vector]]
+kind = "key"
+section = "Key test vectors (path mode unless noted)"
+arg = "a/"
+key = "a"
+
+[[vector]]
+kind = "key"
+section = "Key test vectors (path mode unless noted)"
+arg = "/"
+key = "/"
+
+[[vector]]
+kind = "key"
+section = "Key test vectors (path mode unless noted)"
+arg = "//x"
+key = "/x"
+
+[[vector]]
+kind = "key"
+section = "Key test vectors (path mode unless noted)"
+arg = "x/.."
+key = "."
+
+[[vector]]
+kind = "key"
+section = "Key test vectors (path mode unless noted)"
+arg = "a/b/../.."
+key = "."
+
+[[vector]]
+kind = "key"
+section = "Key test vectors (path mode unless noted)"
+arg = "../.."
+key = "../.."
+
+[[vector]]
+kind = "key"
+section = "Key test vectors (path mode unless noted)"
+arg = "a/../../b"
+key = "../b"
+
+[[vector]]
+kind = "key"
+section = "Key test vectors (path mode unless noted)"
+arg = "/.."
+key = "/"
+
+[[vector]]
+kind = "key"
+section = "Key test vectors (path mode unless noted)"
+arg = "/../a"
+key = "/a"
+
+[[vector]]
+kind = "key"
+section = "Key test vectors (path mode unless noted)"
+arg = "-I=/x/../y"
+key = "-I=/y"
+
+[[vector]]
+kind = "key"
+section = "Key test vectors (path mode unless noted)"
+arg = "-Ia/b=c/../d"
+key = "-Ia/d"
+
+[[vector]]
+kind = "key"
+section = "Key test vectors (path mode unless noted)"
+arg = "-mfoo=a/b"
+key = "-mfoo=a/b"
+
+[[vector]]
+kind = "key"
+section = "Key test vectors (path mode unless noted)"
+arg = "--x="
+key = "--x="
+
+[[vector]]
+kind = "key"
+section = "Key test vectors (path mode unless noted)"
+arg = "--x=./"
+key = "--x=."
+
+[[vector]]
+kind = "key"
+section = "Key test vectors (path mode unless noted)"
+arg = "-L./lib"
+key = "-Llib"
+
+[[vector]]
+kind = "key"
+section = "Key test vectors (path mode unless noted)"
+arg = "-l./x"
+key = "-lx"
+
+[[vector]]
+kind = "key"
+section = "Key test vectors (path mode unless noted)"
+arg = "-o./a/../b.o"
+key = "-ob.o"
+
+[[vector]]
+kind = "key"
+section = "Key test vectors (path mode unless noted)"
+arg = "-fprofile-use=./p/../q"
+key = "-fprofile-use=q"
+
+[[vector]]
+kind = "key"
+section = "Key test vectors (path mode unless noted)"
+arg = "-Wl,-rpath,/a/../b"
+key = "-Wl,-rpath,/b"
+
+[[vector]]
+kind = "key"
+section = "Key test vectors (path mode unless noted)"
+arg = "-Wp,-MD,./x.d"
+key = "-Wp,-MD,./x.d"
+
+[[vector]]
+kind = "key"
+section = "Key test vectors (path mode unless noted)"
+arg = "-include./x.h"
+key = "-include./x.h"
+
+[[vector]]
+kind = "key"
+section = "Key test vectors (path mode unless noted)"
+arg = "-iquote./a/../b"
+key = "-iquote./b"
+
+[[vector]]
+kind = "key"
+section = "Key test vectors (path mode unless noted)"
+arg = "@./rsp"
+key = "@./rsp"
+
+[[vector]]
+kind = "key"
+section = "Key test vectors (path mode unless noted)"
+arg = "cwd=/a/../b"
+key = "cwd=/b"
+
+[[vector]]
+kind = "key"
+section = "Key test vectors (path mode unless noted)"
+arg = "/b/TryCompile-teSZ4z/src.c"
+key = "/b/TryCompile-######/src.c"
+
+[[vector]]
+kind = "key"
+section = "Key test vectors (path mode unless noted)"
+arg = "CMakeFiles/cmTC_7c7e5.dir/x.c.o"
+key = "CMakeFiles/cmTC_#####.dir/x.c.o"
+
+[[vector]]
+kind = "key"
+section = "Key test vectors (path mode unless noted)"
+arg = "TryCompile-abcdefgh"
+key = "TryCompile-######gh"
+
+[[vector]]
+kind = "key"
+section = "Key test vectors (path mode unless noted)"
+arg = "cmTC_abcde_cmTC_12345"
+key = "cmTC_#####_cmTC_#####"
+
+[[vector]]
+kind = "key"
+section = "Key test vectors (path mode unless noted)"
+arg = "-I/nix/store/0123456789abcdfghijklmnpqrsvwxyz-zlib-1.3/include"
+key = "-I/nix/store/0123456789abcdfghijklmnpqrsvwxyz-zlib-1.3/include"
+default_store_only = true
+
+[[vector]]
+kind = "key"
+section = "Key test vectors (path mode unless noted)"
+mode = "content"
+arg = "-I/nix/store/0123456789abcdfghijklmnpqrsvwxyz-zlib-1.3/include"
+key = "-I/nix/store/*-zlib-1.3/include"
+default_store_only = true
+
+# ---- Composite test vector ----------------------------------------------------------------
+
+[[vector]]
+kind = "composite"
+section = "Composite test vector"
+fields = [
+  "cc=/nix/store/*-gcc-14.3.0/bin/gcc",
+  "cwd=/build/source",
+  "src=a.c",
+  "mode=compile",
+  "env=",
+  "-c",
+  "-O2",
+  "int main(){}\n\ntoolchain=C:00000000000000000000000000000000,",
+]
+k1 = "544ade1ae7d1ab515b12eaba8c82aca5"
+rs_text = "rs/544ade1ae7d1ab515b12eaba8c82aca5"
+
+[[vector]]
+kind = "doc-only"
+section = "Composite test vector"
+digest = "e670e1a0104f0d5abffd4c4fe35ada39"
+cc_text = "e670e1a0104f0d5abffd4c4fe35ada39"
+rs_text = "rs/e670e1a0104f0d5abffd4c4fe35ada39"
+manifest_key = "m/rs/e670e1a0104f0d5abffd4c4fe35ada39"
+note = "An example of the prefix rule for a given digest, with no inputs: ekacache-core has no constructor of a Digest from hex, so the rule is checked on the composite vector above (cc text, rs/ text) and by keys.rs's slot tests instead."
+
+# ---- Manifest test vectors ----------------------------------------------------------------
+
+[[vector]]
+kind = "manifest-scenario"
+section = "Manifest test vectors"
+note = "The k2 hashes these literal paths, so the test must use exactly /tmp/jigprobe."
+root = "/tmp/jigprobe/t"
+files = ["a.h", "b.h", "src.c"]
+contents = ["int a;\n", "int b;\n", ""]
+k1_of = "k1"
+k1_text = "ffb4332755be52674d663ce9586917c9"
+inputs = [
+  "/tmp/jigprobe/t/src.c",
+  "/tmp/jigprobe/t/a.h",
+  "/tmp/jigprobe/t/./b.h",
+  "/tmp/jigprobe/t/missing.h",
+  "/tmp/jigprobe/t/a.h",
+]
+primary_source = "/tmp/jigprobe/t/src.c"
+absent = [
+  "/tmp/jigprobe/t/early/a.h",
+  "",
+  "/tmp/jigprobe/t/early/a.h",
+  "/tmp/jigprobe/t/a.h",
+  "/nix/store/1123456789abcdfghijklmnpqrsvwxyz-glibc-2.40/include/x.h",
+  "rel/q.h",
+]
+# ADOPTED Q-KEY-3: the unreadable input makes the manifest unstorable; the expected text is
+# that of the inputs without it.
+unstorable = "/tmp/jigprobe/t/missing.h"
+text = "/tmp/jigprobe/t/a.h\tC:0d937065826369d51c16019b838d8932\n/tmp/jigprobe/t/b.h\tC:709be0706c9c4004a3ae4d9c20050e55\n/tmp/jigprobe/t/a.h\tC:0d937065826369d51c16019b838d8932\n!/tmp/jigprobe/t/early/a.h\n!rel/q.h\n"
+k2 = "ca06f7cce6259fa171f39edb0e29b4a8"
+junk = "junk line\n\n"
+appear = "early/a.h"
+appeared = "appeared:/tmp/jigprobe/t/early/a.h"
+edit = "b.h"
+edit_contents = "int b2;\n"
+changed = "inputs-changed:/tmp/jigprobe/t/b.h"
+
+[[vector]]
+kind = "manifest-validate"
+section = "Manifest test vectors"
+mode = "content"
+text = "!/nix/store/*-other/y.h\n"
+k2 = "7eb18b0a88c25e4e28595f120f4ba2da"
+default_store_only = true
+
+[[vector]]
+kind = "manifest-validate"
+section = "Manifest test vectors"
+mode = "content"
+text = "/nix/store/*-other/x.h\tC:00\n"
+error = "inputs-changed:/nix/store/*-other/x.h"
+
+[[vector]]
+kind = "manifest-k2"
+section = "Manifest test vectors"
+k1_text = "0123456789abcdef0123456789abcdef"
+lines = []
+k2 = "5573430e23fe9fc1644dd647cc911c2f"
+
+[[vector]]
+kind = "manifest-k2"
+section = "Manifest test vectors"
+k1_text = "0123456789abcdef0123456789abcdef"
+lines = ["include/a.h\tC:0d937065826369d51c16019b838d8932", "!early/a.h"]
+k2 = "f445848e6f30d9745cdb88c0744c7859"
+
+[[vector]]
+kind = "manifest-k2"
+section = "Manifest test vectors"
+k1_text = "rs/0123456789abcdef0123456789abcdef"
+lines = ["include/a.h\tC:0d937065826369d51c16019b838d8932", "!early/a.h"]
+k2 = "11c6c31720976272d3ac6ab556847c54"
