@@ -4,6 +4,6 @@
 use libfuzzer_sys::fuzz_target;
 
 fuzz_target!(|text: &[u8]| {
-    let paths = jig_core::manifest::parse_depfile(text);
+    let paths = ekacache_core::manifest::parse_depfile(text);
     assert!(paths.iter().all(|p| !p.is_empty()));
 });

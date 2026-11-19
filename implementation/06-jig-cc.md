@@ -9,7 +9,7 @@ Adopted here: Q-CC-2 (DONE after PUTs), Q-CC-5 (transient failures not stored), 
 Q-KEY-1 (path-mode replay unmasked), Q-KEY-3 (unreadable input → not stored), Q-CC-12..16
 (rules A–D).
 
-## Part 1: driver policy (`crates/jig/src/driver/`)
+## Part 1: driver policy (`crates/ekacache/src/driver/`)
 
 | File | Contents |
 |---|---|
@@ -70,7 +70,7 @@ macOS (P9) the legacy code has a different path. See 11.
   seeded from the vectors and extended with a proptest generator over flag vocabularies
   (`-l`, `-L`, `-Wl,-rpath`, `-static`, `-shared`, `-nostdlib`, FORTIFY variants, …).
 
-## Part 2: cc mode (`crates/jig/src/cc/`)
+## Part 2: cc mode (`crates/ekacache/src/cc/`)
 
 | File | Contents | Spec |
 |---|---|---|

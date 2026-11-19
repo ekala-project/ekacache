@@ -1,6 +1,6 @@
 // -*- mode: Bluespec; -*-
 /**
- * Longer runs of spec/jigd_protocol.qnt for the socket replay (crates/jigd/tests/protocol_itf.rs).
+ * Longer runs of spec/jigd_protocol.qnt for the socket replay (crates/ekacached/tests/protocol_itf.rs).
  *
  * The model's own `step` picks a malformed request 6 times in 13 and a disconnect once in 5, so
  * its traces end after about five steps, when both connections are gone. `longStep` takes the

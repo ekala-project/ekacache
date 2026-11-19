@@ -11,8 +11,8 @@ layers must be green.
 |---|---|---|---|
 | L1 spec vectors | the documented byte-level examples hold | `tests/vectors/`, unit tests | every push |
 | L2 ported legacy tests | everything the old suites pinned still holds | `crates/*/tests/legacy_*.rs` | every push |
-| L3 differential | Rust and legacy produce the same observable bytes on the same inputs | `tests/difftest/`, `jig-testkit` | every push (from P1) |
-| L4 Quint MBT | the concurrent parts satisfy the models' invariants on model-generated schedules | `tests/itf/`, `jig-testkit::itf` | every push |
+| L3 differential | Rust and legacy produce the same observable bytes on the same inputs | `tests/difftest/`, `ekacache-testkit` | every push (from P1) |
+| L4 Quint MBT | the concurrent parts satisfy the models' invariants on model-generated schedules | `tests/itf/`, `ekacache-testkit::itf` | every push |
 | L5 fuzzing | no panics; parity on malformed input | `fuzz/` | nightly |
 
 ## L1: spec vectors
@@ -28,11 +28,11 @@ file, so a vector added to a doc later cannot be forgotten.
 
 | Legacy suite | Lines | Port to | Notes |
 |---|---|---|---|
-| `legacy/jig/src/jig_test.cc` | 722 | `crates/jig/tests/legacy_jig.rs` + `jig-core` unit tests | segfaults under GCC 14 (known). Port the assertions; run the C++ binary under clang if a cross-check is needed |
-| `legacy/jigd/store_test.go` | 340 | `crates/jigd/tests/legacy_store.rs` | virtual clock → `Clock` trait |
-| `legacy/jigd/serve_test.go` | 132 | `crates/jigd/tests/legacy_serve.rs` | in-process server on a temp socket |
-| `legacy/jigd/slots_test.go` | 29 | `crates/jigd/src/slots.rs` tests | |
-| `legacy/jigd/identity_test.go` | 55 | `crates/jigd/tests/legacy_identity.rs` | |
+| `legacy/jig/src/jig_test.cc` | 722 | `crates/ekacache/tests/legacy_jig.rs` + `ekacache-core` unit tests | segfaults under GCC 14 (known). Port the assertions; run the C++ binary under clang if a cross-check is needed |
+| `legacy/jigd/store_test.go` | 340 | `crates/ekacached/tests/legacy_store.rs` | virtual clock → `Clock` trait |
+| `legacy/jigd/serve_test.go` | 132 | `crates/ekacached/tests/legacy_serve.rs` | in-process server on a temp socket |
+| `legacy/jigd/slots_test.go` | 29 | `crates/ekacached/src/slots.rs` tests | |
+| `legacy/jigd/identity_test.go` | 55 | `crates/ekacached/tests/legacy_identity.rs` | |
 
 Rules: same test names in snake case; a header comment cites the original file and line; an
 expectation changed by an adopted row says `// ADOPTED Q-…` and asserts the new result. A
@@ -41,7 +41,7 @@ on both sides and lists the missing ones.
 
 ## L3: differential testing
 
-### Harness (`crates/jig-testkit`)
+### Harness (`crates/ekacache-testkit`)
 
 **As built (2026-11-18):** the shared TOML-scenario harness below was not built, and will not
 be. Each phase has its own Rust difftest harness under `crates/*/tests/` (for example
@@ -49,7 +49,7 @@ be. Each phase has its own Rust difftest harness under `crates/*/tests/` (for ex
 `difftest_wire.rs`), with the recording proxies and fakes it needs (`fixtures/rustc/harness.rs`,
 `fake-rustc.sh`, the fake compilers and daemons in each file). They follow the rules below: an
 empty environment, the same absolute paths for both implementations, HELLO normalised out of
-transcripts, and comparison of bytes, exit status and log lines. `jig-testkit` holds what they
+transcripts, and comparison of bytes, exit status and log lines. `ekacache-testkit` holds what they
 share: the ITF reader, the L1 vector reader and the `ETXTBSY` spawn retry. The design below is
 kept as the description of what those harnesses do.
 
@@ -128,16 +128,16 @@ The `spec/` models stay as they are, and are the reference. They are not rewritt
    when wiring it up). Adopted-change flags (`CANCEL_ABANDONED`, `DROP_EMPTY_PACKS`,
    `KICK_AT_START`, `FSYNC_ON_SEAL`) are set to `true` through a thin wrapper module per
    model, so the generated traces follow the Rust semantics.
-2. **Replay driver** (`jig-testkit::itf`, using the `itf` crate): for each state transition,
+2. **Replay driver** (`ekacache-testkit::itf`, using the `itf` crate): for each state transition,
    read `mbt::actionTaken` + `mbt::nondetPicks`, apply the matching operation to the real
    implementation, then compare the projected real state with the model state.
 
 | Model | Real system under test | Projection compared |
 |---|---|---|
-| `slots.qnt` / `slotNesting` | `jigd::slots` directly, plus a socket-level variant on the real server | `out`, `held`, queue contents, granted set; invariants incl. `noDeadWaiters` |
-| `store.qnt` | `jigd::store::Store` with a test clock, tiny `packLimit`/budgets; crash = drop + reopen | index contents, `live`/`totals`, packs per tier; `indexSound`, `liveAccounting`, `tierTotals` |
+| `slots.qnt` / `slotNesting` | `ekacached::slots` directly, plus a socket-level variant on the real server | `out`, `held`, queue contents, granted set; invariants incl. `noDeadWaiters` |
+| `store.qnt` | `ekacached::store::Store` with a test clock, tiny `packLimit`/budgets; crash = drop + reopen | index contents, `live`/`totals`, packs per tier; `indexSound`, `liveAccounting`, `tierTotals` |
 | `jigd_protocol.qnt` | real jigd over a socket | replies, hang-ups |
-| `twokey.qnt` | `jig::twokey` over a fake filesystem | hit/miss decision, stored entries; soundness invariant |
+| `twokey.qnt` | `ekacache::twokey` over a fake filesystem | hit/miss decision, stored entries; soundness invariant |
 | `gocache.qnt` | gocacheprog processes + Rust jigd | `hitIsConsistent`, `noTornBodies`, `pointersAnnounced` |
 | `builder_rpc.qnt` | `jig nix-store` against the scriptable fake daemon | ops sent, exit |
 

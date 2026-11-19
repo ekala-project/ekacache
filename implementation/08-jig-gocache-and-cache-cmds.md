@@ -9,7 +9,7 @@ Specified by: `jig-cache-commands.md` (all), `jig-dispatch.md §cache subcommand
 subcommand`.
 Adopted here: Q-DIR-1 / Q-KEY-1 (path mode stores and restores text unmasked).
 
-### Module (`crates/jig/src/dir.rs`, `slot.rs`)
+### Module (`crates/ekacache/src/dir.rs`, `slot.rs`)
 
 - `run_cache(args, socket, store)`: exactly 3 args, else exit 1. Verbs `put`, `put-dir`,
   `get-dir`; **any other verb is `get`** (Q-DIR-6 kept). Connect failure → exit 2.
@@ -26,7 +26,7 @@ Adopted here: Q-DIR-1 / Q-KEY-1 (path mode stores and restores text unmasked).
   and `put_many` of the missing ones (Q-DIR-3 double read kept). Count duplicates twice. PUT
   the listing last, print the summary line, exit 0.
 - `Stored(bytes)`: **adopted Q-KEY-1**: content mode → `mask_hashes` if the file has no NUL;
-  path mode → unchanged. Add `Store::stored()` to `jig-core` next to `resolve_all` so the
+  path mode → unchanged. Add `Store::stored()` to `ekacache-core` next to `resolve_all` so the
   mode logic lives in one place.
 - `get-dir`: parse the listing (skip malformed lines; octal mode with a `0644` fallback),
   symlinks first, then files in batches of 256 with `get_many`, all 12 mode bits applied,
@@ -62,7 +62,7 @@ Specified by: `jig-gocacheprog.md` (all), `spec/gocache.qnt`.
 Adopted here: §Adopted: JSON handling (Q-GO-1, Q-GO-3, Q-GO-4): a real JSON parser and
 serializer, strict base64.
 
-### Module (`crates/jig/src/gocache.rs`)
+### Module (`crates/ekacache/src/gocache.rs`)
 
 ```rust
 #[derive(Deserialize)] struct Req { #[serde(rename = "ID")] id: Option<i64>,

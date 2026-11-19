@@ -134,6 +134,58 @@ dependencies = [
 ]
 
 [[package]]
+name = "ekacache"
+version = "0.2.0"
+dependencies = [
+ "base64",
+ "ekacache-core",
+ "ekacache-testkit",
+ "libc",
+ "object",
+ "proptest",
+ "rustix",
+ "serde",
+ "serde_json",
+ "sha2",
+ "tempfile",
+]
+
+[[package]]
+name = "ekacache-core"
+version = "0.2.0"
+dependencies = [
+ "blake3",
+ "ekacache-testkit",
+ "proptest",
+ "serde_json",
+ "tempfile",
+ "zstd",
+]
+
+[[package]]
+name = "ekacache-testkit"
+version = "0.2.0"
+dependencies = [
+ "ekacache-core",
+ "serde",
+ "serde_json",
+ "tempfile",
+]
+
+[[package]]
+name = "ekacached"
+version = "0.2.0"
+dependencies = [
+ "ekacache-core",
+ "ekacache-testkit",
+ "libc",
+ "proptest",
+ "rustix",
+ "tempfile",
+ "tokio",
+]
+
+[[package]]
 name = "errno"
 version = "0.3.15"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -182,58 +234,6 @@ name = "itoa"
 version = "1.0.19"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3bd1574e617a9a6c1f8f8181bd7e841e1f20e4277607ef28945765188d6284d4"
-
-[[package]]
-name = "jig"
-version = "0.2.0"
-dependencies = [
- "base64",
- "jig-core",
- "jig-testkit",
- "libc",
- "object",
- "proptest",
- "rustix",
- "serde",
- "serde_json",
- "sha2",
- "tempfile",
-]
-
-[[package]]
-name = "jig-core"
-version = "0.2.0"
-dependencies = [
- "blake3",
- "jig-testkit",
- "proptest",
- "serde_json",
- "tempfile",
- "zstd",
-]
-
-[[package]]
-name = "jig-testkit"
-version = "0.2.0"
-dependencies = [
- "jig-core",
- "serde",
- "serde_json",
- "tempfile",
-]
-
-[[package]]
-name = "jigd"
-version = "0.2.0"
-dependencies = [
- "jig-core",
- "jig-testkit",
- "libc",
- "proptest",
- "rustix",
- "tempfile",
- "tokio",
-]
 
 [[package]]
 name = "jobserver"

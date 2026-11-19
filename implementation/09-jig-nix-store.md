@@ -7,7 +7,7 @@ reproduced.
 This mode is self-contained: it shares no keys or jigd traffic with the rest of jig. It can
 therefore be built at any point after P3, in parallel with P5–P7.
 
-## Module (`crates/jig/src/nix_store/`)
+## Module (`crates/ekacache/src/nix_store/`)
 
 | File | Contents | Spec section |
 |---|---|---|
@@ -41,7 +41,7 @@ therefore be built at any point after P3, in parallel with P5–P7.
 1. All vectors in `jig-nix-store.md §Test vectors`: SHA-256, Nix32, fixed output path, text
    paths, ATerm, fetchurls, CLI behaviour offline, and the wire examples (byte-exact client
    transcripts).
-2. A **fake builder-rpc daemon** in `jig-testkit` that speaks the 1.38 handshake, the stderr
+2. A **fake builder-rpc daemon** in `ekacache-testkit` that speaks the 1.38 handshake, the stderr
    message kinds, AddToStore and SubmitOutput. It is scriptable to misbehave (close early,
    oversize strings, bad magic, `STDERR_ERROR`). One test per row of §Client
    state-transition table.

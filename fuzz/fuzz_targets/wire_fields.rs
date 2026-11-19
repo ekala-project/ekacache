@@ -15,8 +15,8 @@ static GO: LazyLock<HashMap<Vec<u8>, serde_json::Value>> =
     LazyLock::new(|| common::oracle(include_str!("../../tests/vectors/go_fields.json")));
 
 fuzz_target!(|line: &[u8]| {
-    let f = jig_core::wire::fields(line);
-    let iterated: Vec<&[u8]> = jig_core::wire::field_iter(line).collect();
+    let f = ekacache_core::wire::fields(line);
+    let iterated: Vec<&[u8]> = ekacache_core::wire::field_iter(line).collect();
     assert_eq!(f.len(), iterated.len());
     let kept: Vec<&[u8]> = (0..f.len().min(4))
         .map(|i| f.get(i).expect("kept"))

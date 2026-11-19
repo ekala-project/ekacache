@@ -1,0 +1,35 @@
+[package]
+name = "ekacache"
+description = "The ekacache compiler launcher (ec): two-key compile cache for cc and rustc, Go cache program, nix-store and reloc-fixup"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[lib]
+path = "src/lib.rs"
+
+[[bin]]
+name = "ec"
+path = "src/main.rs"
+# `#![no_main]`: the binary has no test harness; its behaviour is tested through the library and
+# the integration tests in tests/
+test = false
+
+[dependencies]
+ekacache-core = { workspace = true, features = ["frame"] }
+serde.workspace = true
+serde_json.workspace = true
+base64.workspace = true
+sha2.workspace = true
+rustix.workspace = true
+object.workspace = true
+libc.workspace = true
+
+[dev-dependencies]
+ekacache-testkit.workspace = true
+tempfile.workspace = true
+proptest.workspace = true
+
+[lints]
+workspace = true

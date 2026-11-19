@@ -11,6 +11,21 @@ Rust. The **what** is fixed elsewhere:
 This plan covers only the **how**: crate layout, ordering, internal design, and how each step is
 shown to be correct.
 
+## Naming
+
+The project was renamed after the port to **ekacache**. The plan's prose keeps the old names:
+read **jig** as `ec` (crate `ekacache`, `crates/ekacache`) and **jigd** as `ecd` (crate
+`ekacached`, `crates/ekacached`) where they mean the Rust code, and as the C++ jig and Go jigd
+where they mean `legacy/`. `jig-core` is `ekacache-core` and `jig-testkit` is
+`ekacache-testkit`. The package attributes are `ekacache` and `ekacached`, and `legacy.jig` and
+`legacy.jigd` are unchanged. Code paths and crate names in these docs use the new names.
+
+The names the outside world sees are kept, because the behaviour docs fix them and mixed fleets
+rely on them: the `JIG_*`/`JIGD_*` environment, the socket path `/nix/var/nix/jigd/socket`,
+`jig.json`, the store layout, the wire protocol, and the usage and error text. `ec` also
+answers to `jig` as its `argv[0]` name. The Rust-side test gates are `EC_RUST_EC` and
+`EC_RUST_ECD`. The legacy and compiler gates (`JIG_LEGACY_*`, `JIG_TEST_*`) are unchanged.
+
 ## Decisions (2026-11-17)
 
 | Topic | Decision | Consequence |
@@ -52,7 +67,7 @@ against the C++ jig, and the Rust jig against the Go jigd, before the two Rust h
 
 | Phase | Doc | Ships | Exit criterion |
 |---|---|---|---|
-| P0 | [01-workspace.md](01-workspace.md), [02-core.md](02-core.md) | workspace, `jig-core` (hasher, keys, framing, wire codec), difftest harness skeleton | every digest/key/framing vector in the behaviour docs passes; CI green |
+| P0 | [01-workspace.md](01-workspace.md), [02-core.md](02-core.md) | workspace, `ekacache-core` (hasher, keys, framing, wire codec), difftest harness skeleton | every digest/key/framing vector in the behaviour docs passes; CI green |
 | P1 | [04-jigd-store.md](04-jigd-store.md) | bitcask store, tiers, demotion, recovery | ported `store_test.go`; opens a Go-written store; Quint store traces replay |
 | P2 | [03-jigd-server.md](03-jigd-server.md) | jigd binary: protocol, slots, identities, daemon | ported `serve_test.go`, `slots_test.go`, `identity_test.go`; wire transcripts identical to Go jigd; the C++ jig runs a nixpkgs-style build against it |
 | P3 | [05-jig-foundation.md](05-jig-foundation.md) | jig binary skeleton: dispatch, launcher, process, logging, client, manifest/two-key engine | dispatch/usage/exit-code differential tests; client talks to Go jigd |
@@ -102,7 +117,7 @@ The plan does not resolve these. Each blocks only the item named:
 | Doc | Contents |
 |---|---|
 | [01-workspace.md](01-workspace.md) | crates, dependencies, build config, toolchain, Nix packaging, CI |
-| [02-core.md](02-core.md) | `jig-core`: hasher, key prefixes, store-path masking, value framing, line-protocol codec, HELLO |
+| [02-core.md](02-core.md) | `ekacache-core`: hasher, key prefixes, store-path masking, value framing, line-protocol codec, HELLO |
 | [03-jigd-server.md](03-jigd-server.md) | jigd: tokio architecture, protocol server, slots, identities, peer auth, signals, logging |
 | [04-jigd-store.md](04-jigd-store.md) | jigd: packs, hints, index, tiers, demotion, eviction, recovery, durability |
 | [05-jig-foundation.md](05-jig-foundation.md) | jig: dispatch, launcher, process, logging, cache client, manifest and two-key engine |

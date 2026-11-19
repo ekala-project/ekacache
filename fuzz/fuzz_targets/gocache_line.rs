@@ -3,16 +3,16 @@
 //! input ended) or 1 (a fatal line, Q-GO-1).
 #![no_main]
 
-use jig::gocache::{LineReader, Session};
-use jig::process::ProcEnv;
-use jig_core::env::Env;
+use ekacache::gocache::{LineReader, Session};
+use ekacache::process::ProcEnv;
+use ekacache_core::env::Env;
 use libfuzzer_sys::fuzz_target;
 
 fuzz_target!(|input: &[u8]| {
     let dir = tempfile::tempdir().expect("temp dir");
     let env = ProcEnv::new(Env::from_pairs::<&str, &str>(&[]));
     let mut session = Session {
-        client: jig::client::Client::new(),
+        client: ekacache::client::Client::new(),
         dir: dir.path().as_os_str().as_encoded_bytes().to_vec(),
         env: &env,
     };

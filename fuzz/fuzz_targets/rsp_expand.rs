@@ -9,6 +9,6 @@ fuzz_target!(|body: &[u8]| {
     std::io::Write::write_all(&mut file, body).expect("write");
     let mut arg = b"@".to_vec();
     arg.extend_from_slice(file.path().as_os_str().as_encoded_bytes());
-    let words = jig::util::expand_response_files(&[arg.as_slice(), b"-c"]);
+    let words = ekacache::util::expand_response_files(&[arg.as_slice(), b"-c"]);
     assert_eq!(words.last().map(Vec::as_slice), Some(&b"-c"[..]));
 });

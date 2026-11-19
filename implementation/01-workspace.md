@@ -6,7 +6,7 @@
 Cargo.toml                 workspace: members, shared [workspace.dependencies], lints, profiles
 rust-toolchain.toml        pinned channel (matches the Nix-provided rustc)
 crates/
-  jig-core/                library, no I/O beyond std::io traits
+  ekacache-core/                library, no I/O beyond std::io traits
     src/hasher.rs          length-framed BLAKE3, 128-bit hex digests          (02-core.md)
     src/keys.rs            key prefixes, k1/k2 builders, KeyEnvironment
     src/store_path.rs      STORE_DIR, IsStorePath, masking/unmasking
@@ -30,7 +30,7 @@ crates/
     src/gocache.rs, src/dir.rs, src/slot.rs                                  (08-…)
     src/nix_store/         rpc.rs, offline.rs, drv.rs, nix32.rs              (09-jig-nix-store.md)
     src/fixup/             mod.rs, elf.rs, macho.rs (P9)                     (10-jig-reloc-fixup.md)
-  jig-testkit/             dev-only: difftest harness, fake/proxy jigd, ITF trace replay
+  ekacache-testkit/             dev-only: difftest harness, fake/proxy jigd, ITF trace replay
 tests/
   vectors/                 test vectors extracted from behaviors/*.md (TOML/JSON)
   difftest/                differential scenarios (see 12-testing.md)
@@ -41,11 +41,11 @@ implementation/            this plan
 flake.nix or default.nix   packaging (see below)
 ```
 
-Why `jig` and `jigd` each have a lib target: integration tests and `jig-testkit` call internal
+Why `jig` and `jigd` each have a lib target: integration tests and `ekacache-testkit` call internal
 functions (for example `parse_invocation`, `Store::open`) that the doc tables say "the Rust port
 MUST mirror for its own unit tests" (for example `jig-driver-policy.md §Interface to cc mode`).
 
-`jig-core` is shared by both binaries because keys, framing and the wire codec must agree
+`ekacache-core` is shared by both binaries because keys, framing and the wire codec must agree
 between them. jigd uses only `wire` and `hasher` (identities). It never decompresses values.
 
 ## Dependencies
@@ -83,7 +83,7 @@ legacy binary on a cache hit of a trivial `.c` file:
 
 ## Build configuration
 
-- `JIG_STORE_DIR`: read in `jig-core/build.rs` through `option_env!`, default `/nix/store`,
+- `JIG_STORE_DIR`: read in `ekacache-core/build.rs` through `option_env!`, default `/nix/store`,
   exported as `pub const STORE_DIR: &[u8]`. It is used for masking, `IsStorePath`, the default
   socket `<store>/../var/nix/jigd/socket` and nix-store paths. `build.rs` declares
   `cargo:rerun-if-env-changed=JIG_STORE_DIR`. The value must be absolute, contain no trailing
@@ -95,7 +95,7 @@ legacy binary on a cache hit of a trivial `.c` file:
 ## Toolchain and lints
 
 - `rust-toolchain.toml` pins the channel to the rustc in the pinned package set.
-- Workspace lints: `unsafe_code = "deny"` in `jig-core`. In `jig`/`jigd` it is `warn`, and each
+- Workspace lints: `unsafe_code = "deny"` in `ekacache-core`. In `jig`/`jigd` it is `warn`, and each
   `unsafe` gets a `// SAFETY:` comment. Expected uses: none, because rustix covers the syscalls.
   Clippy pedantic is on, with a short allow-list.
 - `cargo deny` (licenses: MIT-compatible; no duplicate major versions of tokio/serde).

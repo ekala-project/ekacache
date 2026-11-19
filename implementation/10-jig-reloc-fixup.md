@@ -21,7 +21,7 @@ then the Rust reloc-fixup **refuses to run** on a tree containing a 64-bit LE Ma
 silently does less than legacy. **Proposal:** if darwin cross-builds on Linux matter, move A6
 into P8a. It costs about a week and needs no macOS machine, since the tests are byte-level.
 
-## Module (`crates/jig/src/fixup/`)
+## Module (`crates/ekacache/src/fixup/`)
 
 | File | Contents | Spec |
 |---|---|---|
@@ -35,7 +35,7 @@ into P8a. It costs about a week and needs no macOS machine, since the tests are 
 
 The path operations in §Conventions (`join`, `normalize`, `relative`, `filename`,
 `parent_path`, element-wise comparison, `Final`, `OnDisk`, `RelativeTo`) go into
-`jig-core::fspath`, because cc and rustc modes need the same `lexically_normal` semantics (07).
+`ekacache-core::fspath`, because cc and rustc modes need the same `lexically_normal` semantics (07).
 Every example in the doc becomes a test row, plus a proptest against the **legacy** binary's
 behaviour, which is only reachable through whole-tree runs, so in practice the doc examples
 plus the derived-and-confirmed path table are the oracle.

@@ -1,5 +1,5 @@
 # L1 spec vectors of behaviors/jig-keys.md (implementation/12-testing.md §L1: spec vectors).
-# Read by crates/jig-core/tests/spec_vectors.rs. Extracted by hand; keep in step with the doc.
+# Read by crates/ekacache-core/tests/spec_vectors.rs. Extracted by hand; keep in step with the doc.
 #
 # kinds:
 #   digest            `Hasher` ops -> digest. `fields` = one Field call each, `hash_of` = HashOf
@@ -360,7 +360,7 @@ digest = "e670e1a0104f0d5abffd4c4fe35ada39"
 cc_text = "e670e1a0104f0d5abffd4c4fe35ada39"
 rs_text = "rs/e670e1a0104f0d5abffd4c4fe35ada39"
 manifest_key = "m/rs/e670e1a0104f0d5abffd4c4fe35ada39"
-note = "An example of the prefix rule for a given digest, with no inputs: jig-core has no constructor of a Digest from hex, so the rule is checked on the composite vector above (cc text, rs/ text) and by keys.rs's slot tests instead."
+note = "An example of the prefix rule for a given digest, with no inputs: ekacache-core has no constructor of a Digest from hex, so the rule is checked on the composite vector above (cc text, rs/ text) and by keys.rs's slot tests instead."
 
 # ---- Manifest test vectors ----------------------------------------------------------------
 

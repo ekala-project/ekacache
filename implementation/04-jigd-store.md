@@ -8,7 +8,7 @@ The store is plain synchronous Rust (`std::fs`, `std::sync`) with no tokio types
 server (03) calls into it from blocking-pool threads. This keeps the store testable without a
 runtime, and maps it one to one onto the Go code and `spec/store.qnt`.
 
-## Module layout (`crates/jigd/src/store/`)
+## Module layout (`crates/ekacached/src/store/`)
 
 | File | Contents |
 |---|---|

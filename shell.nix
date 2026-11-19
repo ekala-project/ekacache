@@ -30,6 +30,6 @@ pkgs.mkShell {
     pkgs.python3 # scripts/bench.sh
   ]
   ++ pkgs.lib.optional pkgs.stdenv.isLinux pkgs.strace;
-  # the jig store dir is a build-time constant; keep the default explicit
+  # the ec store dir is a build-time constant; keep the default explicit
   JIG_STORE_DIR = builtins.storeDir;
 }

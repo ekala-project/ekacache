@@ -6,8 +6,8 @@
 use std::sync::Arc;
 
 use arbitrary::Arbitrary;
-use jigd::log::Logger;
-use jigd::store::{DemoterMode, Store, StoreConfig, TestClock, Tier};
+use ekacached::log::Logger;
+use ekacached::store::{DemoterMode, Store, StoreConfig, TestClock, Tier};
 use libfuzzer_sys::fuzz_target;
 
 #[derive(Debug, Arbitrary)]

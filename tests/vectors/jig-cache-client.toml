@@ -1,6 +1,6 @@
 # L1 spec vectors of behaviors/jig-cache-client.md (implementation/12-testing.md §L1: spec
 # vectors). The doc has no vector heading; its inline vector sits in §Value encoding. Read by
-# crates/jig-core/tests/spec_vectors.rs.
+# crates/ekacache-core/tests/spec_vectors.rs.
 #
 # kinds:
 #   frame  `value` wrapped for PUT/GET is `wire` (hex). Decoding `wire` must give `value`

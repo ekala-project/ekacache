@@ -146,7 +146,7 @@ Go (vectors generated once). Then `realStore` prefix, `open`, `fstat` regular-fi
 `fdUnder` via `readlink(/proc/self/fd/N)`, the stamp `(ino, size, mtime_ns)`, and the memo
 (`Mutex<HashMap<Vec<u8>, (Stamp, [u8; 34])>>`, never pruned; `ids=` reports its length).
 
-Hashing streams the file through `jig_core::hasher` and checks that it read exactly `st_size`
+Hashing streams the file through `ekacache_core::hasher` and checks that it read exactly `st_size`
 bytes, so a short read gives `""`. The bytes hashed and the result are identical to Go, so
 Q-ID-2 (whole file in memory) needs no sign-off to change. It is an internal resource fix.
 

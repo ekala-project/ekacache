@@ -1,4 +1,4 @@
-# 02: `jig-core` (phase P0)
+# 02: `ekacache-core` (phase P0)
 
 The shared library. Everything that both binaries must agree on byte for byte lives here, so
 the agreement is enforced by the compiler and not by convention.
@@ -123,7 +123,7 @@ pub const PROTOCOL_MAX: u32 = 1;
 UTF-8 scalar at a time with a hand-written decoder. Invalid sequences count as non-space and
 advance one byte, as Go's `utf8.DecodeRune` does with `RuneError`. Test against a table built
 by running Go `strings.Fields` over a byte corpus (the generator is checked in under
-`jig-testkit`; its output is a committed vector file, so CI needs no Go for this test).
+`ekacache-testkit`; its output is a committed vector file, so CI needs no Go for this test).
 
 `Fields` holds a fixed `[&[u8]; 4]` plus the total count. Dispatch needs at most 3 fields, and
 "more than 3" only means "hang up", so nothing is allocated per request.
@@ -139,4 +139,4 @@ from jigd to explain key mismatches.
 - every vector in `jig-keys.md` and `jig-cache-client.md §Value encoding` passes;
 - the `fields` corpus agrees with Go on 100 % of entries;
 - the `parse_int64` corpus (signs, leading zeros, overflow at ±2⁶³) agrees with Go;
-- `cargo test -p jig-core` runs in under 2 s with no network and no Go.
+- `cargo test -p ekacache-core` runs in under 2 s with no network and no Go.

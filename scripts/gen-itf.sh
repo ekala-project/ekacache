@@ -3,11 +3,11 @@
 # The traces are not committed (tests/itf/*/ is in .gitignore). Each command is also in the
 # header of the test that replays it:
 #
-#   store          crates/jigd/tests/store_itf.rs
-#   slots          crates/jigd/tests/slots_itf.rs (in-process)
-#   slots_socket   crates/jigd/tests/slots_itf.rs (over jigd's socket)
-#   jigd_protocol  crates/jigd/tests/protocol_itf.rs (and its long-trace wrapper)
-#   twokey         crates/jig/tests/twokey_itf.rs
+#   store          crates/ekacached/tests/store_itf.rs
+#   slots          crates/ekacached/tests/slots_itf.rs (in-process)
+#   slots_socket   crates/ekacached/tests/slots_itf.rs (over ecd's socket)
+#   jigd_protocol  crates/ekacached/tests/protocol_itf.rs (and its long-trace wrapper)
+#   twokey         crates/ekacache/tests/twokey_itf.rs
 #
 #   QUINT=/path/to/quint scripts/gen-itf.sh     # quint 0.33.1; nixpkgs may carry an older one
 set -eu

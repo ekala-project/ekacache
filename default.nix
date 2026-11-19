@@ -1,11 +1,11 @@
 # Nix packaging (implementation/01-workspace.md §Nix packaging, 13-rollout.md §Packaging).
 #
-#   nix-build -A jig          # bin/jig and the mode symlink farm in libexec/jig; jigd in .jigd
-#   nix-build -A jigd         # bin/jigd
+#   nix-build -A ekacache     # bin/ec and the mode symlink farm in libexec/ekacache; ecd in .ekacached
+#   nix-build -A ekacached    # bin/ecd
 #   nix-build -A legacy.jig   # the C++ jig, for rollback and the difftest
 #   nix-build -A legacy.jigd  # the Go jigd
 #
-# JIG_STORE_DIR is a build-time constant of jig (keys and the default socket derive from it), so
+# JIG_STORE_DIR is a build-time constant of ec (keys and the default socket derive from it), so
 # it is the store this package is built for: builtins.storeDir.
 {
   pkgs ? import <nixpkgs> { },
@@ -14,7 +14,7 @@ let
   inherit (pkgs) lib;
   fs = lib.fileset;
 
-  # names jig answers to through argv[0] (behaviors/jig-dispatch.md §Mode selection): the
+  # names ec answers to through argv[0] (behaviors/jig-dispatch.md §Mode selection): the
   # non-cc modes, and the compiler names cc mode takes its language from
   modes = [
     "cache"
@@ -34,8 +34,8 @@ let
     "gfortran"
   ];
 
-  jig = pkgs.rustPlatform.buildRustPackage {
-    pname = "jig";
+  ekacache = pkgs.rustPlatform.buildRustPackage {
+    pname = "ekacache";
     version = "0.2.0";
 
     src = fs.toSource {
@@ -55,7 +55,7 @@ let
 
     outputs = [
       "out"
-      "jigd"
+      "ekacached"
     ];
 
     nativeBuildInputs = [ pkgs.pkg-config ];
@@ -65,19 +65,19 @@ let
 
     cargoBuildFlags = [
       "-p"
-      "jig"
+      "ekacache"
       "-p"
-      "jigd"
+      "ekacached"
     ];
     # the whole workspace; the differential tests skip themselves without JIG_LEGACY_* and the
     # real-compiler tests without JIG_TEST_GCC/JIG_TEST_CLANG
     cargoTestFlags = [ "--workspace" ];
 
     postInstall = ''
-      moveToOutput bin/jigd "$jigd"
-      mkdir -p "$out/libexec/jig"
+      moveToOutput bin/ecd "$ekacached"
+      mkdir -p "$out/libexec/ekacache"
       for name in ${lib.escapeShellArgs (modes ++ compilers)}; do
-        ln -s ../../bin/jig "$out/libexec/jig/$name"
+        ln -s ../../bin/ec "$out/libexec/ekacache/$name"
       done
     '';
 
@@ -86,10 +86,10 @@ let
     };
 
     meta = {
-      description = "Compile cache for Nix builds (jig) and its per-machine daemon (jigd)";
+      description = "Compile cache for Nix builds (ec) and its per-machine daemon (ecd)";
       license = lib.licenses.mit;
       platforms = lib.platforms.linux ++ lib.platforms.darwin;
-      mainProgram = "jig";
+      mainProgram = "ec";
     };
   };
 
@@ -148,7 +148,7 @@ let
   };
 in
 {
-  inherit jig legacy;
-  jigd = jig.jigd;
-  default = jig;
+  inherit ekacache legacy;
+  ekacached = ekacache.ekacached;
+  default = ekacache;
 }

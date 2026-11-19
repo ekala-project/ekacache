@@ -3,7 +3,7 @@
 # target for <seconds> (default 60, the nightly budget). Stops at the first target that finds a
 # new crash; the input is left in fuzz/artifacts/<target>/.
 #
-#   JIG_RUST_JIG=target/release/jig [JIG_LEGACY_JIG=...] [CC=gcc] scripts/fuzz.sh [seconds] [target...]
+#   EC_RUST_EC=target/release/ec [JIG_LEGACY_JIG=...] [CC=gcc] scripts/fuzz.sh [seconds] [target...]
 #
 # Needs cargo-fuzz (or CARGO_FUZZ=/path/to/cargo-fuzz). libFuzzer is used without a sanitizer (nixpkgs' rustc ships none), with a
 # 256 MiB allocation limit so a header that reserves gigabytes counts as a crash.
@@ -12,8 +12,8 @@ root=$(cd "$(dirname "$0")/.." && pwd)
 secs=${1:-60}
 [ $# -gt 0 ] && shift
 targets=${*:-wire_fields wire_request frame_decode store_load gocache_line nix_drv_json elf_fixup macho_fixup depfile_parse rsp_expand listing_parse driver_json}
-: "${JIG_RUST_JIG:?set JIG_RUST_JIG to a release jig}"
-export RUSTC_BOOTSTRAP=1 JIG_RUST_JIG
+: "${EC_RUST_EC:?set EC_RUST_EC to a release ec}"
+export RUSTC_BOOTSTRAP=1 EC_RUST_EC
 fuzz=${CARGO_FUZZ:-cargo fuzz}
 cd "$root/fuzz"
 c=corpus

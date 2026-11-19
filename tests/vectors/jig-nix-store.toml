@@ -2,16 +2,16 @@
 # §L1: spec vectors). The store dir is /nix/store throughout, as in the doc.
 #
 # kinds:
-#   sha256        SHA256(input, or `repeat` × `count`) == hex (crates/jig/src/nix_store/hash.rs).
+#   sha256        SHA256(input, or `repeat` × `count`) == hex (crates/ekacache/src/nix_store/hash.rs).
 #   nix32         Nix32(bytes_hex, or SHA256(sha256_of)) == nix32 (hash.rs).
 #   fixed-output-path  FixedOutputPath(store, name, algo, hex) == path, and the intermediate
 #                 values: SHA256(inner) is the hash in `fingerprint`, SHA256(fingerprint) ==
 #                 fingerprint_sha256, its fold == fold, Nix32(fold) == fold_nix32 (hash.rs).
 #   text-path     `add-text name refs...` with `stdin` prints `path` (TextPath in hash.rs, the
-#                 offline binary in crates/jig/tests/nix_store_offline.rs).
+#                 offline binary in crates/ekacache/tests/nix_store_offline.rs).
 #   text-fingerprint  SHA256(fingerprint) == sha256 and its fold == fold where given, and
 #                 Nix32(fold) is the hash part of `path` (hash.rs).
-#   aterm         DerivationToATerm(json) == aterm (crates/jig/src/nix_store/drv.rs); SHA256(aterm)
+#   aterm         DerivationToATerm(json) == aterm (crates/ekacache/src/nix_store/drv.rs); SHA256(aterm)
 #                 == inner_sha256 (hash.rs); `add-drv x.drv` prints drv_path, `add-drv x.drv refs`
 #                 prints drv_path_with_refs (nix_store_offline.rs).
 #   fetchurls     `fetchurls` of stdin prints stdout (nix_store_offline.rs); the derivation of the
@@ -21,7 +21,7 @@
 #                 its place) with stdin: status, stderr and stdout (each a line; absent means
 #                 empty) (nix_store_offline.rs).
 #   wire          the client's bytes `wire_hex` (whitespace ignored) built by `message`
-#                 (crates/jig/tests/nix_store_rpc.rs wire_examples).
+#                 (crates/ekacache/tests/nix_store_rpc.rs wire_examples).
 #   doc-only      not checked from here; `note` says why.
 
 doc = "behaviors/jig-nix-store.md"

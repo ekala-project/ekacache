@@ -1,6 +1,6 @@
 // -*- mode: Bluespec; -*-
 /**
- * spec/slots.qnt (module `slots`) for the socket replay in crates/jigd/tests/slots_itf.rs.
+ * spec/slots.qnt (module `slots`) for the socket replay in crates/ekacached/tests/slots_itf.rs.
  *
  * jigd drains a closed connection in one go: its deferred cleanup releases every token before
  * anything else on that connection happens, while the model's `drainOne` steps may interleave

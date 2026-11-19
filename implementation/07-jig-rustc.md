@@ -5,7 +5,7 @@ Specified by: `jig-rustc-mode.md` (all), `jig-keys.md` (k1 framing, manifest), `
 Adopted here: Q-RS-3 (`# env-dep` tracked, `rs-schema=8`), Q-RS-5 (`--crate-type` split on
 `,`), Q-CC-2 / Q-CLIENT-2 (DONE after checked PUTs), Q-KEY-3 (unreadable input → not stored).
 
-## Module (`crates/jig/src/rustc/`)
+## Module (`crates/ekacache/src/rustc/`)
 
 | File | Contents | Spec section |
 |---|---|---|
@@ -18,7 +18,7 @@ Adopted here: Q-RS-3 (`# env-dep` tracked, `rs-schema=8`), Q-RS-5 (`--crate-type
 ## Implementation notes
 
 - **`OnPath(rustc)`**: PATH lookup for a bare name, following the legacy algorithm (check
-  `rustc_mode.cc`), not `which`. `ToolId` comes from `jig_core::store_path::Store::tool_id`.
+  `rustc_mode.cc`), not `which`. `ToolId` comes from `ekacache_core::store_path::Store::tool_id`.
 - **`StdlibIds`**: `canonical(OnPath(rustc))` (failure → `?`), roots `real/../..` plus the
   sysroot. Scan `lib/rustlib/*/lib/` for `libstd-*.rlib` / `libcore-*.rlib`, apply
   `weakly_canonical` (port libstdc++'s semantics: canonicalise the longest existing prefix,
@@ -27,7 +27,7 @@ Adopted here: Q-RS-3 (`# env-dep` tracked, `rs-schema=8`), Q-RS-5 (`--crate-type
   the result is sorted.
 - **`absolute(p).lexically_normal()`**: port `std::filesystem::path::lexically_normal`
   exactly (it differs from Rust's `Path::components` normalisation on trailing `/`, on `..`
-  past the root, and on empty components). It lives in `jig-core::bytes` (or `path.rs`),
+  past the root, and on empty components). It lives in `ekacache-core::bytes` (or `path.rs`),
   because cc mode uses it too, with a table test.
 - **Env-dep (adopted Q-RS-3)**:
   - `parse_dep_info` keeps lines starting with `# env-dep:` and extracts `NAME` up to the
@@ -64,7 +64,7 @@ Adopted here: Q-RS-3 (`# env-dep` tracked, `rs-schema=8`), Q-RS-5 (`--crate-type
    `serde`, `tokio`), both jigs against a recording proxy. All key fields must match except
    field 1 (`rs-schema=7` vs `=8`), so the comparison masks that field and compares the rest
    of the framed input. To make this possible, both implementations' k1 *preimages* are
-   compared, not the hashes: `jig-testkit` has a debug env var `JIG_DEBUG_KEYS` (Rust only)
+   compared, not the hashes: `ekacache-testkit` has a debug env var `JIG_DEBUG_KEYS` (Rust only)
    that dumps preimages. For legacy, the preimage is reconstructed by the harness from the
    same inputs. If that turns out too fiddly, fall back to comparing manifests and blobs
    only.

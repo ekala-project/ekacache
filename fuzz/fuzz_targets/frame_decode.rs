@@ -6,9 +6,12 @@
 use libfuzzer_sys::fuzz_target;
 
 fuzz_target!(|wire: &[u8]| {
-    if let Some(raw) = jig_core::frame::decode(wire)
-        && let Ok(again) = jig_core::frame::encode(&raw)
+    if let Some(raw) = ekacache_core::frame::decode(wire)
+        && let Ok(again) = ekacache_core::frame::encode(&raw)
     {
-        assert_eq!(jig_core::frame::decode(&again).as_deref(), Some(&raw[..]));
+        assert_eq!(
+            ekacache_core::frame::decode(&again).as_deref(),
+            Some(&raw[..])
+        );
     }
 });

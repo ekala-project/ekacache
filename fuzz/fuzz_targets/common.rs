@@ -23,14 +23,14 @@ pub fn oracle(text: &str) -> HashMap<Vec<u8>, serde_json::Value> {
         .collect()
 }
 
-/// `JIG_RUST_JIG` and `JIG_LEGACY_JIG`. The process targets need the first.
+/// `EC_RUST_EC` and `JIG_LEGACY_JIG`. The process targets need the first.
 pub fn binaries() -> (PathBuf, Option<PathBuf>) {
     let get = |v: &str| {
         std::env::var_os(v)
             .filter(|p| !p.is_empty())
             .map(PathBuf::from)
     };
-    let rust = get("JIG_RUST_JIG").expect("set JIG_RUST_JIG to a release jig binary");
+    let rust = get("EC_RUST_EC").expect("set EC_RUST_EC to a release jig binary");
     (rust, get("JIG_LEGACY_JIG"))
 }
 

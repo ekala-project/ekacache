@@ -3,10 +3,10 @@
 #   RUSTC_BOOTSTRAP=1 cargo fuzz run --sanitizer none <target> -- -max_total_time=60
 #
 # A workspace of its own, so the main workspace never builds libFuzzer. The targets that run
-# processes (`nix_drv_json`, `elf_fixup`, `macho_fixup`) need JIG_RUST_JIG (a release jig) and
+# processes (`nix_drv_json`, `elf_fixup`, `macho_fixup`) need EC_RUST_EC (a release jig) and
 # compare with JIG_LEGACY_JIG when it is set. scripts/fuzz.sh seeds the corpora and runs them all.
 [package]
-name = "jig-fuzz"
+name = "ekacache-fuzz"
 version = "0.0.0"
 edition = "2024"
 publish = false
@@ -20,9 +20,9 @@ members = ["."]
 [dependencies]
 libfuzzer-sys = "0.4"
 arbitrary = { version = "1", features = ["derive"] }
-jig-core = { path = "../crates/jig-core" }
-jig = { path = "../crates/jig" }
-jigd = { path = "../crates/jigd" }
+ekacache-core = { path = "../crates/ekacache-core" }
+ekacache = { path = "../crates/ekacache" }
+ekacached = { path = "../crates/ekacached" }
 serde_json = "1"
 tempfile = "3"
 

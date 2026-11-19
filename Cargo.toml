@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["crates/jig-core", "crates/jigd", "crates/jig", "crates/jig-testkit"]
+members = ["crates/ekacache-core", "crates/ekacached", "crates/ekacache", "crates/ekacache-testkit"]
 exclude = ["fuzz"]
 
 [workspace.package]
@@ -13,10 +13,10 @@ repository = "https://github.com/ekala-project/jig"
 # Every dependency is listed in implementation/01-workspace.md §Dependencies with the reason it
 # is here. Adding one needs a row in that table.
 [workspace.dependencies]
-jig-core = { path = "crates/jig-core", default-features = false }
-jigd = { path = "crates/jigd" }
-jig = { path = "crates/jig" }
-jig-testkit = { path = "crates/jig-testkit" }
+ekacache-core = { path = "crates/ekacache-core", default-features = false }
+ekacached = { path = "crates/ekacached" }
+ekacache = { path = "crates/ekacache" }
+ekacache-testkit = { path = "crates/ekacache-testkit" }
 blake3 = { version = "1", default-features = false, features = ["std"] }
 zstd = { version = "0.13", default-features = false, features = ["pkg-config"] }
 serde = { version = "1", features = ["derive"] }
@@ -31,7 +31,7 @@ tempfile = "3"
 proptest = { version = "1", default-features = false, features = ["std"] }
 
 [workspace.lints.rust]
-# jig-core denies unsafe outright (#![deny(unsafe_code)] in lib.rs); jig and jigd warn, and
+# ekacache-core denies unsafe outright (#![deny(unsafe_code)] in lib.rs); jig and jigd warn, and
 # every use carries a // SAFETY: comment.
 unsafe_code = "warn"
 unsafe_op_in_unsafe_fn = "deny"

@@ -2,10 +2,10 @@
 # The P10 performance checks (implementation/12-testing.md §Performance checks):
 #
 # 1. hit latency: `jig` and the legacy jig compiling a trivial .c that is already cached, both
-#    against the Rust jigd (so the Rust side pays the HELLO round trip). Gate: Rust <= legacy + 5%.
-# 2. jigd GET/PUT round trips and IDS for 100 paths, Rust jigd against the Go jigd.
+#    against ecd (so the Rust side pays the HELLO round trip). Gate: Rust <= legacy + 5%.
+# 2. daemon GET/PUT round trips and IDS for 100 paths, ecd against the Go jigd.
 #
-#   scripts/bench.sh <rust-jig> <rust-jigd> <legacy-jig> <legacy-jigd> <cc>
+#   scripts/bench.sh <ec> <ecd> <legacy-jig> <legacy-jigd> <cc>
 #
 # Needs hyperfine and python3. Exits 1 if the hit-latency gate fails.
 set -eu
@@ -35,7 +35,7 @@ start_jigd() {
 start_jigd "$jigd" rust
 start_jigd "$legacy_jigd" go
 
-# cc mode takes its language from argv[0]; JIG_CC is the compiler of a conf-less jig
+# cc mode takes its language from argv[0]; JIG_CC is the compiler of a conf-less ec or jig
 mkdir -p "$work/rust-bin" "$work/legacy-bin" "$work/src"
 ln -s "$jig" "$work/rust-bin/cc"
 ln -s "$legacy_jig" "$work/legacy-bin/cc"
@@ -44,20 +44,20 @@ export JIG_CC="$cc" JIG_SOCK="$work/rust/sock"
 cd "$work/src"
 for side in rust legacy; do "$work/$side-bin/cc" -c t.c -o "t-$side.o"; done
 
-echo "== hit latency (Rust jigd behind both)"
+echo "== hit latency (ecd behind both)"
 hyperfine --warmup 20 --runs 300 -N --export-json "$work/hit.json" \
-  -n jig "$work/rust-bin/cc -c t.c -o t-rust.o" \
+  -n ec "$work/rust-bin/cc -c t.c -o t-rust.o" \
   -n legacy-jig "$work/legacy-bin/cc -c t.c -o t-legacy.o"
 python3 -I - "$work/hit.json" <<'PY'
 import json, sys
 r = {x["command"]: x["mean"] for x in json.load(open(sys.argv[1]))["results"]}
-rust, legacy = r["jig"], r["legacy-jig"]
+rust, legacy = r["ec"], r["legacy-jig"]
 ok = rust <= legacy * 1.05
-print(f"gate: jig {rust * 1e3:.2f} ms, legacy {legacy * 1e3:.2f} ms, limit {legacy * 1.05e3:.2f} ms: {'pass' if ok else 'FAIL'}")
+print(f"gate: ec {rust * 1e3:.2f} ms, legacy {legacy * 1e3:.2f} ms, limit {legacy * 1.05e3:.2f} ms: {'pass' if ok else 'FAIL'}")
 sys.exit(0 if ok else 1)
 PY
 
 for side in rust go; do
-  echo "== jigd round trips: $side"
+  echo "== daemon round trips: $side"
   python3 -I "$here/jigd_bench.py" "$work/$side/sock" "$work/$side/store"
 done

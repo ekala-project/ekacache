@@ -5,6 +5,9 @@
 use libfuzzer_sys::fuzz_target;
 
 fuzz_target!(|text: &[u8]| {
-    let _ = jig::driver::json::parse(text);
-    let _ = jig::driver::parse_driver_conf(text, b"/nix/store/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-cc");
+    let _ = ekacache::driver::json::parse(text);
+    let _ = ekacache::driver::parse_driver_conf(
+        text,
+        b"/nix/store/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-cc",
+    );
 });

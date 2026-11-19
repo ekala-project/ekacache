@@ -85,7 +85,7 @@ jobs:
       - name: replay traces
         shell: bash # -o pipefail, so tee keeps cargo's exit status
         run: |
-          nix-shell --run 'cargo build -p jigd --locked && JIG_RUST_JIGD=$PWD/target/debug/jigd cargo test --locked -p jigd -p jig --test store_itf --test slots_itf --test protocol_itf --test twokey_itf --test nix_store_quint -- --nocapture' 2>&1 | tee replay.log
+          nix-shell --run 'cargo build -p ekacached --locked && EC_RUST_ECD=$PWD/target/debug/ecd cargo test --locked -p ekacached -p ekacache --test store_itf --test slots_itf --test protocol_itf --test twokey_itf --test nix_store_quint -- --nocapture' 2>&1 | tee replay.log
           # a replay test with no traces passes and says so: that must not happen here
           ! grep -q 'no traces' replay.log
 
@@ -104,10 +104,10 @@ jobs:
           echo "JIG_LEGACY_JIGD=$(nix-build --no-out-link -A legacy.jigd)/bin/jigd" >>"$GITHUB_ENV"
           echo "JIG_TEST_GCC=$(nix-build --no-out-link '<nixpkgs>' -A gcc15)/bin/gcc" >>"$GITHUB_ENV"
           echo "JIG_TEST_CLANG=$(nix-build --no-out-link '<nixpkgs>' -A clang_20)/bin/clang" >>"$GITHUB_ENV"
-      - name: Rust jig + Rust jigd, against legacy
-        run: nix-shell --run 'cargo build -p jigd --locked && JIG_RUST_JIGD=$PWD/target/debug/jigd cargo test --workspace --locked --no-fail-fast'
-      - name: Rust jig + Go jigd
-        run: nix-shell --run 'cargo test -p jig --locked --no-fail-fast'
+      - name: ec + ecd, against legacy
+        run: nix-shell --run 'cargo build -p ekacached --locked && EC_RUST_ECD=$PWD/target/debug/ecd cargo test --workspace --locked --no-fail-fast'
+      - name: ec + Go jigd
+        run: nix-shell --run 'cargo test -p ekacache --locked --no-fail-fast'
 
   bench:
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
@@ -115,11 +115,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: cachix/install-nix-action@v31
-      - name: "hit latency and jigd round trips (gate: Rust <= legacy + 5%)"
+      - name: "hit latency and daemon round trips (gate: Rust <= legacy + 5%)"
         run: |
           legacy_jig=$(nix-build --no-out-link -A legacy.jig)/bin/jig
           legacy_jigd=$(nix-build --no-out-link -A legacy.jigd)/bin/jigd
-          nix-shell --run "cargo build --release --locked -p jig -p jigd && scripts/bench.sh target/release/jig target/release/jigd $legacy_jig $legacy_jigd \$(command -v cc)"
+          nix-shell --run "cargo build --release --locked -p ekacache -p ekacached && scripts/bench.sh target/release/ec target/release/ecd $legacy_jig $legacy_jigd \$(command -v cc)"
 
   fuzz:
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
@@ -130,7 +130,7 @@ jobs:
       - name: 60 s per target, against legacy
         run: |
           legacy_jig=$(nix-build --no-out-link -A legacy.jig)/bin/jig
-          nix-shell --run "cargo build --release --locked -p jig && JIG_RUST_JIG=\$PWD/target/release/jig JIG_LEGACY_JIG=$legacy_jig scripts/fuzz.sh 60"
+          nix-shell --run "cargo build --release --locked -p ekacache && EC_RUST_EC=\$PWD/target/release/ec JIG_LEGACY_JIG=$legacy_jig scripts/fuzz.sh 60"
       - uses: actions/upload-artifact@v4
         if: failure()
         with:
@@ -151,4 +151,4 @@ jobs:
       - name: build the Go jigd
         run: echo "JIG_LEGACY_JIGD=$(nix-build --no-out-link -A legacy.jigd)/bin/jigd" >>"$GITHUB_ENV"
       - name: test and difftest
-        run: nix-shell --run 'cargo build -p jigd --locked && JIG_RUST_JIGD=$PWD/target/debug/jigd cargo test --workspace --locked --no-fail-fast'
+        run: nix-shell --run 'cargo build -p ekacached --locked && EC_RUST_ECD=$PWD/target/debug/ecd cargo test --workspace --locked --no-fail-fast'

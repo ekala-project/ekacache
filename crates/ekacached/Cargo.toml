@@ -1,0 +1,28 @@
+[package]
+name = "ekacached"
+description = "The ekacache daemon (ecd): a shared compile cache and job-slot server on a Unix socket"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[lib]
+path = "src/lib.rs"
+
+[[bin]]
+name = "ecd"
+path = "src/main.rs"
+
+[dependencies]
+ekacache-core = { workspace = true, default-features = false }
+tokio.workspace = true
+rustix.workspace = true
+libc.workspace = true
+
+[dev-dependencies]
+ekacache-testkit.workspace = true
+tempfile.workspace = true
+proptest.workspace = true
+
+[lints]
+workspace = true

@@ -41,7 +41,7 @@ pub fn check(magic: &[u8], data: &[u8]) {
     image.extend_from_slice(data);
     let (rust, legacy) = common::binaries();
     // a fixed path per fuzzing process: paths are part of the output
-    let root = std::env::temp_dir().join(format!("jig-fuzz-fixup-{}", std::process::id()));
+    let root = std::env::temp_dir().join(format!("ekacache-fuzz-fixup-{}", std::process::id()));
     let ours = once(&rust, &root, &image);
     common::assert_no_panic(&ours.0);
     if let Some(legacy) = legacy {

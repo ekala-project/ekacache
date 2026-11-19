@@ -1,5 +1,5 @@
 # L1 spec vectors of behaviors/jig-driver-policy.md §Test vectors (implementation/12-testing.md
-# §L1: spec vectors). Read by crates/jig/tests/driver_vectors.rs.
+# §L1: spec vectors). Read by crates/ekacache/tests/driver_vectors.rs.
 #
 # The doc's notation is kept: the single arguments START, END and META, the five CRT_TAIL
 # arguments, and `_×N` inside a string for N underscores. /nix/store stands for the store dir.
@@ -23,7 +23,7 @@
 #   search-dirs  WithPackageLibDirs(text, ldflags) == result.
 #   conf-parse   ParseDriverConf(text or text_hex, ""): `status` 2 with `stderr` (Fatal::Exit of
 #                stderr + "\n"), `abort` (SIGABRT), or parse ok with the given fields.
-#   end-to-end   TV-37 on the built binary at R/bin/jig (crates/jig/tests/cc_mode.rs): R/etc/jig.json
+#   end-to-end   TV-37 on the built binary at R/bin/jig (crates/ekacache/tests/cc_mode.rs): R/etc/jig.json
 #                = `conf` when given, run `tool args` with `env` (NAME=VALUE); <R> is the root. The
 #                given of status, stdout, stdout_ends_with, stderr and log (the $JIG_LOG rows
 #                without their times) are checked.

@@ -3,12 +3,12 @@
 # not /nix/store.
 #
 # kinds:
-#   binary-image  TestBinaryImage (crates/jig/src/fixup/image.rs test_binary_image): an image
+#   binary-image  TestBinaryImage (crates/ekacache/src/fixup/image.rs test_binary_image): an image
 #                 of `image_hex` zero-padded to `image_len` bytes, then each step
 #                 "<op> <args...> -> <result>" in order; ops is_elf64_le, read_u16/u32/u64,
 #                 write_u32/u64, write_padded <at> <width> <text>, cstring <at>; results true,
 #                 false, none, a 0x number or a C string (empty after "-> ").
-#   macho         TestMachOFixup on the doc's 2048-byte image (crates/jig/tests/fixup_macho.rs
+#   macho         TestMachOFixup on the doc's 2048-byte image (crates/ekacache/tests/fixup_macho.rs
 #                 test_mach_o_fixup builds the image): stdout, stderr, status, file size, the
 #                 cmdsizes, sizeofcmds, NUL-terminated strings the file `contains` and `lacks`.
 #   macho-unresolvable  The image with one LC_LOAD_DYLIB `load`, run with --sdk: stderr and
@@ -17,13 +17,13 @@
 #   macho-resign  The re-signing image with code signature hashType `hash_type`: stdout,
 #                 stderr, status, cmdsizes, sizeofcmds, ncmds; `slots_hash_pages` that each code
 #                 slot is the SHA-256 of its page; `unchanged` that the file is byte-identical.
-#   cli           `jig reloc-fixup args` (crates/jig/tests/fixup_vectors.rs cli): stderr and
+#   cli           `jig reloc-fixup args` (crates/ekacache/tests/fixup_vectors.rs cli): stderr and
 #                 status, stdout empty. <dir> is an existing empty directory; `usage` stands
 #                 for the usage line (the doc does not spell it; its text is the top-level
-#                 `usage`, checked against jig::fixup::USAGE).
+#                 `usage`, checked against ekacache::fixup::USAGE).
 #   deny          `--deny needle` over the top-level deny_files/deny_contents tree
 #                 (fixup_vectors.rs deny): the stderr lines (compared sorted) and status.
-#   relative-to   RelativeTo(dir, target, anchor) == result (crates/jig/src/fixup/mod.rs).
+#   relative-to   RelativeTo(dir, target, anchor) == result (crates/ekacache/src/fixup/mod.rs).
 #   final         Final(path) == result with prefix/dest (mod.rs).
 #   on-disk       OnDisk(path) == result with prefix/dest (mod.rs).
 #   doc-only      not checked from here; `note` says why and where it is checked.
@@ -341,41 +341,41 @@ id = "elf-e2e"
 kind = "doc-only"
 section = "Test vectors > Derived and confirmed: ELF end to end (GNU ld output, gcc 14)"
 stdout_shape = "lib/libbar.so  RUNPATH $ORIGIN/../../<G>/lib/:\u2026\nbin/foo  RUNPATH $ORIGIN/../../<G>/lib/:\u2026  NEEDED $ORIGIN/../lib//libbar.so  INTERP ../../<G>/lib/ld-linux-x86-64.so.2 (PT_NULL, entry=__reloc_start)\n"
-note = "PT_INTERP becomes PT_NULL and e_entry = st_value(__reloc_start). The binaries come from this machine's gcc and glibc (<G> is its glibc), so crates/jig/tests/fixup_vectors.rs elf_end_to_end builds them and checks these shapes with the real names."
+note = "PT_INTERP becomes PT_NULL and e_entry = st_value(__reloc_start). The binaries come from this machine's gcc and glibc (<G> is its glibc), so crates/ekacache/tests/fixup_vectors.rs elf_end_to_end builds them and checks these shapes with the real names."
 
 [[vector]]
 id = "elf-e2e-idempotent"
 kind = "doc-only"
 section = "Test vectors > Derived and confirmed: ELF end to end (GNU ld output, gcc 14)"
-note = "A second run prints nothing (but WARN lines) and exits 0. The binaries come from this machine's gcc and glibc (<G> is its glibc), so crates/jig/tests/fixup_vectors.rs elf_end_to_end builds them and checks these shapes with the real names."
+note = "A second run prints nothing (but WARN lines) and exits 0. The binaries come from this machine's gcc and glibc (<G> is its glibc), so crates/ekacache/tests/fixup_vectors.rs elf_end_to_end builds them and checks these shapes with the real names."
 
 [[vector]]
 id = "elf-e2e-relocated"
 kind = "doc-only"
 section = "Test vectors > Derived and confirmed: ELF end to end (GNU ld output, gcc 14)"
 contains = "  NEEDED $ORIGIN/../lib/libbar.so  "
-note = "Copied to run2: a single slash in NEEDED. The binaries come from this machine's gcc and glibc (<G> is its glibc), so crates/jig/tests/fixup_vectors.rs elf_end_to_end builds them and checks these shapes with the real names."
+note = "Copied to run2: a single slash in NEEDED. The binaries come from this machine's gcc and glibc (<G> is its glibc), so crates/ekacache/tests/fixup_vectors.rs elf_end_to_end builds them and checks these shapes with the real names."
 
 [[vector]]
 id = "elf-e2e-no-stub"
 kind = "doc-only"
 section = "Test vectors > Derived and confirmed: ELF end to end (GNU ld output, gcc 14)"
 shape = "  INTERP /nix/store/<G>/lib/ld-linux-x86-64.so.2 kept (no stub)\n  WARN absolute store ref in bin/foo @0x318: /nix/store/<G>/lib/ld-linux-x86-64.so.2"
-note = "Checked on bin/plain. The binaries come from this machine's gcc and glibc (<G> is its glibc), so crates/jig/tests/fixup_vectors.rs elf_end_to_end builds them and checks these shapes with the real names."
+note = "Checked on bin/plain. The binaries come from this machine's gcc and glibc (<G> is its glibc), so crates/ekacache/tests/fixup_vectors.rs elf_end_to_end builds them and checks these shapes with the real names."
 
 [[vector]]
 id = "elf-e2e-no-fit"
 kind = "doc-only"
 section = "Test vectors > Derived and confirmed: ELF end to end (GNU ld output, gcc 14)"
 shape = "<prefix>/lib/libbar.so: RUNPATH does not fit (192 > 183): $ORIGIN/../../<D1>/lib:\u2026"
-note = "Checked on lib/libnopad.so with this machine's lengths. The binaries come from this machine's gcc and glibc (<G> is its glibc), so crates/jig/tests/fixup_vectors.rs elf_end_to_end builds them and checks these shapes with the real names."
+note = "Checked on lib/libnopad.so with this machine's lengths. The binaries come from this machine's gcc and glibc (<G> is its glibc), so crates/ekacache/tests/fixup_vectors.rs elf_end_to_end builds them and checks these shapes with the real names."
 
 [[vector]]
 id = "elf-e2e-write-back"
 kind = "doc-only"
 section = "Test vectors > Derived and confirmed: ELF end to end (GNU ld output, gcc 14)"
 shape = "<prefix>/bin/foo: cannot write back: No such file or directory"
-note = "Q-FIX-4, with a read-only bin/ in run3. The binaries come from this machine's gcc and glibc (<G> is its glibc), so crates/jig/tests/fixup_vectors.rs elf_end_to_end builds them and checks these shapes with the real names."
+note = "Q-FIX-4, with a read-only bin/ in run3. The binaries come from this machine's gcc and glibc (<G> is its glibc), so crates/ekacache/tests/fixup_vectors.rs elf_end_to_end builds them and checks these shapes with the real names."
 
 # ---- Mach-O re-signing -------------------------------------------------------------------------
 

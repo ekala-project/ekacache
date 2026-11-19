@@ -5,7 +5,7 @@ logging, the jigd client, and the two-key engine (manifest build/validate).
 
 Specified by: `jig-dispatch.md`, `jig-cache-client.md`, `jig-keys.md §Manifest`,
 `environment.md`; model `spec/twokey.qnt`.
-Adopted here: Q-CLIENT-1 (LE header, via `jig_core::frame`), Q-CLIENT-2 (PUT replies checked,
+Adopted here: Q-CLIENT-1 (LE header, via `ekacache_core::frame`), Q-CLIENT-2 (PUT replies checked,
 DONE after PUTs), HELLO negotiation, Q-KEY-3 (unreadable input → unstorable manifest).
 
 **jig is synchronous.** It uses std sockets and blocking I/O, no tokio, no threads except where
@@ -17,7 +17,7 @@ legacy uses them (it uses none).
 fn main() -> ! {
     let argv: Vec<OsString> = std::env::args_os().collect();
     let env = Env::capture();                 // the variables jig reads (environment.md), once
-    let store = Store::from_env(&env);        // jig_core::store_path::Store
+    let store = Store::from_env(&env);        // ekacache_core::store_path::Store
     let mode = basename(argv[0]);
     std::process::exit(dispatch(mode, &argv[1..], &env, &store))
 }
@@ -29,7 +29,7 @@ launcher, then `nix-store`, `cache`, `slot`, `gocacheprog`, `rustcwrap`, `reloc-
 cc mode. Comparisons are byte-exact and case-sensitive. The usage text is a `const &[u8]`
 copied from the doc, and a test compares it with the doc block.
 
-`socket_path` = `$JIG_SOCK` if set (even empty), else `jig_core::store_path::default_socket()`.
+`socket_path` = `$JIG_SOCK` if set (even empty), else `ekacache_core::store_path::default_socket()`.
 It is computed once.
 
 `self_path` for GOCACHEPROG: `absolute(argv[0])` if it contains `/` (made absolute, **not**

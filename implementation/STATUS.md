@@ -5,12 +5,16 @@ done. The rest of P10 is operational and time-gated, and has not started: rollin
 builders, 30 days of green difftests, then legacy removal (13 §Rollout order, §Legacy removal).
 `legacy/` and the `legacy` attribute are still in place.
 
+After P10 the project was renamed to ekacache, with the commands `ec` and `ecd`
+([README.md §Naming](README.md#naming)). The rows below keep the names that were in use when
+each phase was done.
+
 Each phase lists its exit criterion from [README.md §Phases](README.md#phases), and what met it
 or what is still missing.
 
 | Phase | Commits | Exit criterion |
 |---|---|---|
-| P0 | `64f3e8f` | Vectors pass: every vector section of `behaviors/` is extracted to `tests/vectors/<doc>.toml`, which the tests read (§L1 below). A CI workflow exists (`.github/workflows/ci.yml`) but **has not run on GitHub yet**, so "CI green" is not shown. |
+| P0 | `64f3e8f` | Vectors pass: every vector section of `behaviors/` is extracted to `tests/vectors/<doc>.toml`, which the tests read (§L1 below). CI (`.github/workflows/ci.yml`) is green on GitHub for check, test, difftest and quint, on x86_64 and aarch64 (§Not built, or not run, for macOS). |
 | P1 | `2d4a115` | Met: `store_test.go` ported (`store`, `legacy_store`); each implementation opens the other's store (`difftest_store_compat`); Quint store traces replay, and the model's witnesses are checked (`store_itf`). |
 | P2 | `cfdd65d`, `2b9ba3f` | Ported serve/slots/identity tests pass; wire transcripts match the Go jigd (`difftest_wire`); slots traces replay in-process and over jigd's socket (`slots_itf`), and so do `jigd_protocol` traces (`protocol_itf`). The C++ jig's difftests and a compile smoke test pass against the Rust jigd. **No nixpkgs-style package build** was run with the C++ jig. |
 | P3 | `35ad914` | Met: dispatch/usage/exit-code difftests (`binary`, `legacy_jig`); the client talks to the Go jigd, falling back to v0 (`client_jigd`). |
@@ -25,18 +29,19 @@ or what is still missing.
 
 ## Test results
 
-All on Linux x86_64, at `2ae5b2d`. The legacy jig is the GCC 15 build from `nix-build -A
+All on Linux x86_64, at `2ae5b2d`. The rename to ekacache was rerun on the same setup (counts
+in brackets: one test more, `binary::self_names`). The legacy jig is the GCC 15 build from `nix-build -A
 legacy.jig`, the Go jigd is `nix-build -A legacy.jigd`, and the real compilers are GCC 15.2 and
 clang 20.1.8 from the pinned nixpkgs (the ones the CI difftest job uses). The ITF traces were
 generated with `scripts/gen-itf.sh` and quint 0.33.1.
 
 | Combination | Result |
 |---|---|
-| Rust jig + Rust jigd, every gate set (`cargo test --workspace`), twice | 462 passed, 0 failed, 1 ignored (the HELLO benchmark, by design) |
-| Rust jig + Go jigd (`cargo test -p jig`, no `JIG_RUST_JIGD`) | 313 passed, 0 failed, 1 ignored |
-| C++ jig + Rust jigd | difftests and compile smoke pass |
-| Go jigd ↔ Rust jigd store files | each opens the other's store (`difftest_store_compat`) |
-| Nix sandbox: `nix-build -A jig` | 462 passed; the gated tests skip themselves |
+| ec + ecd, every gate set (`cargo test --workspace`), twice | 462 [463] passed, 0 failed, 1 ignored (the HELLO benchmark, by design) |
+| ec + Go jigd (`cargo test -p ekacache`, no `EC_RUST_ECD`) | 313 [314] passed, 0 failed, 1 ignored |
+| C++ jig + ecd | difftests and compile smoke pass |
+| Go jigd ↔ ecd store files | each opens the other's store (`difftest_store_compat`) |
+| Nix sandbox: `nix-build -A ekacache` | 462 passed (as `-A jig`, before the rename; not rerun since); the gated tests skip themselves |
 | Nix sandbox: `nix-build -A legacy.jig` | `jig_test` passes (it segfaulted under GCC 14, see below) |
 | macOS (aarch64, x86_64) | type-check and clippy only, clean |
 | `cargo deny check` | advisories, bans, licenses, sources: ok |
@@ -50,8 +55,8 @@ binary it has just written while another thread forks (`b09104f`), and
 
 | File | Entries | Read by |
 |---|---|---|
-| `jig-keys.toml` | 59 | `jig-core/tests/spec_vectors.rs` |
-| `jig-cache-client.toml` | 1 | `jig-core/tests/spec_vectors.rs` |
+| `jig-keys.toml` | 59 | `ekacache-core/tests/spec_vectors.rs` |
+| `jig-cache-client.toml` | 1 | `ekacache-core/tests/spec_vectors.rs` |
 | `jigd-identities.toml` | 2 | `jigd/tests/identity.rs` |
 | `jig-driver-policy.toml` | 90 | `jig/tests/driver_vectors.rs`, `cc_mode.rs` (`tv37_end_to_end`) |
 | `jig-reloc-fixup.toml` | 41 | `fixup/image.rs`, `fixup/mod.rs`, `fixup_vectors.rs`, `fixup_macho.rs` |
@@ -62,7 +67,7 @@ prefix example (no Digest-from-hex constructor), the six ELF end-to-end fixup ou
 depend on the host's gcc and glibc, so `elf_end_to_end` builds them), and the nix-store daemon
 example (no fixed bytes for its version string). TV-37's "SIGABRT even for `cc --version`" is
 checked through `package_flags`, not the binary. The file is read by a TOML-subset reader in
-`jig-testkit`, so no TOML crate was added.
+`ekacache-testkit`, so no TOML crate was added.
 
 ### L4: Quint replays
 
@@ -204,17 +209,16 @@ These quirks are kept, though they look unreasonable:
 
 ## Not built, or not run
 
-- **CI has not run.** The branch stays local until it is pushed by hand. `.github/workflows/ci.yml` has every job from 01 §CI, but it has never
-  run on GitHub. Expect first-run fixes. Things to check:
-  - the runner labels (`ubuntu-24.04-arm`, `macos-15`, `macos-13`);
-  - the nixpkgs pin, `8fd9daa3db09ced9700431c5b7ad0e8ba199b575` (the archive exists);
-  - quint 0.33.1 from npm.
+- **CI has run on GitHub (PR #1).** check, test, difftest and quint pass on `ubuntu-24.04` and
+  `ubuntu-24.04-arm`. The macOS jobs (`macos-15`, `macos-15-intel`) build only the Go jigd, because
+  the C++ jig does not compile on macOS (`SOCK_CLOEXEC`, `environ`). They compare ec and ecd
+  against it.
 
   The bench and fuzz jobs are nightly only.
 - **Testing infrastructure from 12 that was not built as specified:**
-  - The `jig-testkit` harness (TOML scenarios, recording proxy, fakes) will not be built
+  - The `ekacache-testkit` harness (TOML scenarios, recording proxy, fakes) will not be built
     (decided 2026-11-18; 12 §Harness now says so). Each phase has its own Rust difftest
-    harness, with proxies and fakes where it needs them. `jig-testkit` holds the ITF reader,
+    harness, with proxies and fakes where it needs them. `ekacache-testkit` holds the ITF reader,
     the vector reader and the `ETXTBSY` retry.
   - `tests/difftest/allow.toml` lists one rule per adopted change, with the tests that pin it,
     and `scripts/check-allow-list.sh` keeps it in step with `behaviors/README.md`. The
@@ -225,5 +229,5 @@ These quirks are kept, though they look unreasonable:
 - **The macOS tests have not run on a Mac**, only the cross type-check and lint.
 - **The ekapkgs real-package canary** (13 §TODO) was deferred, as planned.
 - **Possible cleanups:**
-  - the reloc-fixup byte helpers and `nix_store/hash.rs` overlap with `jig-core`;
+  - the reloc-fixup byte helpers and `nix_store/hash.rs` overlap with `ekacache-core`;
   - `connect_unix` could return a distinct error for a path that is too long.
