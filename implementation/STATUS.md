@@ -10,22 +10,22 @@ or what is still missing.
 
 | Phase | Commits | Exit criterion |
 |---|---|---|
-| P0 | `0769b87` | Vectors pass: every vector section of `behaviors/` is extracted to `tests/vectors/<doc>.toml`, which the tests read (§L1 below). A CI workflow exists (`.github/workflows/ci.yml`) but **has not run on GitHub yet**, so "CI green" is not shown. |
-| P1 | `3f849ec` | Met: `store_test.go` ported (`store`, `legacy_store`); each implementation opens the other's store (`difftest_store_compat`); Quint store traces replay, and the model's witnesses are checked (`store_itf`). |
-| P2 | `c9f5a59`, `2176bdb` | Ported serve/slots/identity tests pass; wire transcripts match the Go jigd (`difftest_wire`); slots traces replay in-process and over jigd's socket (`slots_itf`), and so do `jigd_protocol` traces (`protocol_itf`). The C++ jig's difftests and a compile smoke test pass against the Rust jigd. **No nixpkgs-style package build** was run with the C++ jig. |
-| P3 | `81a8005` | Met: dispatch/usage/exit-code difftests (`binary`, `legacy_jig`); the client talks to the Go jigd, falling back to v0 (`client_jigd`). |
-| P4 | `6044c3f` | Met: blobs interchangeable with the C++ jig (`cache_cmd` difftests). |
-| P5 | `d451990`, `e03b0e3` | Met: `jig_test.cc` parse/key tests ported (`legacy_jig`, `2d5de7b`); k1/k2 identical to the C++ jig with real GCC 15.3 and clang 20.1 (`cc_mode`). The corpus is the test corpus, not a package set. |
-| P6 | `01722c1`, `c94213e` | Met for a test workspace: `cargo build` twice, every library crate hits (`rustc_mode::cargo_workspace_twice`); env deps tracked. No real-crate corpus. |
-| P7 | `517830a` | Met: `go build` twice gives only hits (`gocache_e2e`); entries are shared with the C++ jig (`gocache_difftest`). |
-| P8a | `df4caec` | Met: rewritten trees byte-identical to the C++ jig's (`fixup_difftest`). |
-| P8b | `16bcd17` | Met: worker-protocol transcripts identical (`nix_store_rpc`, `nix_store_quint`); vectors pass (`nix_store_offline`). |
-| P9 | `9a95a39`, `54ec5c7`, `b648a62`, `bb12667` | **Not met:** "differential suite green on macOS" needs a Mac. Done so far: the Mach-O fixup, which is host-independent and difftested on Linux (`fixup_macho`); every macOS `cfg` branch; and `scripts/check-macos.sh`, which runs clippy with `-D warnings` for both darwin targets, clean. |
-| P10 | `33862e0`, `2ab5f67`, `e35fe48`, `8ee93c5`, `04033fb` | Packaging done: `default.nix` builds `jig`, `jigd`, `legacy.jig` and `legacy.jigd`, and runs the test suites in the sandbox. Mixed-fleet compatibility tested locally (§Test results). Rollout, soak and legacy removal: not started. |
+| P0 | `64f3e8f` | Vectors pass: every vector section of `behaviors/` is extracted to `tests/vectors/<doc>.toml`, which the tests read (§L1 below). A CI workflow exists (`.github/workflows/ci.yml`) but **has not run on GitHub yet**, so "CI green" is not shown. |
+| P1 | `2d4a115` | Met: `store_test.go` ported (`store`, `legacy_store`); each implementation opens the other's store (`difftest_store_compat`); Quint store traces replay, and the model's witnesses are checked (`store_itf`). |
+| P2 | `cfdd65d`, `2b9ba3f` | Ported serve/slots/identity tests pass; wire transcripts match the Go jigd (`difftest_wire`); slots traces replay in-process and over jigd's socket (`slots_itf`), and so do `jigd_protocol` traces (`protocol_itf`). The C++ jig's difftests and a compile smoke test pass against the Rust jigd. **No nixpkgs-style package build** was run with the C++ jig. |
+| P3 | `35ad914` | Met: dispatch/usage/exit-code difftests (`binary`, `legacy_jig`); the client talks to the Go jigd, falling back to v0 (`client_jigd`). |
+| P4 | `1ac0fee` | Met: blobs interchangeable with the C++ jig (`cache_cmd` difftests). |
+| P5 | `848e3a9`, `a011c74` | Met: `jig_test.cc` parse/key tests ported (`legacy_jig`, `8dd27a6`); k1/k2 identical to the C++ jig with real GCC 15.3 and clang 20.1 (`cc_mode`). The corpus is the test corpus, not a package set. |
+| P6 | `c7b9153`, `e15f7f5` | Met for a test workspace: `cargo build` twice, every library crate hits (`rustc_mode::cargo_workspace_twice`); env deps tracked. No real-crate corpus. |
+| P7 | `496d072` | Met: `go build` twice gives only hits (`gocache_e2e`); entries are shared with the C++ jig (`gocache_difftest`). |
+| P8a | `021d07c` | Met: rewritten trees byte-identical to the C++ jig's (`fixup_difftest`). |
+| P8b | `9192189` | Met: worker-protocol transcripts identical (`nix_store_rpc`, `nix_store_quint`); vectors pass (`nix_store_offline`). |
+| P9 | `3a78547`, `bcee151`, `91d6f09`, `79fd31c` | **Not met:** "differential suite green on macOS" needs a Mac. Done so far: the Mach-O fixup, which is host-independent and difftested on Linux (`fixup_macho`); every macOS `cfg` branch; and `scripts/check-macos.sh`, which runs clippy with `-D warnings` for both darwin targets, clean. |
+| P10 | `cc40b39`, `8fcd88f`, `2b74a1f`, `f1c5650`, `e5bd25d` | Packaging done: `default.nix` builds `jig`, `jigd`, `legacy.jig` and `legacy.jigd`, and runs the test suites in the sandbox. Mixed-fleet compatibility tested locally (§Test results). Rollout, soak and legacy removal: not started. |
 
 ## Test results
 
-All on Linux x86_64, at `2d708bb`. The legacy jig is the GCC 15 build from `nix-build -A
+All on Linux x86_64, at `2ae5b2d`. The legacy jig is the GCC 15 build from `nix-build -A
 legacy.jig`, the Go jigd is `nix-build -A legacy.jigd`, and the real compilers are GCC 15.2 and
 clang 20.1.8 from the pinned nixpkgs (the ones the CI difftest job uses). The ITF traces were
 generated with `scripts/gen-itf.sh` and quint 0.33.1.
@@ -43,8 +43,8 @@ generated with `scripts/gen-itf.sh` and quint 0.33.1.
 | `scripts/check-legacy-ports.sh`, `check-allow-list.sh`, `check-vectors.sh` | pass |
 
 Two test-harness races showed up in these runs and are fixed: `ETXTBSY` when a test execs a
-binary it has just written while another thread forks (`1c28c67`), and
-`connections_are_independent` reading STATS before the second SLOT had queued (`23af4d6`).
+binary it has just written while another thread forks (`b09104f`), and
+`connections_are_independent` reading STATS before the second SLOT had queued (`0ec664c`).
 
 ### L1: spec vectors
 
@@ -81,14 +81,14 @@ The two wrapper modules (`tests/itf-wrappers/`) are subsets of their model's `st
 ### L5: fuzzing
 
 `scripts/fuzz.sh`, 12 targets, libFuzzer without a sanitizer (nixpkgs' rustc ships none), the
-process targets compared with the C++ jig. 20–30 s per target, all clean at `2d708bb`. What
+process targets compared with the C++ jig. 20–30 s per target, all clean at `2ae5b2d`. What
 the runs found:
 
 - `elf_fixup`: legacy prints libstdc++'s `terminate` text where both abort with the same bytes.
   That is decision 11, and it is the one difference the fixup targets tolerate.
 - `nix_drv_json`: the target called `derivation_to_aterm` in-process, which aborts by design on
   type errors (Q-NIX-4). Both jigs abort identically; the target now runs it only in the jig
-  process (`eebd97c`).
+  process (`2aba920`).
 
 ## Performance (12 §Performance checks)
 
@@ -102,7 +102,7 @@ the runs found:
 | `IDS` for 100 paths, memoised | 0.5–0.6 ms | ~1.0 ms |
 
 - The HELLO round trip costs about 33 µs per jig process, and is included in the hit latency.
-- Before `2ab5f67`, jigd ran its store calls through `spawn_blocking`, as 03 §Runtime shape
+- Before `8fcd88f`, jigd ran its store calls through `spawn_blocking`, as 03 §Runtime shape
   says. That made it about 1.5× slower than Go per GET or PUT (22 µs). See decision 6.
 
 ## Decisions signed off (2026-11-18)
@@ -119,7 +119,7 @@ Each was a default chosen during the port. All twelve were confirmed as built:
    `peer_other.go`. The Nix build-user lookup exists only on Linux.
 5. **reloc-fixup: a page-size shift of 64 or more is an error.** Legacy masks the shift with
    `& 63`, and aborts on a shift of 255.
-6. **jigd's store calls use `block_in_place`, not the plan's `spawn_blocking`** (`2ab5f67`).
+6. **jigd's store calls use `block_in_place`, not the plan's `spawn_blocking`** (`8fcd88f`).
    A slow call still holds up no other connection, and the thread cap is the same.
 7. **`jig cache put-dir` exits 0 when a PUT is refused.** Adopted Q-CLIENT-2 makes `jig cache
    put` exit 1 and says nothing about put-dir, so put-dir keeps legacy's exit 0.
@@ -188,7 +188,7 @@ These quirks are kept, though they look unreasonable:
   - No `ENAMETOOLONG` fallback for canonical paths.
   - glibc's stdout buffering is emulated, and so are legacy's early loop exits.
   - The output follows readdir order.
-  - The Mach-O half was written alongside P8a (`9a95a39`), because it is host-independent.
+  - The Mach-O half was written alongside P8a (`3a78547`), because it is host-independent.
 - **nix-store:**
   - Q-NIX-1 (a C++-only dangling temporary) is not reproduced.
   - Deep JSON nesting is handled, where legacy overflows its stack.
