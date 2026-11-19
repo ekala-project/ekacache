@@ -41,7 +41,7 @@ generated with `scripts/gen-itf.sh` and quint 0.33.1.
 | ec + Go jigd (`cargo test -p ekacache`, no `EC_RUST_ECD`) | 313 [314] passed, 0 failed, 1 ignored |
 | C++ jig + ecd | difftests and compile smoke pass |
 | Go jigd ↔ ecd store files | each opens the other's store (`difftest_store_compat`) |
-| Nix sandbox: `nix-build -A ekacache` | 462 passed (as `-A jig`, before the rename; not rerun since); the gated tests skip themselves |
+| Nix sandbox: `nix-build -A ekacache` | 462 [463] passed, 0 failed, 1 ignored; the gated tests skip themselves |
 | Nix sandbox: `nix-build -A legacy.jig` | `jig_test` passes (it segfaulted under GCC 14, see below) |
 | macOS (aarch64, x86_64) | type-check and clippy only, clean |
 | `cargo deny check` | advisories, bans, licenses, sources: ok |
