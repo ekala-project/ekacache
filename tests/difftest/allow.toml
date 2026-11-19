@@ -24,7 +24,7 @@ differs = "the HELLO exchange in transcripts (normalised away)"
 tests = [
   "crates/jigd/tests/difftest_wire.rs::hello_is_the_only_difference",
   "crates/jigd/tests/serve.rs::hello",
-  "crates/jig-core/src/frame.rs::hello_vector",
+  "crates/jig-core/tests/spec_vectors.rs::value_encoding_vectors",
 ]
 
 [[rule]]
@@ -32,7 +32,7 @@ name = "le-header"
 adopted = ["Q-CLIENT-1"]
 row = "Value header is defined as little-endian u32"
 differs = "nothing on x86-64 and aarch64; the rule documents that the header is LE by definition"
-tests = ["crates/jig-core/src/frame.rs::round_trip"]
+tests = ["crates/jig-core/src/frame.rs::round_trip", "crates/jig-core/tests/spec_vectors.rs::value_encoding_vectors"]
 
 [[rule]]
 name = "hint-order"
