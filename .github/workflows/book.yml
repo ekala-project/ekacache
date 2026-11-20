@@ -1,0 +1,55 @@
+# User docs book (book/): built with mdBook on every push and pull request that touches it,
+# published to GitHub Pages from main.
+#
+# One-time repository setting: Settings → Pages → Source: "GitHub Actions".
+name: book
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "book/**"
+      - ".github/workflows/book.yml"
+  pull_request:
+    paths:
+      - "book/**"
+      - ".github/workflows/book.yml"
+  workflow_dispatch:
+
+env:
+  # the same nixpkgs pin as ci.yml
+  NIX_PATH: nixpkgs=https://github.com/NixOS/nixpkgs/archive/8fd9daa3db09ced9700431c5b7ad0e8ba199b575.tar.gz
+
+permissions:
+  contents: read
+
+concurrency:
+  group: book-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: cachix/install-nix-action@v31
+      - name: mdbook build
+        run: nix-shell -p mdbook --run 'mdbook build book'
+      - uses: actions/upload-pages-artifact@v3
+        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+        with:
+          path: book/build
+
+  deploy:
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    needs: build
+    runs-on: ubuntu-24.04
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
