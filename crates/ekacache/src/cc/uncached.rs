@@ -1,4 +1,4 @@
-//! Uncached runs (`behaviors/jig-cc-mode.md §Uncached runs`, `cc_mode.cc:520-552`): the compiler
+//! Uncached runs (`behaviors/ec-cc-mode.md §Uncached runs`, `cc_mode.cc:520-552`): the compiler
 //! as given, under a slot when it is real work.
 
 use super::{Invocation, stdout_flushed};
@@ -9,7 +9,7 @@ use crate::log::{self, Outcome, Stopwatch};
 use crate::process::{self, Capture, ProcEnv};
 use crate::slot;
 
-/// `RunUncached(...)`: run, then log the outcome and (unless a query) the `$JIG_LOG_ARGS` line.
+/// `RunUncached(...)`: run, then log the outcome and (unless a query) the `$EKACACHE_LOG_ARGS` line.
 #[allow(clippy::too_many_arguments)]
 pub fn run_uncached(
     client: &mut Client,

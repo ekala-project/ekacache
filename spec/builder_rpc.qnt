@@ -1,8 +1,8 @@
 // -*- mode: Bluespec; -*-
 /**
- * Client side of builder-rpc-v0 (`jig nix-store`, jig/src/nix_store_mode.cc): the subset of the
+ * Client side of builder-rpc-v0 (`ec nix-store`, jig/src/nix_store_mode.cc): the subset of the
  * Nix worker protocol 1.38 a sandboxed builder speaks over NIX_REMOTE=unix://<path>.
- * Byte layouts: behaviors/jig-nix-store.md (this module's state names follow its
+ * Byte layouts: behaviors/ec-nix-store.md (this module's state names follow its
  * "Client state-transition table").
  *
  * The daemon is an arbitrary environment: at every point where the client reads, it may get

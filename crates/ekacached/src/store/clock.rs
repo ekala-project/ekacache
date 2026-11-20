@@ -1,4 +1,4 @@
-//! The store's clock (`jigd-store.md` §Recency). `used`/`touched` and pack mtimes are Unix
+//! The store's clock (`ecd-store.md` §Recency). `used`/`touched` and pack mtimes are Unix
 //! nanoseconds; the Go tests swap `Store.now` for a virtual clock
 //! (`TestEvictRecencySurvivesRestart`), and the Quint replay drives an integer clock.
 

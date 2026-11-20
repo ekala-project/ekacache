@@ -1,5 +1,5 @@
 //! The `std::filesystem` calls reloc-fixup makes that touch the disk, with libstdc++'s error
-//! semantics (`behaviors/jig-reloc-fixup.md §Conventions` `rel(p)`, A5.5, A6.3 `Resolve`;
+//! semantics (`behaviors/ec-reloc-fixup.md §Conventions` `rel(p)`, A5.5, A6.3 `Resolve`;
 //! Q-FIX-10).
 //!
 //! - `fs::exists(p)` (throwing) is `true` for an existing path, `false` for `ENOENT`/`ENOTDIR`,
@@ -10,7 +10,7 @@
 //!   and throws (aborts) when either canonicalisation fails.
 //!
 //! These differ from the lexical operations in `ekacache_core::fspath` in that they need the file
-//! system; nothing else in jig needs `weakly_canonical` yet, so they live here.
+//! system; nothing else in ec needs `weakly_canonical` yet, so they live here.
 
 use ekacache_core::bytes::os_path;
 use ekacache_core::fspath;

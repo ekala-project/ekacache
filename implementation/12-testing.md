@@ -17,9 +17,9 @@ layers must be green.
 
 ## L1: spec vectors
 
-Each behaviour doc's *Test vectors* section, plus the inline vectors (`jig-keys.md` digests,
-keys, composites and manifests; the `jig-cache-client.md` frame; `jigd-identities.md`; the
-`jig-driver-policy.md` tables; `jig-reloc-fixup.md`; `jig-nix-store.md`), is **extracted** into
+Each behaviour doc's *Test vectors* section, plus the inline vectors (`ec-keys.md` digests,
+keys, composites and manifests; the `ec-cache-client.md` frame; `ecd-identities.md`; the
+`ec-driver-policy.md` tables; `ec-reloc-fixup.md`; `ec-nix-store.md`), is **extracted** into
 data files under `tests/vectors/<doc>.toml` by hand, once per doc, with the doc section named
 in each entry. A CI script checks that every vector heading in `behaviors/` has a matching
 file, so a vector added to a doc later cannot be forgotten.
@@ -28,7 +28,7 @@ file, so a vector added to a doc later cannot be forgotten.
 
 | Legacy suite | Lines | Port to | Notes |
 |---|---|---|---|
-| `legacy/jig/src/jig_test.cc` | 722 | `crates/ekacache/tests/legacy_jig.rs` + `ekacache-core` unit tests | segfaults under GCC 14 (known). Port the assertions; run the C++ binary under clang if a cross-check is needed |
+| `legacy/jig/src/jig_test.cc` | 722 | `crates/ekacache/tests/legacy_port.rs` + `ekacache-core` unit tests | segfaults under GCC 14 (known). Port the assertions; run the C++ binary under clang if a cross-check is needed |
 | `legacy/jigd/store_test.go` | 340 | `crates/ekacached/tests/legacy_store.rs` | virtual clock → `Clock` trait |
 | `legacy/jigd/serve_test.go` | 132 | `crates/ekacached/tests/legacy_serve.rs` | in-process server on a temp socket |
 | `legacy/jigd/slots_test.go` | 29 | `crates/ekacached/src/slots.rs` tests | |
@@ -54,7 +54,7 @@ share: the ITF reader, the L1 vector reader and the `ETXTBSY` spawn retry. The d
 kept as the description of what those harnesses do.
 
 - **Builds:** CI builds `legacy` (meson + go, from `legacy/`, via the Nix expression from 01)
-  and the Rust workspace. Binaries: `legacy-jig`, `legacy-jigd`, `jig`, `jigd`.
+  and the Rust workspace. Binaries: `legacy-ec`, `legacy-ecd`, `ec`, `ecd`.
 - **Scenario:** a TOML file listing: the files to create, the env (an explicit allow-list
   dict; the harness starts from an **empty** environment, never the CI runner's, which also
   keeps tokens out of logs), the commands to run, and which outputs to compare.
@@ -62,7 +62,7 @@ kept as the description of what those harnesses do.
   paths**. The runner executes legacy, snapshots the outputs, wipes the work dir, recreates it
   at the same path, runs Rust, and compares. Optionally, each run gets its own mount namespace
   (`unshare -rm` + bind mount) so that runs can proceed in parallel.
-- **Recording proxy jigd** (`testkit::proxy`): listens on a socket, forwards to a real jigd
+- **Recording proxy ecd** (`testkit::proxy`): listens on a socket, forwards to a real ecd
   (Go or Rust), and records every byte per connection in both directions. Comparisons work on
   the recorded transcripts. It normalises the **HELLO** exchange (adopted, Rust-only) out of
   the transcript, and records it separately so a test can assert it happened.
@@ -72,7 +72,7 @@ kept as the description of what those harnesses do.
   scenarios uses real GCC, clang, rustc and go.
 - **Comparator:** per output kind: exact bytes (stdout, stderr, files, wire transcripts, pack
   files after a deterministic sequence), exit status or signal, and log lines with timestamps
-  stripped (`jigd` log; `JIG_LOG` with the `<ms>` column stripped).
+  stripped (`ecd` log; `EKACACHE_LOG` with the `<ms>` column stripped).
 
 ### Allow-list for intended differences
 
@@ -94,7 +94,7 @@ allow-list rule in `tests/difftest/allow.toml`, with the adopted row it implemen
 | `empty-packs`, `kick-at-start` | Q-STORE-2, -5 | empty pack files absent; demotion log lines at startup |
 | `fsync` | Q-STORE-7 | nothing observable in bytes (strace-only check) |
 | `cc-uncacheable-A..D` | Q-CC-12..16 | no PUTs, and the `uncacheable` outcome, for matching invocations |
-| `jigd-size-strict` | Q-DAEMON-1 | exit 2 and a message for invalid sizes; budget log line |
+| `ecd-size-strict` | Q-DAEMON-1 | exit 2 and a message for invalid sizes; budget log line |
 | `gocache-json` | Q-GO-1, -3, -4 | `Err` replies / exit 1 for malformed lines; escaped DiskPath |
 
 Any difference not covered by a rule fails the test, and the failure prints the first
@@ -103,15 +103,15 @@ differing byte with context. **Reviewing a new allow-list entry requires pointin
 
 ### Mixed-fleet matrix
 
-Each jig scenario runs in four configurations: {legacy-jig, jig} × {legacy-jigd, jigd}, and the
+Each ec scenario runs in four configurations: {legacy-ec, ec} × {legacy-ecd, ecd}, and the
 cross pairs must interoperate. Cache entries written in one configuration must hit in the
 other (except where `rs-schema-8` / adopted uncacheables say otherwise).
 
 ### Scenario inventory (initial)
 
-- jigd: every hang-up H1–H11, every command, IDS edge cases, PUT spool threshold, store
+- ecd: every hang-up H1–H11, every command, IDS edge cases, PUT spool threshold, store
   restart, tiers and demotion, eviction order, torn tail, Go↔Rust store reopen.
-- jig dispatch: usage, `--help`, symlink names, launcher classification, exec failures.
+- ec dispatch: usage, `--help`, symlink names, launcher classification, exec failures.
 - cc: each invocation kind, depfile variants (`-MD`, `-MMD`, `-MF`, `-Wp,-MD`), `-E` to stdout,
   PCH, assembler, links (ELF), uncacheable flags, cached failures, response files, driver conf
   variants.
@@ -136,10 +136,10 @@ The `spec/` models stay as they are, and are the reference. They are not rewritt
 |---|---|---|
 | `slots.qnt` / `slotNesting` | `ekacached::slots` directly, plus a socket-level variant on the real server | `out`, `held`, queue contents, granted set; invariants incl. `noDeadWaiters` |
 | `store.qnt` | `ekacached::store::Store` with a test clock, tiny `packLimit`/budgets; crash = drop + reopen | index contents, `live`/`totals`, packs per tier; `indexSound`, `liveAccounting`, `tierTotals` |
-| `jigd_protocol.qnt` | real jigd over a socket | replies, hang-ups |
+| `ecd_protocol.qnt` | real ecd over a socket | replies, hang-ups |
 | `twokey.qnt` | `ekacache::twokey` over a fake filesystem | hit/miss decision, stored entries; soundness invariant |
-| `gocache.qnt` | gocacheprog processes + Rust jigd | `hitIsConsistent`, `noTornBodies`, `pointersAnnounced` |
-| `builder_rpc.qnt` | `jig nix-store` against the scriptable fake daemon | ops sent, exit |
+| `gocache.qnt` | gocacheprog processes + Rust ecd | `hitIsConsistent`, `noTornBodies`, `pointersAnnounced` |
+| `builder_rpc.qnt` | `ec nix-store` against the scriptable fake daemon | ops sent, exit |
 
 3. **Coverage:** each witness in the models (for example `witnessAbandonedWaiterGranted`)
    must appear in at least one replayed trace. With adopted flags that witness must be
@@ -161,6 +161,6 @@ The `spec/` models stay as they are, and are the reference. They are not rewritt
 
 ## Performance checks
 
-Not correctness, but they gate P10: `hyperfine` hit latency (`jig` vs `legacy-jig` on a
-trivial `.c`, Rust jigd behind both), jigd GET/PUT throughput, and IDS for 100 paths. The
+Not correctness, but they gate P10: `hyperfine` hit latency (`ec` vs `legacy-ec` on a
+trivial `.c`, Rust ecd behind both), ecd GET/PUT throughput, and IDS for 100 paths. The
 target is Rust ≤ legacy + 5% on hit latency, which includes the HELLO round trip (05).

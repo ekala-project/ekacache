@@ -1,18 +1,18 @@
-//! Running the real compiler (`behaviors/jig-dispatch.md §Process execution`, `process.cc`), and
-//! jig's own environment as its children see it (`behaviors/environment.md §Reading rules`).
+//! Running the real compiler (`behaviors/ec-dispatch.md §Process execution`, `process.cc`), and
+//! ec's own environment as its children see it (`behaviors/environment.md §Reading rules`).
 //!
 //! `run` is a direct port of `Run`: `pipe`, `fork`, `dup2`, `execvp`, `_exit(127)`, read the pipe
 //! to EOF in 4096-byte reads, `waitpid`. It does not use `std::process::Command`, which differs
-//! from legacy in three observable ways (`implementation/05-jig-foundation.md §Signal
+//! from legacy in three observable ways (`implementation/05-ec-foundation.md §Signal
 //! disposition`):
 //!
-//! - it resets `SIGPIPE` to `SIG_DFL` in the child; legacy passes on the disposition jig
-//!   inherited (jig is `#![no_main]`, so jig itself keeps it too);
+//! - it resets `SIGPIPE` to `SIG_DFL` in the child; legacy passes on the disposition ec
+//!   inherited (ec is `#![no_main]`, so ec itself keeps it too);
 //! - when any variable changes it rebuilds the child's environment sorted and de-duplicated
 //!   (last duplicate wins); legacy `setenv`s its own environment, which keeps the order and lets
 //!   the first duplicate win;
 //! - it folds a failed `fork` and a failed `exec` into one `io::Error`; legacy reports
-//!   `127` + `jig: fork failed\n` for the first and a silent `127` for the second (Q-DISPATCH-4,
+//!   `127` + `ec: fork failed\n` for the first and a silent `127` for the second (Q-DISPATCH-4,
 //!   Q-DISPATCH-5).
 //!
 //! Between `fork` and `exec` the child calls only `dup2`, `execvp` and `_exit`, and stores the
@@ -32,9 +32,9 @@ pub const EXEC_FAILED: i32 = 127;
 /// Death by signal `n` reports as `128 + n` (`kSignalStatusBase`).
 pub const SIGNAL_BASE: i32 = 128;
 
-/// jig's environment: what `getenv` returns, and what every child inherits.
+/// ec's environment: what `getenv` returns, and what every child inherits.
 ///
-/// Legacy changes its own environment with `setenv`/`unsetenv` (`JIG_SLOT`, `JIG_ABSENT_LOG`,
+/// Legacy changes its own environment with `setenv`/`unsetenv` (`EKACACHE_SLOT`, `EKACACHE_ABSENT_LOG`,
 /// `GOCACHEPROG`) so that children inherit the change, and reads it back with `getenv`. This
 /// keeps the same model without touching the real process environment (unsound with threads in
 /// Rust 2024): `set` is `setenv(name, value, 1)` (replace the first entry, else append), `remove`
@@ -112,7 +112,7 @@ pub struct RunResult {
     /// `WEXITSTATUS`, `128 + signal`, `127` when `fork` or `exec` failed, `1` when `waitpid`
     /// failed (Q-DISPATCH-6).
     pub status: i32,
-    /// The captured stream; `jig: fork failed\n` after a failed `fork` (Q-DISPATCH-4).
+    /// The captured stream; `ec: fork failed\n` after a failed `fork` (Q-DISPATCH-4).
     pub captured: Vec<u8>,
 }
 
@@ -122,7 +122,7 @@ fn cloexec_pipe() -> Option<(OwnedFd, OwnedFd)> {
     rustix::pipe::pipe_with(rustix::pipe::PipeFlags::CLOEXEC).ok()
 }
 
-/// macOS has no `pipe2` (`11-macos.md`): `pipe`, then `FD_CLOEXEC` on both ends. jig forks from
+/// macOS has no `pipe2` (`11-macos.md`): `pipe`, then `FD_CLOEXEC` on both ends. ec forks from
 /// one thread, so no child can inherit the ends between the calls.
 #[cfg(target_vendor = "apple")]
 fn cloexec_pipe() -> Option<(OwnedFd, OwnedFd)> {
@@ -162,7 +162,7 @@ pub fn run<A: AsRef<[u8]>>(
     if pid < 0 {
         return RunResult {
             status: EXEC_FAILED,
-            captured: b"jig: fork failed\n".to_vec(),
+            captured: b"ec: fork failed\n".to_vec(),
         };
     }
     if pid == 0 {
@@ -214,7 +214,7 @@ pub fn run<A: AsRef<[u8]>>(
     RunResult { status, captured }
 }
 
-/// ADOPTED Q-CC-5 (`behaviors/jig-cc-mode.md`): resource errors that say nothing about the
+/// ADOPTED Q-CC-5 (`behaviors/ec-cc-mode.md`): resource errors that say nothing about the
 /// inputs. A failure whose stderr mentions one is not stored.
 const TRANSIENT: [&[u8]; 9] = [
     b"No space left on device",
@@ -240,8 +240,8 @@ pub fn deterministic(r: &RunResult) -> bool {
 }
 
 /// Launcher `Exec` (`launcher.cc:43-55`): `execv(program, [program, args...])`, no `PATH`
-/// search, with jig's environment. Returns only on failure, after printing
-/// `jig: cannot execute <program>: <strerror>`; the caller exits with the returned 127.
+/// search, with ec's environment. Returns only on failure, after printing
+/// `ec: cannot execute <program>: <strerror>`; the caller exits with the returned 127.
 pub fn exec<A: AsRef<[u8]>>(program: &[u8], args: &[A], env: &ProcEnv) -> i32 {
     use std::io::Write;
     let mut argv = Vec::with_capacity(args.len() + 1);
@@ -263,7 +263,7 @@ pub fn exec<A: AsRef<[u8]>>(program: &[u8], args: &[A], env: &ProcEnv) -> i32 {
         }
     }
     let err = sys::errno();
-    let mut msg = b"jig: cannot execute ".to_vec();
+    let mut msg = b"ec: cannot execute ".to_vec();
     msg.extend_from_slice(program);
     msg.extend_from_slice(b": ");
     msg.extend_from_slice(&sys::strerror(err));
@@ -337,7 +337,7 @@ mod tests {
             }
         );
         let r = run(
-            b"jig-no-such-program-on-path",
+            b"ec-no-such-program-on-path",
             &[] as &[&[u8]],
             Capture::Stderr,
             &e,
@@ -367,7 +367,7 @@ mod tests {
             ("A", "second"),
             ("B", "b"),
         ]));
-        e.set("JIG_SLOT", "1");
+        e.set("EKACACHE_SLOT", "1");
         e.set("A", "new");
         e.remove("B");
         // env(1) prints `environ` as it is: order kept, the first duplicate replaced. Found
@@ -396,7 +396,7 @@ mod tests {
             .collect();
         assert_eq!(
             lines,
-            ["PATH=/usr/bin:/bin", "A=new", "A=second", "JIG_SLOT=1"]
+            ["PATH=/usr/bin:/bin", "A=new", "A=second", "EKACACHE_SLOT=1"]
         );
         assert_eq!(e.get("A"), Some(&b"new"[..]));
         assert_eq!(e.get("B"), None);

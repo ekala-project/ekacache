@@ -1,5 +1,5 @@
-//! reloc-fixup (`behaviors/jig-reloc-fixup.md`; `fixup_mode.cc`, `elf_fixup.cc`,
-//! `macho_fixup.cc`; `implementation/10-jig-reloc-fixup.md`). Phase P8a, and the
+//! reloc-fixup (`behaviors/ec-reloc-fixup.md`; `fixup_mode.cc`, `elf_fixup.cc`,
+//! `macho_fixup.cc`; `implementation/10-ec-reloc-fixup.md`). Phase P8a, and the
 //! host-independent Mach-O half of P9.
 //!
 //! The mode rewrites every ELF64-LE and 64-bit Mach-O image under `<prefix>` in place so the
@@ -120,7 +120,7 @@ fn fix_one(fx: &mut Fixup, path: &[u8]) {
     };
     let rel = relative_or_abort(path, &fx.prefix);
     // a compiler driver's config names the build machine's compiler on purpose
-    let exempt = [&b"etc/jig.json"[..], b"etc/roots"]
+    let exempt = [&b"etc/ekacache.json"[..], b"etc/roots"]
         .iter()
         .any(|e| fspath::compare(&rel, e) == Ordering::Equal);
     if !exempt {
@@ -185,7 +185,7 @@ fn fixup_mode(args: &[Vec<u8>], out: Out) -> (i32, Out) {
     (i32::from(fx.errors != 0), fx.out)
 }
 
-/// `jig reloc-fixup <prefix> [--dest <store path>] [--sdk <dir>] [--deny <store path>]...`
+/// `ec reloc-fixup <prefix> [--dest <store path>] [--sdk <dir>] [--deny <store path>]...`
 ///
 /// Only the compile-time store directory is used; nothing of `ctx` is.
 pub fn run(args: &[Vec<u8>], ctx: &mut Ctx) -> i32 {
@@ -213,11 +213,11 @@ mod tests {
     }
 
     fn vectors() -> ekacache_testkit::vectors::VectorFile {
-        ekacache_testkit::vectors::VectorFile::load("jig-reloc-fixup")
+        ekacache_testkit::vectors::VectorFile::load("ec-reloc-fixup")
     }
 
     /// §Test vectors, *path operations*: the `relative-to` rows of
-    /// `tests/vectors/jig-reloc-fixup.toml`.
+    /// `tests/vectors/ec-reloc-fixup.toml`.
     #[test]
     fn relative_to_vectors() {
         for v in vectors().of_kind("relative-to", 7) {

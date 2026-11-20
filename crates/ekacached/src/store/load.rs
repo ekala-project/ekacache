@@ -1,4 +1,4 @@
-//! Startup: `OpenStore` and `load` (`jigd-store.md` §Startup: OpenStore and load, §Each start
+//! Startup: `OpenStore` and `load` (`ecd-store.md` §Startup: OpenStore and load, §Each start
 //! makes a new pack; quirks Q-STORE-2 (adopted), Q-STORE-4, Q-STORE-6, Q-STORE-9, Q-STORE-14,
 //! Q-STORE-15).
 

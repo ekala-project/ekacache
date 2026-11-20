@@ -1,7 +1,7 @@
 //! ekacache-core against the L1 spec vectors (`implementation/12-testing.md §L1: spec vectors`):
-//! `tests/vectors/jig-keys.toml` (`behaviors/jig-keys.md` §Digest, §Key, §Composite and
-//! §Manifest test vectors) and `tests/vectors/jig-cache-client.toml` (`behaviors/
-//! jig-cache-client.md §Value encoding`).
+//! `tests/vectors/ec-keys.toml` (`behaviors/ec-keys.md` §Digest, §Key, §Composite and
+//! §Manifest test vectors) and `tests/vectors/ec-cache-client.toml` (`behaviors/
+//! ec-cache-client.md §Value encoding`).
 //!
 //! An integration test rather than unit tests: ekacache-testkit depends on ekacache-core, so only here do
 //! both link the same ekacache-core.
@@ -15,14 +15,14 @@ use ekacache_core::store_path::{STORE_DIR, Store};
 use ekacache_testkit::vectors::{Vector, VectorFile};
 
 fn keys() -> VectorFile {
-    VectorFile::load("jig-keys")
+    VectorFile::load("ec-keys")
 }
 
 fn s(b: &[u8]) -> String {
     String::from_utf8_lossy(b).into_owned()
 }
 
-/// The vectors spell `/nix/store`; some hold only for the default `JIG_STORE_DIR`.
+/// The vectors spell `/nix/store`; some hold only for the default `EKACACHE_STORE_DIR`.
 fn default_store_dir() -> bool {
     STORE_DIR == b"/nix/store"
 }
@@ -35,7 +35,9 @@ fn in_store(p: &[u8]) -> Vec<u8> {
 fn store(mode: Option<&str>) -> Store {
     match mode {
         None | Some("path") => Store::from_env(&Env::default()),
-        Some("content") => Store::from_env(&Env::from_pairs(&[("JIG_STORE_IDENTITY", "content")])),
+        Some("content") => {
+            Store::from_env(&Env::from_pairs(&[("EKACACHE_STORE_IDENTITY", "content")]))
+        }
         Some(m) => panic!("unknown mode {m}"),
     }
 }
@@ -217,7 +219,7 @@ fn frame_vector(v: &Vector) {
 
 #[test]
 fn value_encoding_vectors() {
-    for v in VectorFile::load("jig-cache-client").of_kind("frame", 1) {
+    for v in VectorFile::load("ec-cache-client").of_kind("frame", 1) {
         frame_vector(v);
     }
 }

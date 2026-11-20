@@ -1,23 +1,23 @@
-# jig / jigd Quint specification
+# ec / ecd Quint specification
 
-Executable models of the parts of jig and jigd where getting the design wrong is a correctness
+Executable models of the parts of ec and ecd where getting the design wrong is a correctness
 problem, not a cosmetic one. They are the abstract half of the rewrite contract. The concrete
 half (byte layouts, messages, exit codes, environment) is in [`../behaviors/`](../behaviors/README.md).
 Where the two disagree, `behaviors/` is authoritative about bytes and these models are
 authoritative about which interleavings must stay safe.
 
 Checked with Quint 0.33.1. Commands are run from the repository root. Source paths below are relative to
-`legacy/`, where the C++ and Go implementation now lives.
+the original C++ and Go implementation (under `legacy/` until commit `86ea083`).
 
 | Module | Models | Source of truth | Behaviour doc |
 |---|---|---|---|
-| `slots.qnt` (`slots`) | jigd's job-slot semaphore: grant rule, fewest-held-first fairness, hang-up release | `jigd/slots.go` | `jigd-slots.md` |
-| `slots.qnt` (`slotNesting`) | why a child jig must not take a slot while its parent holds one (`JIG_SLOT`) | `jig/src/process.cc` | `jigd-slots.md`, `environment.md` |
-| `store.qnt` | the bitcask store: packs, hints, index, live accounting, tiers, demotion, crash/restart | `jigd/store.go` | `jigd-store.md` |
-| `jigd_protocol.qnt` | the line protocol per connection: pipelining, reply shapes, hang up on malformed input | `jigd/main.go` | `jigd-protocol.md` |
-| `twokey.qnt` | soundness of the two-key (k1 manifest → k2 artifacts) cache, absent-path tracking | `jig/src/manifest.cc`, `cc_mode.cc` | `jig-keys.md`, `jig-cc-mode.md` |
-| `gocache.qnt` | GOCACHEPROG put/get over jigd with concurrent go commands and eviction | `jig/src/gocache_mode.cc` | `jig-gocacheprog.md` |
-| `builder_rpc.qnt` | the `jig nix-store` client of builder-rpc-v0 (Nix worker protocol 1.38 subset) against an arbitrary daemon | `jig/src/nix_store_mode.cc` | `jig-nix-store.md` |
+| `slots.qnt` (`slots`) | ecd's job-slot semaphore: grant rule, fewest-held-first fairness, hang-up release | `jigd/slots.go` | `ecd-slots.md` |
+| `slots.qnt` (`slotNesting`) | why a child ec must not take a slot while its parent holds one (`EKACACHE_SLOT`) | `jig/src/process.cc` | `ecd-slots.md`, `environment.md` |
+| `store.qnt` | the bitcask store: packs, hints, index, live accounting, tiers, demotion, crash/restart | `jigd/store.go` | `ecd-store.md` |
+| `ecd_protocol.qnt` | the line protocol per connection: pipelining, reply shapes, hang up on malformed input | `jigd/main.go` | `ecd-protocol.md` |
+| `twokey.qnt` | soundness of the two-key (k1 manifest → k2 artifacts) cache, absent-path tracking | `jig/src/manifest.cc`, `cc_mode.cc` | `ec-keys.md`, `ec-cc-mode.md` |
+| `gocache.qnt` | GOCACHEPROG put/get over ecd with concurrent go commands and eviction | `jig/src/gocache_mode.cc` | `ec-gocacheprog.md` |
+| `builder_rpc.qnt` | the `ec nix-store` client of builder-rpc-v0 (Nix worker protocol 1.38 subset) against an arbitrary daemon | `jig/src/nix_store_mode.cc` | `ec-nix-store.md` |
 
 ## Running
 
@@ -25,7 +25,7 @@ Checked with Quint 0.33.1. Commands are run from the repository root. Source pat
 # scenario tests (each module's `run ...Test` definitions)
 quint test --main=slots spec/slots.qnt
 quint test spec/store.qnt
-quint test spec/jigd_protocol.qnt
+quint test spec/ecd_protocol.qnt
 quint test spec/twokey.qnt
 quint test spec/builder_rpc.qnt
 
@@ -33,7 +33,7 @@ quint test spec/builder_rpc.qnt
 quint run --main=slots       --invariant=safety       --max-steps=60 --max-samples=5000  spec/slots.qnt
 quint run --main=slotNesting --invariant=noNestedWait --max-steps=20                     spec/slots.qnt
 quint run --invariant=safety --max-steps=50 --max-samples=3000  spec/store.qnt
-quint run --invariant=safety --max-steps=40 --max-samples=5000  spec/jigd_protocol.qnt
+quint run --invariant=safety --max-steps=40 --max-samples=5000  spec/ecd_protocol.qnt
 quint run --invariant=sound  --max-steps=30 --max-samples=20000 spec/twokey.qnt
 quint run --invariant=entriesSound --max-steps=30 --max-samples=20000 spec/twokey.qnt
 quint run --invariant=safety --max-steps=30 --max-samples=10000 spec/gocache.qnt
@@ -80,9 +80,9 @@ Design-assumption flags:
 
 | Parameter | Default | If flipped |
 |---|---|---|
-| `slotNesting.HONOR_JIG_SLOT` | `true` | `false`: a child jig asks for a slot while its parent holds the only one, and `noNestedWait` is violated (deadlock) |
-| `twokey.ABSENT_LOG` | `true` | `false` (stock GCC, no `JIG_ABSENT_LOG`): a header that appears earlier on the search path is not noticed, and `sound` is violated |
-| `twokey.MUTATE_DURING_COMPILE` | `false` | `true`: an input edited between the compiler reading it and jig hashing it gets cached under the wrong identity (the TOCTOU quirk), and `sound` is violated |
+| `slotNesting.HONOR_EKACACHE_SLOT` | `true` | `false`: a child ec asks for a slot while its parent holds the only one, and `noNestedWait` is violated (deadlock) |
+| `twokey.ABSENT_LOG` | `true` | `false` (stock GCC, no `EKACACHE_ABSENT_LOG`): a header that appears earlier on the search path is not noticed, and `sound` is violated |
+| `twokey.MUTATE_DURING_COMPILE` | `false` | `true`: an input edited between the compiler reading it and ec hashing it gets cached under the wrong identity (the TOCTOU quirk), and `sound` is violated |
 
 The sizes (`LIMIT`, `BUDGET`, `PACK_LIMIT`, `MAX_IDS`, ...) are scaled-down stand-ins for the
 real constants, which are listed in the behaviour docs. Changing them only changes how much

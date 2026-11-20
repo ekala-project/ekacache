@@ -1,6 +1,6 @@
-//! reloc-fixup through the `jig` binary against the spec's test vectors
-//! (`behaviors/jig-reloc-fixup.md §Test vectors`: CLI, deny check, ELF end to end). CLI and
-//! deny read `tests/vectors/jig-reloc-fixup.toml`; the ELF end-to-end binaries come from this
+//! reloc-fixup through the `ec` binary against the spec's test vectors
+//! (`behaviors/ec-reloc-fixup.md §Test vectors`: CLI, deny check, ELF end to end). CLI and
+//! deny read `tests/vectors/ec-reloc-fixup.toml`; the ELF end-to-end binaries come from this
 //! machine's gcc, so those shapes stay here (the file has them as doc-only entries).
 #![allow(clippy::unwrap_used)]
 
@@ -17,7 +17,7 @@ use common::{DEST, Sink, arg, build_elf_set, copy_tree, gcc, nix_store, run_mode
 
 fn fixup(cwd: &Path, args: &[Vec<u8>]) -> common::Run {
     run_mode(
-        Path::new(common::JIG),
+        Path::new(common::EC),
         cwd,
         args,
         Sink::File,
@@ -30,10 +30,10 @@ fn text(b: &[u8]) -> String {
 }
 
 fn vectors() -> VectorFile {
-    VectorFile::load("jig-reloc-fixup")
+    VectorFile::load("ec-reloc-fixup")
 }
 
-/// §Test vectors, *CLI*: the `cli` rows of `tests/vectors/jig-reloc-fixup.toml`.
+/// §Test vectors, *CLI*: the `cli` rows of `tests/vectors/ec-reloc-fixup.toml`.
 #[test]
 fn cli() {
     if !nix_store() {

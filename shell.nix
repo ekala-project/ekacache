@@ -25,5 +25,5 @@ pkgs.mkShell {
   ]
   ++ pkgs.lib.optional pkgs.stdenv.isLinux pkgs.strace;
   # the ec store dir is a build-time constant; keep the default explicit
-  JIG_STORE_DIR = builtins.storeDir;
+  EKACACHE_STORE_DIR = builtins.storeDir;
 }

@@ -1,4 +1,4 @@
-//! The `jigd` binary (`behaviors/jigd-daemon.md` §Command line, §Environment, §Startup order,
+//! The `ecd` binary (`behaviors/ecd-daemon.md` §Command line, §Environment, §Startup order,
 //! §Signals and shutdown, §Exit codes): usage, the adopted strict budgets (Q-DAEMON-1), the
 //! tier log lines, socket setup, and the clean exit on SIGTERM.
 
@@ -11,7 +11,7 @@ use std::os::unix::fs::{FileTypeExt, PermissionsExt};
 use std::path::Path;
 use std::time::{Duration, Instant};
 
-use common::{Daemon, log_lines, run, rust_jigd};
+use common::{Daemon, log_lines, run, rust_ecd};
 use ekacached::daemon::{USAGE, num_cpu, parse_budget};
 
 fn b(p: &Path) -> Vec<u8> {
@@ -20,7 +20,7 @@ fn b(p: &Path) -> Vec<u8> {
 
 #[test]
 fn usage_and_arguments() {
-    let bin = rust_jigd();
+    let bin = rust_ecd();
     for arg in [&b"--help"[..], b"-h"] {
         let r = run(&bin, &[arg], &[]);
         assert_eq!(r.code, Some(0));
@@ -74,27 +74,27 @@ fn budget_syntax() {
 /// Q-DAEMON-1 (adopted): an invalid budget exits 2 before anything is opened.
 #[test]
 fn invalid_budget_exits_2() {
-    let bin = rust_jigd();
+    let bin = rust_ecd();
     let root = tempfile::tempdir().unwrap();
     let sock = b(&root.path().join("sock"));
     let cache = b(&root.path().join("cache"));
     let cold = b(&root.path().join("cold"));
     for (env, want) in [
         (
-            vec![("JIGD_SIZE", &b"1.5"[..])],
-            &b"jigd: invalid JIGD_SIZE \"1.5\": want <n>[M|G|T], 0 = unbounded\n"[..],
+            vec![("EKACACHED_SIZE", &b"1.5"[..])],
+            &b"ecd: invalid EKACACHED_SIZE \"1.5\": want <n>[M|G|T], 0 = unbounded\n"[..],
         ),
         (
-            vec![("JIGD_SIZE", b"8589934592")],
-            b"jigd: invalid JIGD_SIZE \"8589934592\": want <n>[M|G|T], 0 = unbounded\n",
+            vec![("EKACACHED_SIZE", b"8589934592")],
+            b"ecd: invalid EKACACHED_SIZE \"8589934592\": want <n>[M|G|T], 0 = unbounded\n",
         ),
         (
-            vec![("JIGD_COLD", &cold), ("JIGD_COLD_SIZE", b"-1")],
-            b"jigd: invalid JIGD_COLD_SIZE \"-1\": want <n>[M|G|T], 0 = unbounded\n",
+            vec![("EKACACHED_COLD", &cold), ("EKACACHED_COLD_SIZE", b"-1")],
+            b"ecd: invalid EKACACHED_COLD_SIZE \"-1\": want <n>[M|G|T], 0 = unbounded\n",
         ),
         (
-            vec![("JIGD_SIZE", b"\xff\n")],
-            b"jigd: invalid JIGD_SIZE \"\xff\n\": want <n>[M|G|T], 0 = unbounded\n",
+            vec![("EKACACHED_SIZE", b"\xff\n")],
+            b"ecd: invalid EKACACHED_SIZE \"\xff\n\": want <n>[M|G|T], 0 = unbounded\n",
         ),
     ] {
         let mut env = env;
@@ -110,36 +110,39 @@ fn invalid_budget_exits_2() {
     }
 }
 
-/// The budgets as the daemon logs them after opening the store; `JIGD_COLD_SIZE` is not read
-/// without `JIGD_COLD`.
+/// The budgets as the daemon logs them after opening the store; `EKACACHED_COLD_SIZE` is not read
+/// without `EKACACHED_COLD`.
 #[test]
 fn tier_log_lines() {
-    let bin = rust_jigd();
+    let bin = rust_ecd();
     let slots = num_cpu();
     for (env, want) in [
         (
             vec![],
-            vec!["tier 0 $ROOT/cache/jigd/packs budget 53687091200"],
+            vec!["tier 0 $ROOT/cache/ekacache/packs budget 53687091200"],
         ),
         (
-            vec![("JIGD_SIZE", ""), ("JIGD_COLD_SIZE", "x")],
-            vec!["tier 0 $ROOT/cache/jigd/packs budget 53687091200"],
+            vec![("EKACACHED_SIZE", ""), ("EKACACHED_COLD_SIZE", "x")],
+            vec!["tier 0 $ROOT/cache/ekacache/packs budget 53687091200"],
         ),
         (
-            vec![("JIGD_SIZE", "10M")],
-            vec!["tier 0 $ROOT/cache/jigd/packs budget 10485760"],
+            vec![("EKACACHED_SIZE", "10M")],
+            vec!["tier 0 $ROOT/cache/ekacache/packs budget 10485760"],
         ),
         (
-            vec![("JIGD_SIZE", "0"), ("JIGD_COLD", "$ROOT/cold")],
+            vec![("EKACACHED_SIZE", "0"), ("EKACACHED_COLD", "$ROOT/cold")],
             vec![
-                "tier 0 $ROOT/cache/jigd/packs budget unbounded",
+                "tier 0 $ROOT/cache/ekacache/packs budget unbounded",
                 "tier 1 $ROOT/cold budget unbounded",
             ],
         ),
         (
-            vec![("JIGD_COLD", "$ROOT/cold"), ("JIGD_COLD_SIZE", "2T")],
             vec![
-                "tier 0 $ROOT/cache/jigd/packs budget 53687091200",
+                ("EKACACHED_COLD", "$ROOT/cold"),
+                ("EKACACHED_COLD_SIZE", "2T"),
+            ],
+            vec![
+                "tier 0 $ROOT/cache/ekacache/packs budget 53687091200",
                 "tier 1 $ROOT/cold budget 2199023255552",
             ],
         ),
@@ -164,7 +167,7 @@ fn tier_log_lines() {
 
 #[test]
 fn home_is_required_without_xdg_cache_home() {
-    let bin = rust_jigd();
+    let bin = rust_ecd();
     let root = tempfile::tempdir().unwrap();
     let sock = b(&root.path().join("sock"));
     for env in [&[][..], &[("HOME", &b""[..]), ("XDG_CACHE_HOME", b"")]] {
@@ -175,13 +178,13 @@ fn home_is_required_without_xdg_cache_home() {
     // HOME alone is enough: the cache goes to $HOME/.cache
     let home = root.path().to_str().unwrap();
     let d = Daemon::start(&bin, root.path(), &[("XDG_CACHE_HOME", ""), ("HOME", home)]);
-    assert!(root.path().join(".cache/jigd/packs").is_dir());
+    assert!(root.path().join(".cache/ekacache/packs").is_dir());
     let (status, log) = d.stop();
     assert!(status.success());
     let lines = log_lines(&log, root.path());
     assert_eq!(
         lines[0],
-        "tier 0 $ROOT/.cache/jigd/packs budget 53687091200"
+        "tier 0 $ROOT/.cache/ekacache/packs budget 53687091200"
     );
 }
 
@@ -189,7 +192,7 @@ fn home_is_required_without_xdg_cache_home() {
 /// seals the store and exits 0, even with a connection waiting in SLOT.
 #[test]
 fn socket_and_sigterm() {
-    let bin = rust_jigd();
+    let bin = rust_ecd();
     let root = tempfile::tempdir().unwrap();
     let cache = root.path().join("cache");
     let cache = cache.to_str().unwrap();
@@ -209,7 +212,7 @@ fn socket_and_sigterm() {
     let d = Daemon::start(
         &bin,
         &nested,
-        &[("JIGD_SLOTS", "1"), ("XDG_CACHE_HOME", cache)],
+        &[("EKACACHED_SLOTS", "1"), ("XDG_CACHE_HOME", cache)],
     );
     let meta = std::fs::metadata(&d.sock).unwrap();
     assert!(meta.file_type().is_socket());
@@ -229,7 +232,9 @@ fn socket_and_sigterm() {
     assert!(!sock.exists(), "socket left behind");
     // the first run's pack was empty and deleted at close (adopted Q-STORE-2); this one sealed
     assert!(
-        root.path().join("cache/jigd/packs/000001.hint").exists(),
+        root.path()
+            .join("cache/ekacache/packs/000001.hint")
+            .exists(),
         "store not sealed"
     );
     let lines = log_lines(&log, root.path());
@@ -259,10 +264,10 @@ fn umask() -> u32 {
 #[cfg(target_os = "linux")]
 #[test]
 fn abstract_socket_fails_at_chmod() {
-    let bin = rust_jigd();
+    let bin = rust_ecd();
     let root = tempfile::tempdir().unwrap();
     let cache = b(&root.path().join("cache"));
-    let name = format!("@jigd-test-{}", std::process::id());
+    let name = format!("@ecd-test-{}", std::process::id());
     let r = run(&bin, &[name.as_bytes()], &[("XDG_CACHE_HOME", &cache)]);
     assert_eq!(r.code, Some(1));
     let lines = log_lines(&r.stderr, root.path());
@@ -275,7 +280,7 @@ fn abstract_socket_fails_at_chmod() {
 /// Socket setup failures are fatal with Go's error text.
 #[test]
 fn socket_errors() {
-    let bin = rust_jigd();
+    let bin = rust_ecd();
     let root = tempfile::tempdir().unwrap();
     let cache = b(&root.path().join("cache"));
     let long = root.path().join("x".repeat(120));
@@ -300,10 +305,10 @@ fn socket_errors() {
     }
 }
 
-/// `JIGD_SLOTS`: a positive integer, anything else the CPU count (Q-DAEMON-13).
+/// `EKACACHED_SLOTS`: a positive integer, anything else the CPU count (Q-DAEMON-13).
 #[test]
 fn slot_count() {
-    let bin = rust_jigd();
+    let bin = rust_ecd();
     let cpus = num_cpu();
     for (v, want) in [
         ("3", 3),
@@ -314,7 +319,7 @@ fn slot_count() {
         (" 3", cpus),
     ] {
         let root = tempfile::tempdir().unwrap();
-        let d = Daemon::start(&bin, root.path(), &[("JIGD_SLOTS", v)]);
+        let d = Daemon::start(&bin, root.path(), &[("EKACACHED_SLOTS", v)]);
         let (_, log) = d.stop();
         let lines = log_lines(&log, root.path());
         assert!(

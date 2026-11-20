@@ -1,8 +1,8 @@
-//! The `jig` binary (`behaviors/jig-dispatch.md`).
+//! The `ec` binary (`behaviors/ec-dispatch.md`).
 //!
 //! `#![no_main]`: std's runtime start-up would set `SIGPIPE` to `SIG_IGN` before `main`. Legacy
-//! jig never touches it, so the disposition jig inherited is what jig and its children run with
-//! (`implementation/05-jig-foundation.md §Signal disposition`). `std::env::args_os` still works:
+//! ec never touches it, so the disposition ec inherited is what ec and its children run with
+//! (`implementation/05-ec-foundation.md §Signal disposition`). `std::env::args_os` still works:
 //! std reads `argv` from `.init_array` on glibc and from `_NSGetArgv` on macOS.
 #![no_main]
 

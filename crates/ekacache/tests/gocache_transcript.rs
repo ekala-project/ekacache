@@ -1,5 +1,5 @@
-//! `jig gocacheprog` transcripts: stdin → stdout bytes against an in-process fake jigd
-//! (`behaviors/jig-gocacheprog.md`, `implementation/08-jig-gocache-and-cache-cmds.md §Part 2
+//! `ec gocacheprog` transcripts: stdin → stdout bytes against an in-process fake ecd
+//! (`behaviors/ec-gocacheprog.md`, `implementation/08-ec-gocache-and-cache-cmds.md §Part 2
 //! §Tests`).
 //!
 //! Every request/response pair of the spec has a test here, plus the adopted JSON handling
@@ -17,10 +17,10 @@ use std::process::Output;
 
 use sha2::Digest as _;
 
-use gocache_support::{FakeJigd, HANDSHAKE, JIG, Run, b64, close, files, get, hex, log_rows, put};
+use gocache_support::{EC, FakeEcd, HANDSHAKE, Run, b64, close, files, get, hex, log_rows, put};
 
 struct Setup {
-    fake: FakeJigd,
+    fake: FakeEcd,
     tmp: tempfile::TempDir,
     dp: PathBuf,
     log: PathBuf,
@@ -29,7 +29,7 @@ struct Setup {
 fn setup() -> Setup {
     let tmp = tempfile::tempdir().unwrap();
     Setup {
-        fake: FakeJigd::start(),
+        fake: FakeEcd::start(),
         dp: tmp.path().join("dp"),
         log: tmp.path().join("log"),
         tmp,
@@ -38,9 +38,9 @@ fn setup() -> Setup {
 
 impl Setup {
     fn run(&self) -> Run<'_> {
-        Run::new(OsStr::new(JIG), Some(&self.fake.sock))
+        Run::new(OsStr::new(EC), Some(&self.fake.sock))
             .env("GOCACHEPROG_DIR", self.dp.as_os_str())
-            .env("JIG_LOG", self.log.as_os_str())
+            .env("EKACACHE_LOG", self.log.as_os_str())
     }
 
     /// A live session with `stdin`.
@@ -178,7 +178,7 @@ fn get_misses() {
         s.fake.requests()[1..],
         [format!("GET {}", a_key(ACT)), format!("GET {}", o_key(OUT))]
     );
-    // no JIG_LOG line for a miss
+    // no EKACACHE_LOG line for a miss
     assert!(log_rows(&s.log).is_empty());
     assert!(files(&s.dp).is_empty());
 }
@@ -279,7 +279,7 @@ fn unknown_and_missing_commands_get_no_reply() {
 
 #[test]
 fn a_body_line_without_body_size_is_a_bad_request() {
-    // jig-gocacheprog.md §put: with BodySize absent a body line is read as a request. Legacy
+    // ec-gocacheprog.md §put: with BodySize absent a body line is read as a request. Legacy
     // gave it no reply (no Command); under the adopted JSON handling it is a JSON string, not
     // an object, so it has no ID: fatal. Go never sends one.
     let s = setup();
@@ -290,7 +290,7 @@ fn a_body_line_without_body_size_is_a_bad_request() {
         get(2, ACT)
     ));
     assert_eq!(out.status.code(), Some(1));
-    assert_eq!(text(&out.stderr), "jig gocacheprog: bad request line\n");
+    assert_eq!(text(&out.stderr), "ec gocacheprog: bad request line\n");
     assert_eq!(
         replies(&out),
         format!("{{\"ID\":1,\"DiskPath\":\"{}\"}}\n", s.disk_path(OUT))
@@ -302,9 +302,9 @@ fn not_live() {
     // §Startup 1: no daemon → an always-miss cache that still writes DiskPath files; Q-GO-8:
     // the put is logged as compiled
     let s = setup();
-    let out = Run::new(OsStr::new(JIG), None)
+    let out = Run::new(OsStr::new(EC), None)
         .env("GOCACHEPROG_DIR", s.dp.as_os_str())
-        .env("JIG_LOG", s.log.as_os_str())
+        .env("EKACACHE_LOG", s.log.as_os_str())
         .stdin(format!("{}{}{}", put(1, ACT, OUT, b"xyz"), get(2, ACT), close(3)).as_bytes());
     let dp = s.disk_path(OUT);
     assert_eq!(
@@ -324,7 +324,7 @@ fn disk_path_directory() {
     let h = hex(OUT);
     let reply = |d: &str| format!("{{\"ID\":1,\"DiskPath\":\"{d}\"}}\n");
     let session = |env: &[(&str, &OsStr)]| {
-        let mut r = Run::new(OsStr::new(JIG), Some(&s.fake.sock)).cwd(&cwd);
+        let mut r = Run::new(OsStr::new(EC), Some(&s.fake.sock)).cwd(&cwd);
         for (k, v) in env {
             r = r.env(k, v);
         }
@@ -380,7 +380,7 @@ fn unwritable_disk_path_does_not_abort() {
         std::fs::set_permissions(&locked, std::fs::Permissions::from_mode(mode)).unwrap();
     };
     perms(0o000);
-    let out = Run::new(OsStr::new(JIG), Some(&s.fake.sock))
+    let out = Run::new(OsStr::new(EC), Some(&s.fake.sock))
         .env("GOCACHEPROG_DIR", dp.as_os_str())
         .stdin(format!("{}{}", get(2, ACT), put(3, ACT, OUT, b"xyz")).as_bytes());
     perms(0o755);
@@ -416,7 +416,7 @@ fn object_id_is_ignored() {
     let fs = files(&s.dp);
     assert_eq!(fs.len(), 1);
     let (name, data) = fs.iter().next().unwrap();
-    assert!(name.starts_with(".jig"), "{name}");
+    assert!(name.starts_with(".ekacache"), "{name}");
     assert_eq!(data, b"xyz");
 }
 
@@ -603,7 +603,7 @@ fn adopted_invalid_json_without_an_id() {
         assert_eq!(out.status.code(), Some(1), "{bad}");
         assert_eq!(
             text(&out.stderr),
-            "jig gocacheprog: bad request line\n",
+            "ec gocacheprog: bad request line\n",
             "{bad}"
         );
         // the replies before it were flushed; nothing after it was read
@@ -617,7 +617,7 @@ fn adopted_disk_path_escaping() {
     // ADOPTED Q-GO-3: DiskPath is a JSON string
     let s = setup();
     let dir = s.tmp.path().join("a\"b\\c\td");
-    let out = Run::new(OsStr::new(JIG), Some(&s.fake.sock))
+    let out = Run::new(OsStr::new(EC), Some(&s.fake.sock))
         .env("GOCACHEPROG_DIR", dir.as_os_str())
         .stdin(format!("{}{}", put(1, ACT, OUT, b"xyz"), get(2, ACT)).as_bytes());
     let esc = format!("{}/a\\\"b\\\\c\\td/{}", s.tmp.path().display(), hex(OUT));
@@ -653,7 +653,7 @@ fn non_utf8_disk_path_is_raw() {
         return;
     }
     std::fs::remove_dir(dir).unwrap();
-    let out = Run::new(OsStr::new(JIG), Some(&s.fake.sock))
+    let out = Run::new(OsStr::new(EC), Some(&s.fake.sock))
         .env("GOCACHEPROG_DIR", dir)
         .stdin(format!("{}{}", put(1, ACT, OUT, b"xyz"), get(2, ACT)).as_bytes());
     assert_eq!(out.status.code(), Some(0));
@@ -682,7 +682,7 @@ fn refused_put_is_reported() {
     assert_eq!(out.status.code(), Some(0));
     assert_eq!(
         text(&out.stderr),
-        format!("jig: cache put {} failed\n", o_key(OUT))
+        format!("ec: cache put {} failed\n", o_key(OUT))
     );
     // the put is still answered (and logged, Q-GO-8); the dead connection is not used again
     assert_eq!(

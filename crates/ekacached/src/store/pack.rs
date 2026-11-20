@@ -1,4 +1,4 @@
-//! In-memory pack and index entry (`jigd-store.md` §In-memory state).
+//! In-memory pack and index entry (`ecd-store.md` §In-memory state).
 
 use std::fs::File;
 use std::sync::Arc;

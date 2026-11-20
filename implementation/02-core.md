@@ -3,9 +3,9 @@
 The shared library. Everything that both binaries must agree on byte for byte lives here, so
 the agreement is enforced by the compiler and not by convention.
 
-Specified by: `jig-keys.md` (§The Hasher, §Key types and prefixes, §Store paths, §Key: lexical
-normalisation, §Manifest), `jig-cache-client.md` (§Value encoding, §Version negotiation),
-`jigd-protocol.md` (§Framing, §Tokenization, §Number parsing, §HELLO).
+Specified by: `ec-keys.md` (§The Hasher, §Key types and prefixes, §Store paths, §Key: lexical
+normalisation, §Manifest), `ec-cache-client.md` (§Value encoding, §Version negotiation),
+`ecd-protocol.md` (§Framing, §Tokenization, §Number parsing, §HELLO).
 
 ## Modules
 
@@ -30,10 +30,10 @@ pub struct Digest([u8; 16]);   // Display = 32 lowercase hex; also to_hex() -> [
 pub fn hash_of(d: &[u8]) -> Digest;                    // HashOf: unframed
 ```
 
-Tests: all eight rows of `jig-keys.md §Digest test vectors`, plus a property test that
+Tests: all eight rows of `ec-keys.md §Digest test vectors`, plus a property test that
 `field(a).field(b)` never equals `field(a').field(b')` for different splits of `a‖b`.
 
-Streaming: `hash_of` for files reads in 64 KiB chunks through `update`. jigd's IDS hashing
+Streaming: `hash_of` for files reads in 64 KiB chunks through `update`. ecd's IDS hashing
 uses the same path (see 03, Q-ID-2 stays as-is: legacy reads the whole file, but streaming
 gives the same digest, so it is not an observable change).
 
@@ -43,10 +43,10 @@ gives the same digest, so it is not an observable change).
 - Prefix constructors: `manifest(k1)`, `object(k2)`, `stderr(k2)`, `depfile(k2)`,
   `retcode(k2)`, `blob(hex)`, `go_action(hex)`, `go_output(hex)`. Each returns `Vec<u8>`, and
   these are the **only** places the prefixes `m/ o/ e/ d/ r/ b/ go/a/ go/o/ rs/` are spelled.
-- `Key(path)` lexical normalisation and `InputId` (`S:` / `C:` / absent): `jig-keys.md §Key:
+- `Key(path)` lexical normalisation and `InputId` (`S:` / `C:` / absent): `ec-keys.md §Key:
   lexical normalisation`, `§InputId`. Test vectors in §Key test vectors and §Composite test
   vector.
-- `KeyEnvironment` (the env-var fields that go into link keys): `jig-cc-mode.md §Request key`,
+- `KeyEnvironment` (the env-var fields that go into link keys): `ec-cc-mode.md §Request key`,
   test vector `TestKeyEnvironment`.
 
 k1 field *sequences* are tool-specific and live in the front ends (06, 07). `keys` gives the
@@ -58,9 +58,9 @@ building blocks, and a `#[must_use]` builder so a field cannot be silently dropp
 pub const STORE_DIR: &[u8];                     // from build.rs (01-workspace.md)
 pub fn is_store_path(p: &[u8]) -> bool;
 pub fn state_dir() -> Vec<u8>;                  // STORE up to last '/' + "/var/nix"
-pub fn default_socket() -> Vec<u8>;             // state_dir() + "/jigd/socket"
+pub fn default_socket() -> Vec<u8>;             // state_dir() + "/ekacache/socket"
 pub fn mask_hashes(text: &[u8]) -> Vec<u8>;     // MaskHashes, rescans from h+1 in the modified text
-pub enum IdentityMode { Path, Content }         // JIG_STORE_IDENTITY == "content"
+pub enum IdentityMode { Path, Content }         // EKACACHE_STORE_IDENTITY == "content"
 pub struct Store { mode, out_hash, roots }      // constructed once from env
 impl Store {
     pub fn mask_out(&self, b: &[u8]) -> Cow<[u8]>;
@@ -100,9 +100,9 @@ pub fn decode(wire: &[u8]) -> Option<Vec<u8>>;               // <4 bytes → Non
 - Tests: the `hello` vector (only when the linked libzstd is 1.5.7, otherwise decode-only),
   round-trip proptests, two concatenated frames, truncated header, size mismatch.
 
-### `wire`: jigd line protocol
+### `wire`: ecd line protocol
 
-Shared by the client (jig) and server (jigd), so the parsing rules exist once.
+Shared by the client (ec) and server (ecd), so the parsing rules exist once.
 
 ```rust
 pub const MAX_LINE: usize = 65_535;             // content bytes; the 65 536th non-'\n' byte = hang up
@@ -117,7 +117,7 @@ pub fn parse_request(line: &[u8]) -> Option<Request>; // None → hang up (dispa
 pub const PROTOCOL_MAX: u32 = 1;
 ```
 
-`fields` details (from `jigd-protocol.md §Tokenization`): separators are the ASCII set
+`fields` details (from `ecd-protocol.md §Tokenization`): separators are the ASCII set
 `\t \n \v \f \r space`, plus each multi-byte UTF-8 encoding of a `White_Space` code point
 (U+0085, U+00A0, U+1680, U+2000–U+200A, U+2028, U+2029, U+202F, U+205F, U+3000). Decode one
 UTF-8 scalar at a time with a hand-written decoder. Invalid sequences count as non-space and
@@ -130,13 +130,13 @@ by running Go `strings.Fields` over a byte corpus (the generator is checked in u
 
 ### `manifest`
 
-Formatting and parsing of manifest lines, `jig-keys.md §Manifest`, with its test vectors. Shared
+Formatting and parsing of manifest lines, `ec-keys.md §Manifest`, with its test vectors. Shared
 because cc and rustc both use it, and because the difftest harness decodes manifests fetched
-from jigd to explain key mismatches.
+from ecd to explain key mismatches.
 
 ## Done when
 
-- every vector in `jig-keys.md` and `jig-cache-client.md §Value encoding` passes;
+- every vector in `ec-keys.md` and `ec-cache-client.md §Value encoding` passes;
 - the `fields` corpus agrees with Go on 100 % of entries;
 - the `parse_int64` corpus (signs, leading zeros, overflow at ±2⁶³) agrees with Go;
 - `cargo test -p ekacache-core` runs in under 2 s with no network and no Go.

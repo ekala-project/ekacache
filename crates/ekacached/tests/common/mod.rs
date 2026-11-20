@@ -271,7 +271,7 @@ pub fn eventually(mut f: impl FnMut() -> bool) -> bool {
     false
 }
 
-/// The jigd server in this process, on `dir/s`, with its store in `dir/packs` and `dir` as the
+/// The ecd server in this process, on `dir/s`, with its store in `dir/packs` and `dir` as the
 /// identity store.
 pub struct InProc {
     rt: Option<tokio::runtime::Runtime>,
@@ -357,7 +357,7 @@ pub struct Daemon {
 }
 
 /// The Rust binary under test.
-pub fn rust_jigd() -> PathBuf {
+pub fn rust_ecd() -> PathBuf {
     PathBuf::from(env!("CARGO_BIN_EXE_ecd"))
 }
 

@@ -1,5 +1,5 @@
-//! Peer authentication (`behaviors/jigd-daemon.md` §Peer authentication; Q-DAEMON-7, Q-DAEMON-8
-//! kept; `implementation/03-jigd-server.md` §Peer authentication).
+//! Peer authentication (`behaviors/ecd-daemon.md` §Peer authentication; Q-DAEMON-7, Q-DAEMON-8
+//! kept; `implementation/03-ecd-server.md` §Peer authentication).
 //!
 //! On Linux a connection is served iff its `SO_PEERCRED` uid is the daemon's real uid or root,
 //! or its primary gid is the `nixbld` group's, or its uid is in nix's default auto-allocated

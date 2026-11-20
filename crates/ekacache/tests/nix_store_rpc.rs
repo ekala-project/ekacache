@@ -1,5 +1,5 @@
-//! `jig nix-store` online, against a scripted fake builder-rpc daemon
-//! (`behaviors/jig-nix-store.md §Worker protocol`, `§Client state-transition table`, `§Wire
+//! `ec nix-store` online, against a scripted fake builder-rpc daemon
+//! (`behaviors/ec-nix-store.md §Worker protocol`, `§Client state-transition table`, `§Wire
 //! examples`; `spec/builder_rpc.qnt` scenarios; Q-NIX-2/6/7/8/9/10/11/17). One test per row of
 //! the state table and of the drain sub-machine.
 #![allow(clippy::unwrap_used)]
@@ -18,7 +18,7 @@ use nix_store_support::{
     not_an_array, path_info, strace, string, strings, usage, word,
 };
 
-const BAD_MAGIC: &[u8] = b"jig nix-store: bad daemon magic";
+const BAD_MAGIC: &[u8] = b"ec nix-store: bad daemon magic";
 const HELLO_TXT: &[u8] = b"/nix/store/q790zdjk75hm2cn42nh77pqw4gbv1b88-hello.txt";
 /// What the fake daemon answers for an added object.
 const DAEMON_PATH: &[u8] = b"/nix/store/00000000000000000000000000000000-from-daemon";
@@ -68,17 +68,17 @@ fn row_start() {
     assert!(!o.connected);
 }
 
-/// `Opening`: an empty `JIG_NIX_STORE_OFFLINE` is online (Q-NIX-3), non-empty is offline.
+/// `Opening`: an empty `EKACACHE_NIX_STORE_OFFLINE` is online (Q-NIX-3), non-empty is offline.
 #[test]
 fn row_opening() {
     let o = check(
-        &add_hello().env("JIG_NIX_STORE_OFFLINE", b""),
+        &add_hello().env("EKACACHE_NIX_STORE_OFFLINE", b""),
         &hello_script(&ok_reply(DAEMON_PATH)),
     );
     o.assert_prints(DAEMON_PATH);
     assert_sent(&o, &cat(&[&client_handshake(), &hello_request()]));
     let o = check(
-        &add_hello().env("JIG_NIX_STORE_OFFLINE", b"0"),
+        &add_hello().env("EKACACHE_NIX_STORE_OFFLINE", b"0"),
         &hello_script(&ok_reply(DAEMON_PATH)),
     );
     o.assert_prints(HELLO_TXT);
@@ -90,7 +90,7 @@ fn row_opening() {
 fn row_parse_remote() {
     let msg = |v: &[u8]| {
         cat(&[
-            b"jig nix-store: NIX_REMOTE=",
+            b"ec nix-store: NIX_REMOTE=",
             v,
             b" is not a unix:// socket (builder-rpc-v0 missing?)",
         ])
@@ -135,7 +135,7 @@ fn row_check_path() {
         &add_hello().remote(Remote::Value(cat(&[b"unix://", &path]))),
         &[],
     );
-    o.assert_fails(1, &[&cat(&[b"jig nix-store: cannot connect to ", &path])]);
+    o.assert_fails(1, &[&cat(&[b"ec nix-store: cannot connect to ", &path])]);
 }
 
 /// `Connecting`: the path verbatim (Q-NIX-11), relative to the cwd; the empty path (Q-NIX-12).
@@ -155,7 +155,7 @@ fn row_connecting() {
                 .in_dir(),
             &handshake(),
         );
-        o.assert_fails(1, &[&cat(&[b"jig nix-store: cannot connect to ", path])]);
+        o.assert_fails(1, &[&cat(&[b"ec nix-store: cannot connect to ", path])]);
         assert!(!o.connected);
     }
     // relative to the cwd, where the daemon listens
@@ -209,7 +209,7 @@ fn row_await_magic() {
 /// from 1.38 up is accepted.
 #[test]
 fn row_await_version() {
-    let too_old = |v: &[u8]| cat(&[b"jig nix-store: daemon protocol ", v, b" too old"]);
+    let too_old = |v: &[u8]| cat(&[b"ec nix-store: daemon protocol ", v, b" too old"]);
     for (reply, n) in [
         (word(0x125), &b"293"[..]),
         (word(0), b"0"),
@@ -364,7 +364,7 @@ fn row_ready() {
         &Inv::new(&[b"bogus"]).remote(Remote::Value(b"unix:///nonexistent".to_vec())),
         &[],
     );
-    o.assert_fails(1, &[b"jig nix-store: cannot connect to /nonexistent"]);
+    o.assert_fails(1, &[b"ec nix-store: cannot connect to /nonexistent"]);
 }
 
 /// `ReadInput`: stdin after the handshake; conversion failures send no op.
@@ -427,7 +427,7 @@ fn row_drain_add() {
         ),
         (
             word(0x6461_7461),
-            b"jig nix-store: unexpected daemon message 0x64617461",
+            b"ec nix-store: unexpected daemon message 0x64617461",
         ),
         (Vec::new(), b""),
     ] {
@@ -656,7 +656,7 @@ fn drain_code() {
         let o = check(&add_hello(), &drain_script(&word(code)));
         o.assert_fails(
             1,
-            &[&cat(&[b"jig nix-store: unexpected daemon message ", hex])],
+            &[&cat(&[b"ec nix-store: unexpected daemon message ", hex])],
         );
         assert_sent(&o, &client_handshake());
     }
@@ -817,7 +817,7 @@ fn drain_oversize_desync() {
         1,
         &[
             b"",
-            b"jig nix-store: unexpected daemon message 0x7878787878787878",
+            b"ec nix-store: unexpected daemon message 0x7878787878787878",
         ],
     );
 }
@@ -857,7 +857,7 @@ fn drain_huge_fields_count_loops() {
 
 #[test]
 fn wire_examples() {
-    let file = VectorFile::load("jig-nix-store");
+    let file = VectorFile::load("ec-nix-store");
     for v in file.of_kind("wire", 8) {
         let words: Vec<&str> = v.str("message").split(' ').collect();
         let got = match words[..] {
@@ -1034,6 +1034,6 @@ fn quint_old_daemon() {
         &Inv::new(&[&b"add-drv"[..], b"x"]).stdin(b"{}"),
         &[Step::Recv(16), Step::Send(daemon_hello(0x125))],
     );
-    o.assert_fails(1, &[b"jig nix-store: daemon protocol 293 too old"]);
+    o.assert_fails(1, &[b"ec nix-store: daemon protocol 293 too old"]);
     assert_sent(&o, &client_hello());
 }

@@ -1,4 +1,4 @@
-//! Mode selection (`behaviors/jig-dispatch.md §Before dispatch`, `§Mode selection`, `main.cc`).
+//! Mode selection (`behaviors/ec-dispatch.md §Before dispatch`, `§Mode selection`, `main.cc`).
 
 use std::io::Write;
 
@@ -8,8 +8,8 @@ use ekacache_core::fspath;
 use crate::{Ctx, cache_cmd, cc, fixup, gocache, launcher, nix_store, rustc};
 
 /// The usage text, byte for byte (`main.cc:76-89`, `§Usage text`).
-pub const USAGE: &[u8] = b"usage: jig <mode> [args...]   or via a symlink named after the mode
-       jig /path/to/<compiler> [args...]   launcher for gcc, clang, rustc or go
+pub const USAGE: &[u8] = b"usage: ec <mode> [args...]   or via a symlink named after the mode
+       ec /path/to/<compiler> [args...]   launcher for gcc, clang, rustc or go
 
   cc c++ <args>         compiler driver + compile cache (any other name too)
   rustcwrap <args>      rustc through the cache
@@ -17,10 +17,10 @@ pub const USAGE: &[u8] = b"usage: jig <mode> [args...]   or via a symlink named 
   reloc-fixup <dir>     rewrite store references in an output tree
   nix-store <args>      realise paths over the builder RPC socket
   cache get|put <key> <file>, get-dir|put-dir <key> <dir>
-  slot <program> <args> run holding a jigd job slot
+  slot <program> <args> run holding an ecd job slot
 
-  JIG_SOCK  jigd socket (default <store>/../var/nix/jigd/socket)
-  JIG_LOG, JIG_LOG_ARGS  per-invocation log files
+  EKACACHE_SOCK  ecd socket (default <store>/../var/nix/ekacache/socket)
+  EKACACHE_LOG, EKACACHE_LOG_ARGS  per-invocation log files
 ";
 
 /// The whole program: capture the process state, dispatch, return the exit status.
@@ -34,9 +34,8 @@ pub fn main() -> i32 {
     dispatch(&argv, &mut ctx)
 }
 
-/// The names the binary answers to as itself: `ec`, and `jig` so the symlinks and wrappers made
-/// for the C++ jig keep working. `jig` is the name `behaviors/jig-dispatch.md` gives.
-pub const SELF_NAMES: [&[u8]; 2] = [b"ec", b"jig"];
+/// The name the binary answers to as itself (`behaviors/ec-dispatch.md`).
+pub const SELF_NAME: &[u8] = b"ec";
 
 /// The table of `§Mode selection`. Comparisons are exact and case-sensitive; the same names
 /// work as `argv[0]`'s basename and as `ec <mode>` (Q-DISPATCH-1).
@@ -45,7 +44,7 @@ pub fn dispatch(argv: &[Vec<u8>], ctx: &mut Ctx) -> i32 {
         Some((argv0, rest)) => (fspath::filename(argv0), rest),
         None => (b"", &[]),
     };
-    if SELF_NAMES.contains(&mode) {
+    if mode == SELF_NAME {
         let Some((first, rest)) = args.split_first() else {
             let _ = std::io::stderr().write_all(USAGE);
             return 2;
@@ -81,10 +80,10 @@ mod tests {
     fn usage_matches_the_doc() {
         let doc = std::fs::read_to_string(concat!(
             env!("CARGO_MANIFEST_DIR"),
-            "/../../behaviors/jig-dispatch.md"
+            "/../../behaviors/ec-dispatch.md"
         ))
         .unwrap();
-        let start = doc.find("```\nusage: jig").unwrap() + 4;
+        let start = doc.find("```\nusage: ec").unwrap() + 4;
         let end = start + doc[start..].find("```").unwrap();
         assert_eq!(&doc.as_bytes()[start..end], USAGE);
     }

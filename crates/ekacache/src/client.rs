@@ -1,11 +1,11 @@
-//! The jigd client (`behaviors/jig-cache-client.md`), synchronous, one connection per object.
+//! The ecd client (`behaviors/ec-cache-client.md`), synchronous, one connection per object.
 //!
 //! A port of `cache_client.cc` with the adopted changes:
 //!
 //! - **HELLO** (`§Version negotiation`): `HELLO 1` first; `OK <v>` with `v >= 1` → version 1; EOF
 //!   or a read error → reconnect once and speak version 0 without HELLO (a Go jigd hung up on the
 //!   unknown verb); anything else → the connect failed. The process does not remember a
-//!   version-0 result (`MAY`, item 5): every jig mode connects at most once.
+//!   version-0 result (`MAY`, item 5): every ec mode connects at most once.
 //! - **Q-CLIENT-1**: values are framed by `ekacache_core::frame` (LE header).
 //! - **Q-CLIENT-2**: every PUT reply is read and must be exactly `OK`. Anything else, and any
 //!   failed send of a PUT, closes the connection; `put` and `put_many` report what was stored.
@@ -39,7 +39,7 @@ pub fn sun_path_len() -> usize {
 /// `Connect` steps 1-4 (`cache_client.cc:27-44`), without HELLO: refuse a path of
 /// `sizeof(sun_path)` bytes or more without a syscall, `socket(AF_UNIX, SOCK_STREAM |
 /// SOCK_CLOEXEC)` (see `stream_socket` for macOS), and `connect` with the path copied into a zeroed `sockaddr_un` and
-/// `addrlen = sizeof(sockaddr_un)`. Shared with nix-store (`jig-nix-store.md §Socket`).
+/// `addrlen = sizeof(sockaddr_un)`. Shared with nix-store (`ec-nix-store.md §Socket`).
 #[must_use]
 pub fn connect_unix(path: &[u8]) -> Option<OwnedFd> {
     if path.len() >= sun_path_len() {
@@ -79,7 +79,7 @@ fn stream_socket() -> rustix::io::Result<OwnedFd> {
 }
 
 /// macOS has no `SOCK_CLOEXEC` (`11-macos.md` §Inventory): `socket`, then
-/// `fcntl(F_SETFD, FD_CLOEXEC)`. Nothing runs between the two in jig's single thread.
+/// `fcntl(F_SETFD, FD_CLOEXEC)`. Nothing runs between the two in ec's single thread.
 #[cfg(target_vendor = "apple")]
 fn stream_socket() -> rustix::io::Result<OwnedFd> {
     let fd = rustix::net::socket(AddressFamily::UNIX, SocketType::STREAM, None)?;
@@ -87,7 +87,7 @@ fn stream_socket() -> rustix::io::Result<OwnedFd> {
     Ok(fd)
 }
 
-/// The flags of every `send` to jigd: `MSG_NOSIGNAL`, so a daemon that hung up is a failed send,
+/// The flags of every `send` to ecd: `MSG_NOSIGNAL`, so a daemon that hung up is a failed send,
 /// not a `SIGPIPE`.
 #[cfg(not(target_vendor = "apple"))]
 const SEND_FLAGS: SendFlags = SendFlags::NOSIGNAL;
@@ -96,7 +96,7 @@ const SEND_FLAGS: SendFlags = SendFlags::NOSIGNAL;
 #[cfg(target_vendor = "apple")]
 const SEND_FLAGS: SendFlags = SendFlags::empty();
 
-/// A connection to jigd, or none (`CacheClient`).
+/// A connection to ecd, or none (`CacheClient`).
 pub struct Client {
     fd: Option<OwnedFd>,
     buf: Box<[u8]>,
@@ -536,7 +536,7 @@ mod tests {
 
     #[test]
     fn no_socket_and_long_paths() {
-        assert!(Client::connected_to(b"/nonexistent/jigd/socket").is_none());
+        assert!(Client::connected_to(b"/nonexistent/ekacache/socket").is_none());
         assert!(Client::connected_to(b"").is_none());
         assert!(Client::connected_to(&[b'a'; 108]).is_none());
         let mut c = Client::new();

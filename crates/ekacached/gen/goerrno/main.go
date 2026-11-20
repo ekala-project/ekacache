@@ -1,7 +1,7 @@
-// Command goerrno prints jigd's Go errno string table (crates/ekacached/src/goerr_table.rs).
+// Command goerrno prints ecd's Go errno string table (crates/ekacached/src/goerr_table.rs).
 //
-// Go's syscall error strings differ from glibc strerror in case and wording, and jigd's log
-// lines embed them (implementation/03-jigd-server.md §Logging and error text). Regenerate with
+// Go's syscall error strings differ from glibc strerror in case and wording, and ecd's log
+// lines embed them (implementation/03-ecd-server.md §Logging and error text). Regenerate with
 //
 //	go run ./crates/ekacached/gen/goerrno/main.go > crates/ekacached/src/goerr_table.rs
 //

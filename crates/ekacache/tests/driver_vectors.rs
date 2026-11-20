@@ -1,5 +1,5 @@
-//! The link-driver policy against `tests/vectors/jig-driver-policy.toml`
-//! (`behaviors/jig-driver-policy.md §Test vectors`, `implementation/12-testing.md §L1: spec
+//! The link-driver policy against `tests/vectors/ec-driver-policy.toml`
+//! (`behaviors/ec-driver-policy.md §Test vectors`, `implementation/12-testing.md §L1: spec
 //! vectors`). The file keeps the doc's notation (START, END, META, CRT_TAIL, `_×N`); see its
 //! header for what each kind checks. TV-37's end-to-end rows run in `cc_mode.rs`.
 #![allow(clippy::unwrap_used)]
@@ -15,7 +15,7 @@ const UNDEFINED_VERSION: &[u8] = b"-Wl,--undefined-version";
 const END: &[u8] = b"--end-no-unused-arguments";
 
 fn vectors() -> VectorFile {
-    VectorFile::load("jig-driver-policy")
+    VectorFile::load("ec-driver-policy")
 }
 
 /// The doc's notation expanded, with `subst` applied to each string first.
@@ -271,7 +271,7 @@ fn driver_store_lib_vectors() {
     for v in file.of_kind("driver-store-lib", 1) {
         let store = store_dir();
         let Ok(dir) = tempfile::Builder::new()
-            .prefix("jig-tv33-")
+            .prefix("ec-tv33-")
             .tempdir_in(&store)
         else {
             eprintln!("{store} not writable: skipped");

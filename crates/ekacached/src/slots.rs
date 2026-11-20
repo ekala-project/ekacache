@@ -1,5 +1,5 @@
-//! Host-wide compiler slots (`behaviors/jigd-slots.md` §State, §Operations, §Per-connection
-//! bookkeeping; model `spec/slots.qnt`, module `slots`; `implementation/03-jigd-server.md`
+//! Host-wide compiler slots (`behaviors/ecd-slots.md` §State, §Operations, §Per-connection
+//! bookkeeping; model `spec/slots.qnt`, module `slots`; `implementation/03-ecd-server.md`
 //! §SLOT with cancellation).
 //!
 //! `acquire`, `release` and `grant` are the Go code (`slots.go`) line by line: an immediate grant

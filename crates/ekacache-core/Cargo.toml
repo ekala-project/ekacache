@@ -9,7 +9,7 @@ build = "build.rs"
 
 [features]
 default = ["frame"]
-# value framing (zstd). jigd never decompresses values and can build without it.
+# value framing (zstd). ecd never decompresses values and can build without it.
 frame = ["dep:zstd"]
 
 [dependencies]

@@ -1,7 +1,7 @@
-//! `jig nix-store` (`behaviors/jig-nix-store.md`; `implementation/09-jig-nix-store.md`, phase
+//! `ec nix-store` (`behaviors/ec-nix-store.md`; `implementation/09-ec-nix-store.md`, phase
 //! P8b): add text objects and ATerm derivations to the store and submit build outputs, over the
 //! builder-rpc-v0 worker-protocol socket in `$NIX_REMOTE`, or offline with
-//! `JIG_NIX_STORE_OFFLINE`.
+//! `EKACACHE_NIX_STORE_OFFLINE`.
 //!
 //! This file is `§Invocation`: the processing order (usage → open the store → dispatch → the
 //! verb), `§add-text / add-drv`, `§fetchurls`, `§submit`, the exit statuses of `§Exit status
@@ -30,29 +30,29 @@ use crate::process::ProcEnv;
 // a substitution.
 
 /// No arguments after `nix-store` (exit 2). `…` is U+2026, UTF-8 `E2 80 A6`.
-pub const USAGE: &[u8] = b"usage: jig nix-store add-text|add-drv|fetchurls|submit \xE2\x80\xA6";
+pub const USAGE: &[u8] = b"usage: ec nix-store add-text|add-drv|fetchurls|submit \xE2\x80\xA6";
 /// Online and `NIX_REMOTE` (verbatim, empty when unset) lacks the `unix://` prefix (exit 1).
-pub const NIX_REMOTE_NOT_UNIX: &[u8] = b"jig nix-store: NIX_REMOTE=";
+pub const NIX_REMOTE_NOT_UNIX: &[u8] = b"ec nix-store: NIX_REMOTE=";
 pub const NIX_REMOTE_NOT_UNIX_END: &[u8] = b" is not a unix:// socket (builder-rpc-v0 missing?)";
 /// `socket()` or `connect()` failed; followed by the path (exit 1).
-pub const CANNOT_CONNECT: &[u8] = b"jig nix-store: cannot connect to ";
+pub const CANNOT_CONNECT: &[u8] = b"ec nix-store: cannot connect to ";
 /// The first flush failed, EOF, or the first word is not `WORKER_MAGIC_2` (exit 1).
-pub const BAD_MAGIC: &[u8] = b"jig nix-store: bad daemon magic";
+pub const BAD_MAGIC: &[u8] = b"ec nix-store: bad daemon magic";
 /// The daemon version (decimal; `0` when unreadable) is below 1.38 (exit 1).
-pub const PROTOCOL_TOO_OLD: &[u8] = b"jig nix-store: daemon protocol ";
+pub const PROTOCOL_TOO_OLD: &[u8] = b"ec nix-store: daemon protocol ";
 pub const PROTOCOL_TOO_OLD_END: &[u8] = b" too old";
 /// `STDERR_ERROR` in a drain; followed by its `msg` (exit 1).
 pub const DAEMON_ERROR: &[u8] = b"nix-daemon: ";
 /// What follows `DAEMON_ERROR` when `msg` could not be read.
 pub const DAEMON_ERROR_UNREADABLE: &[u8] = b"?";
 /// An unknown stderr code in a drain; followed by `0x<lowercase hex>` (exit 1).
-pub const UNEXPECTED_MESSAGE: &[u8] = b"jig nix-store: unexpected daemon message ";
+pub const UNEXPECTED_MESSAGE: &[u8] = b"ec nix-store: unexpected daemon message ";
 /// `add-drv`: parse error, non-object top level, or a non-string `env` value (exit 1).
-pub const DRV_DID_NOT_PARSE: &[u8] = b"jig nix-store: derivation JSON did not parse";
+pub const DRV_DID_NOT_PARSE: &[u8] = b"ec nix-store: derivation JSON did not parse";
 /// `fetchurls`: parse error or non-array top level (exit 1). No colon after `nix-store`.
-pub const FETCHURLS_NOT_ARRAY: &[u8] = b"jig nix-store fetchurls: expected a JSON array";
+pub const FETCHURLS_NOT_ARRAY: &[u8] = b"ec nix-store fetchurls: expected a JSON array";
 /// Unknown verb or wrong argument count, after a successful open (exit 2).
-pub const BAD_ARGUMENTS: &[u8] = b"jig nix-store: bad arguments";
+pub const BAD_ARGUMENTS: &[u8] = b"ec nix-store: bad arguments";
 
 /// `std::println(stderr, …)`: the parts and `\n`, in one write.
 fn say(parts: &[&[u8]]) {
@@ -84,11 +84,11 @@ enum Store {
 }
 
 impl Store {
-    /// `Opening`: offline when `JIG_NIX_STORE_OFFLINE` is non-empty, else connect and
+    /// `Opening`: offline when `EKACACHE_NIX_STORE_OFFLINE` is non-empty, else connect and
     /// handshake.
     fn open(env: &ProcEnv) -> Option<Self> {
         // Q-NIX-3: any non-empty value, `0` and `false` included, means offline
-        if env.non_empty("JIG_NIX_STORE_OFFLINE").is_some() {
+        if env.non_empty("EKACACHE_NIX_STORE_OFFLINE").is_some() {
             return Some(Self::Offline);
         }
         rpc::Daemon::connect(env).map(Self::Online)
@@ -260,7 +260,7 @@ mod tests {
     fn messages_match_the_doc() {
         let doc = std::fs::read_to_string(concat!(
             env!("CARGO_MANIFEST_DIR"),
-            "/../../behaviors/jig-nix-store.md"
+            "/../../behaviors/ec-nix-store.md"
         ))
         .unwrap();
         let start = doc.find("## Errors and messages").unwrap();

@@ -1,5 +1,5 @@
-//! The Go `os` file operations jigd uses, with Go's semantics and Go's error values
-//! (`jigd-store.md` §Directory layout and naming, §Seal, §moveDown; `jigd-daemon.md` §Startup).
+//! The Go `os` file operations ecd uses, with Go's semantics and Go's error values
+//! (`ecd-store.md` §Directory layout and naming, §Seal, §moveDown; `ecd-daemon.md` §Startup).
 //!
 //! Every function takes the path as bytes, exactly as the Go code passed it, because the path
 //! is part of the error text that ends up in a log line.
@@ -121,7 +121,7 @@ pub fn rename(old: &[u8], new: &[u8]) -> Result<(), GoErr> {
 }
 
 /// `os.Chtimes(path, time.Time{}, mtime)`: sets the mtime only (atime `UTIME_OMIT`), as Go 1.25
-/// does for a zero atime (`jigd-store.md` §Recency).
+/// does for a zero atime (`ecd-store.md` §Recency).
 pub fn set_mtime(path: &[u8], mtime_ns: i64) -> Result<(), GoErr> {
     let times = Timestamps {
         last_access: Timespec {
@@ -389,7 +389,7 @@ fn last_slash(dest: &[u8], from: usize) -> Option<usize> {
 /// `filepath.EvalSymlinks` on Unix (`walkSymlinks` in Go 1.25's `path/filepath/symlink.go`),
 /// ported literally: components are resolved one at a time with `Lstat` and `Readlink`, at
 /// most 255 links are followed, and a non-directory with components left after it is
-/// `ENOTDIR`. The result is `Clean`ed. `None` on any error (`jigd-identities.md` §Algorithm
+/// `ENOTDIR`. The result is `Clean`ed. `None` on any error (`ecd-identities.md` §Algorithm
 /// step 2 needs only success or failure). This is not `fs::canonicalize`, which treats `..` and
 /// dangling links differently.
 pub fn eval_symlinks(path: &[u8]) -> Option<Vec<u8>> {

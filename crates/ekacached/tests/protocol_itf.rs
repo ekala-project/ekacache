@@ -1,17 +1,17 @@
-//! Replay of `spec/jigd_protocol.qnt` ITF traces against the Rust jigd over its unix socket
-//! (`behaviors/jigd-protocol.md`; implementation/12 §L4). Each trace runs one in-process server
+//! Replay of `spec/ecd_protocol.qnt` ITF traces against the Rust ecd over its unix socket
+//! (`behaviors/ecd-protocol.md`; implementation/12 §L4). Each trace runs one in-process server
 //! (`common::InProc`, `LIMIT` = 1 slot) and one real connection per model connection.
 //!
 //! Traces are generated locally and not committed (`/tests/itf/*/` is ignored). The model's own
 //! `step` ends a trace after about five steps (most requests it picks are malformed, and a
 //! malformed request ends the connection), so a second set comes from
-//! `tests/itf-wrappers/jigd_protocol_long.qnt`, whose `longStep` takes a subset of `step`:
+//! `tests/itf-wrappers/ecd_protocol_long.qnt`, whose `longStep` takes a subset of `step`:
 //!
 //! ```text
-//! quint run spec/jigd_protocol.qnt --mbt --out-itf='tests/itf/jigd_protocol/t{seq}.itf.json' \
+//! quint run spec/ecd_protocol.qnt --mbt --out-itf='tests/itf/ecd_protocol/t{seq}.itf.json' \
 //!     --n-traces=300 --max-steps=40 --max-samples=300 --seed=1 --invariant=safety
-//! quint run tests/itf-wrappers/jigd_protocol_long.qnt --step=longStep --mbt \
-//!     --out-itf='tests/itf/jigd_protocol_long/t{seq}.itf.json' --n-traces=200 --max-steps=60 \
+//! quint run tests/itf-wrappers/ecd_protocol_long.qnt --step=longStep --mbt \
+//!     --out-itf='tests/itf/ecd_protocol_long/t{seq}.itf.json' --n-traces=200 --max-steps=60 \
 //!     --max-samples=200 --seed=1 --invariant=safety
 //! ```
 //!
@@ -189,7 +189,7 @@ impl Replay {
                 let n = arg.int().map_err(e)?;
                 out.extend_from_slice(format!("IDS {n}\n").as_bytes());
                 for i in 0..n {
-                    out.extend_from_slice(format!("/nonexistent/jig-itf/{i}\n").as_bytes());
+                    out.extend_from_slice(format!("/nonexistent/ec-itf/{i}\n").as_bytes());
                 }
             }
             "IdsBadCount" => out.extend_from_slice(b"IDS -1\n"),
@@ -476,10 +476,10 @@ fn run(model: &str) {
 
 #[test]
 fn protocol_traces_replay() {
-    run("jigd_protocol");
+    run("ecd_protocol");
 }
 
 #[test]
 fn protocol_long_traces_replay() {
-    run("jigd_protocol_long");
+    run("ecd_protocol_long");
 }

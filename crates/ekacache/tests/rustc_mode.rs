@@ -1,5 +1,5 @@
-//! rustc mode end to end (`behaviors/jig-rustc-mode.md`, `implementation/07-jig-rustc.md
-//! §Tests`): the jig binary against an in-memory jigd that records every request, with a fake
+//! rustc mode end to end (`behaviors/ec-rustc-mode.md`, `implementation/07-ec-rustc.md
+//! §Tests`): the ec binary against an in-memory ecd that records every request, with a fake
 //! rustc (`fixtures/rustc/fake-rustc.sh`) for the paths through `run`, and the real rustc and
 //! cargo for env-deps and a workspace built twice.
 #![allow(clippy::unwrap_used, clippy::too_many_lines)]
@@ -16,7 +16,7 @@ use std::process::Command;
 use ekacache_core::env::Env;
 use ekacache_core::manifest::{env_id, env_line, result_key_of};
 use ekacache_core::store_path::Store;
-use harness::{JIG, Server, Ws, have_rustc, lines, os, read_log, run_in, snapshot, take_log};
+use harness::{EC, Server, Ws, have_rustc, lines, os, read_log, run_in, snapshot, take_log};
 
 fn input_line(path: &str) -> String {
     let store = Store::from_env(&Env::default());
@@ -58,7 +58,7 @@ fn record(name: &str, path: &Path) -> Vec<u8> {
 #[test]
 fn usage() {
     let ws = Ws::new();
-    let o = ws.jig(
+    let o = ws.ec(
         Path::new("/nonexistent/s"),
         &[OsString::from("rustcwrap")],
         &[],
@@ -69,7 +69,7 @@ fn usage() {
     assert!(read_log(&ws.log).is_empty());
     // the same as argv[0]
     let link = ws.root.join("bin/rustcwrap");
-    symlink(JIG, &link).unwrap();
+    symlink(EC, &link).unwrap();
     let o = run_in(
         link.as_os_str(),
         &[],
@@ -89,7 +89,7 @@ fn uncached_outcomes() {
     let d = Server::fake();
     let args_log = ws.root.join("args.log");
     let args_log_s = args_log.to_str().unwrap().to_owned();
-    let env = [("JIG_LOG_ARGS", args_log_s.as_str())];
+    let env = [("EKACACHE_LOG_ARGS", args_log_s.as_str())];
 
     // a query: no connection at all, stdout and stderr pass through
     let q: Vec<OsString> = [
@@ -147,7 +147,7 @@ fn uncached_outcomes() {
         lines(&d.take_log()),
         ["HELLO 1", "SLOT /build", "DONE /build"]
     );
-    ws.wrap(&d.sock, &bin, &[("JIG_SLOT", "1")]);
+    ws.wrap(&d.sock, &bin, &[("EKACACHE_SLOT", "1")]);
     assert!(d.take_log().is_empty());
     take_log(&ws.log);
 
@@ -186,7 +186,7 @@ fn uncached_outcomes() {
     assert_eq!(take_log(&ws.log), log1("no-daemon", "foo-abc"));
     assert!(ws.out.join("libfoo-abc.rlib").exists());
 
-    // rustc mode never writes JIG_LOG_ARGS
+    // rustc mode never writes EKACACHE_LOG_ARGS
     assert!(!args_log.exists());
 }
 
@@ -286,11 +286,11 @@ fn miss_store_hit() {
     assert_eq!(take_log(&ws.log), log1("cached", "foo-abc"));
     assert_eq!(snapshot(&elsewhere), before);
 
-    // the launcher: `jig /path/to/rustc …` is the same mode and key
+    // the launcher: `ec /path/to/rustc …` is the same mode and key
     ws.clear_out();
     let mut argv = vec![ws.rustc.clone().into_os_string()];
     argv.extend_from_slice(&args);
-    let o = ws.jig(&d.sock, &argv, &[]);
+    let o = ws.ec(&d.sock, &argv, &[]);
     assert_eq!(o.status.code(), Some(0));
     assert_eq!(take_log(&ws.log), log1("cached", "foo-abc"));
     assert_eq!(k1_of(&d.take_log()), k1);
@@ -388,7 +388,7 @@ fn compiled_unstored() {
     let k1 = k1_of(&log);
     assert_eq!(
         String::from_utf8(o.stderr).unwrap(),
-        format!("w\njig: cache put m/{k1} failed\n")
+        format!("w\nec: cache put m/{k1} failed\n")
     );
     assert_eq!(
         take_log(&ws.log),
@@ -406,7 +406,7 @@ fn compiled_unstored() {
     assert_eq!(puts.len(), 2);
     assert_eq!(
         String::from_utf8(o.stderr).unwrap(),
-        format!("jig: cache put {} failed\n", &puts[1][4..])
+        format!("ec: cache put {} failed\n", &puts[1][4..])
     );
     assert_eq!(
         take_log(&ws.log),
@@ -441,33 +441,36 @@ fn q_rs_4_empty_blob() {
     assert!(snapshot(&ws.out).is_empty());
 }
 
-/// ADOPTED Q-RS-3 with the fake rustc: `$env:` lines from jig's environment, in dep-info order,
+/// ADOPTED Q-RS-3 with the fake rustc: `$env:` lines from ec's environment, in dep-info order,
 /// after the inputs; `env-changed:` misses; unset and set-but-empty differ.
 #[test]
 fn env_dep_lines() {
     let ws = Ws::new();
     let d = Server::fake();
     let args = ws.lib_args(&[]);
-    let deps = ("FAKE_ENV_DEPS", "JIG_T=from-rustc OTHER JIG_T=again");
+    let deps = (
+        "FAKE_ENV_DEPS",
+        "EKACACHE_T=from-rustc OTHER EKACACHE_T=again",
+    );
 
-    ws.wrap(&d.sock, &args, &[deps, ("JIG_T", "1")]);
+    ws.wrap(&d.sock, &args, &[deps, ("EKACACHE_T", "1")]);
     assert_eq!(take_log(&ws.log), log1("compiled", "foo-abc new-key"));
     let log = d.take_log();
     let k1 = k1_of(&log);
     let want = format!(
         "{}\n{}\n{}\n",
         input_line(&ws.p("src/m.rs")),
-        String::from_utf8(env_line(b"JIG_T", Some(b"1"))).unwrap(),
+        String::from_utf8(env_line(b"EKACACHE_T", Some(b"1"))).unwrap(),
         "$env:OTHER\tunset",
     );
     assert_eq!(put_value(&log, &format!("m/{k1}")), want.as_bytes());
     // the same environment hits
-    ws.wrap(&d.sock, &args, &[deps, ("JIG_T", "1")]);
+    ws.wrap(&d.sock, &args, &[deps, ("EKACACHE_T", "1")]);
     assert_eq!(take_log(&ws.log), log1("cached", "foo-abc"));
     // a changed value, an unset one, a set-but-empty one
     for (env, why) in [
-        (vec![("JIG_T", "2")], "env-changed:JIG_T"),
-        (vec![], "env-changed:JIG_T"),
+        (vec![("EKACACHE_T", "2")], "env-changed:EKACACHE_T"),
+        (vec![], "env-changed:EKACACHE_T"),
         (vec![("OTHER", "")], "env-changed:OTHER"),
     ] {
         let mut e = vec![deps];
@@ -486,7 +489,7 @@ fn env_dep_lines() {
         .find(|r| r.verb == "PUT" && r.arg.starts_with(b"m/"))
         .unwrap();
     let text = String::from_utf8(m.value.clone().unwrap()).unwrap();
-    assert!(text.contains("\n$env:JIG_T\tunset\n"), "{text}");
+    assert!(text.contains("\n$env:EKACACHE_T\tunset\n"), "{text}");
     assert!(text.ends_with(&format!(
         "$env:OTHER\t{}\n",
         String::from_utf8(env_id(Some(b""))).unwrap()
@@ -495,7 +498,7 @@ fn env_dep_lines() {
     ws.wrap(&d.sock, &args, &[deps, ("OTHER", "")]);
     assert_eq!(take_log(&ws.log), log1("cached", "foo-abc"));
     std::fs::write(ws.root.join("src/m.rs"), "// changed\n").unwrap();
-    ws.wrap(&d.sock, &args, &[deps, ("JIG_T", "9")]);
+    ws.wrap(&d.sock, &args, &[deps, ("EKACACHE_T", "9")]);
     assert_eq!(
         take_log(&ws.log),
         log1(
@@ -515,14 +518,14 @@ fn env_deps_with_real_rustc() {
     let ws = Ws::new();
     std::fs::write(
         ws.root.join("src/lib.rs"),
-        "pub const T: &str = env!(\"JIG_T\");\npub const U: Option<&str> = option_env!(\"JIG_U\");\n",
+        "pub const T: &str = env!(\"EKACACHE_T\");\npub const U: Option<&str> = option_env!(\"EKACACHE_U\");\n",
     )
     .unwrap();
     let d = Server::fake();
     let mut args = vec![OsString::from("rustcwrap"), OsString::from("rustc")];
     args.extend(ws.lib_args(&[]));
     let run = |env: &[(&str, &str)]| {
-        let o = ws.jig(&d.sock, &args, env);
+        let o = ws.ec(&d.sock, &args, env);
         assert_eq!(
             o.status.code(),
             Some(0),
@@ -531,45 +534,48 @@ fn env_deps_with_real_rustc() {
         );
         take_log(&ws.log)
     };
-    assert_eq!(run(&[("JIG_T", "a")]), log1("compiled", "foo-abc new-key"));
+    assert_eq!(
+        run(&[("EKACACHE_T", "a")]),
+        log1("compiled", "foo-abc new-key")
+    );
     let dep = std::fs::read_to_string(ws.out.join("foo-abc.d")).unwrap();
-    assert!(dep.contains("# env-dep:JIG_T=a\n"), "{dep}");
-    assert!(dep.contains("# env-dep:JIG_U\n"), "{dep}");
+    assert!(dep.contains("# env-dep:EKACACHE_T=a\n"), "{dep}");
+    assert!(dep.contains("# env-dep:EKACACHE_U\n"), "{dep}");
     let log = d.take_log();
     let k1 = k1_of(&log);
     let m = String::from_utf8(put_value(&log, &format!("m/{k1}")).to_vec()).unwrap();
-    let t_line = String::from_utf8(env_line(b"JIG_T", Some(b"a"))).unwrap();
+    let t_line = String::from_utf8(env_line(b"EKACACHE_T", Some(b"a"))).unwrap();
     assert!(m.lines().any(|l| l == t_line), "{m}");
-    assert!(m.lines().any(|l| l == "$env:JIG_U\tunset"), "{m}");
+    assert!(m.lines().any(|l| l == "$env:EKACACHE_U\tunset"), "{m}");
     assert!(m.lines().all(|l| !l.ends_with("src/lib.rs")), "{m}");
     let rlib_a = std::fs::read(ws.out.join("libfoo-abc.rlib")).unwrap();
 
     ws.clear_out();
-    assert_eq!(run(&[("JIG_T", "a")]), log1("cached", "foo-abc"));
+    assert_eq!(run(&[("EKACACHE_T", "a")]), log1("cached", "foo-abc"));
     assert_eq!(
         std::fs::read(ws.out.join("libfoo-abc.rlib")).unwrap(),
         rlib_a
     );
     assert_eq!(
-        run(&[("JIG_T", "b")]),
-        log1("compiled", "foo-abc env-changed:JIG_T")
+        run(&[("EKACACHE_T", "b")]),
+        log1("compiled", "foo-abc env-changed:EKACACHE_T")
     );
     assert_ne!(
         std::fs::read(ws.out.join("libfoo-abc.rlib")).unwrap(),
         rlib_a
     );
     assert_eq!(
-        run(&[("JIG_T", "b"), ("JIG_U", "x")]),
-        log1("compiled", "foo-abc env-changed:JIG_U")
+        run(&[("EKACACHE_T", "b"), ("EKACACHE_U", "x")]),
+        log1("compiled", "foo-abc env-changed:EKACACHE_U")
     );
     assert_eq!(
-        run(&[("JIG_T", "b"), ("JIG_U", "x")]),
+        run(&[("EKACACHE_T", "b"), ("EKACACHE_U", "x")]),
         log1("cached", "foo-abc")
     );
     // one manifest per k1: the latest store wins
     assert_eq!(
-        run(&[("JIG_T", "a")]),
-        log1("compiled", "foo-abc env-changed:JIG_T")
+        run(&[("EKACACHE_T", "a")]),
+        log1("compiled", "foo-abc env-changed:EKACACHE_T")
     );
 }
 
@@ -597,7 +603,10 @@ fn key_environment() {
         assert_eq!(k1_with(&[(var, "")]), k1, "{var}");
     }
     // anything else is not in k1
-    assert_eq!(k1_with(&[("CARGO_PKG_AUTHORS", "x"), ("JIG_T", "1")]), k1);
+    assert_eq!(
+        k1_with(&[("CARGO_PKG_AUTHORS", "x"), ("EKACACHE_T", "1")]),
+        k1
+    );
     // Q-RS-6: a glued -L is in the key, a separate one is not
     let mut a = ws.lib_args(&["-L", "dependency=/x"]);
     ws.wrap(&d.sock, &a, &[]);
@@ -614,7 +623,7 @@ fn key_environment() {
         ws.root.join("bin2/rustc").into_os_string(),
     ];
     argv.extend_from_slice(&args);
-    ws.jig(&d.sock, &argv, &[]);
+    ws.ec(&d.sock, &argv, &[]);
     assert_eq!(k1_of(&d.take_log()), k1);
     // a bare name is resolved on PATH
     let mut argv = vec![OsString::from("rustcwrap"), OsString::from("rustc")];
@@ -624,7 +633,7 @@ fn key_environment() {
         ws.p("bin"),
         std::env::var("PATH").unwrap_or_default()
     );
-    ws.jig(&d.sock, &argv, &[("PATH", &path)]);
+    ws.ec(&d.sock, &argv, &[("PATH", &path)]);
     assert_eq!(k1_of(&d.take_log()), k1);
     take_log(&ws.log);
 }
@@ -640,7 +649,7 @@ fn removed_cwd_aborts() {
     let mut args = ws.lib_args(&[]);
     args[3] = OsString::from(ws.p("src/lib.rs"));
     let mut script = format!(
-        "cd '{0}' && rmdir '{0}' && exec '{JIG}' rustcwrap '{1}'",
+        "cd '{0}' && rmdir '{0}' && exec '{EC}' rustcwrap '{1}'",
         gone.display(),
         ws.rustc.display()
     );
@@ -709,9 +718,9 @@ fn cargo_workspace_twice() {
         std::fs::write(p, text).unwrap();
     }
     let wrapper = root.join("rustcwrap");
-    symlink(JIG, &wrapper).unwrap();
+    symlink(EC, &wrapper).unwrap();
     let d = Server::fake();
-    let log = root.join("jig.log");
+    let log = root.join("ec.log");
     let build = |wrap: bool| {
         let _ = std::fs::remove_dir_all(w.join("target"));
         let mut cmd = Command::new("cargo");
@@ -723,8 +732,8 @@ fn cargo_workspace_twice() {
             .env("CARGO_HOME", root.join("cargo-home"))
             .env("CARGO_INCREMENTAL", "0")
             .env("CARGO_TERM_COLOR", "never")
-            .env("JIG_SOCK", &d.sock)
-            .env("JIG_LOG", &log);
+            .env("EKACACHE_SOCK", &d.sock)
+            .env("EKACACHE_LOG", &log);
         if wrap {
             cmd.env("RUSTC_WRAPPER", &wrapper);
         }
@@ -769,7 +778,7 @@ fn cargo_workspace_twice() {
     );
     // macOS defaults to `split-debuginfo=unpacked`, which leaves each crate's object files next
     // to its rlib. rustc does not name them in dep-info, and only dep-info outputs are stored
-    // (behaviors/jig-rustc.md §Output blob), so a hit does not bring them back. The linked binary
+    // (behaviors/ec-rustc.md §Output blob), so a hit does not bring them back. The linked binary
     // is still identical.
     let mut plain = plain;
     if cfg!(target_vendor = "apple") {

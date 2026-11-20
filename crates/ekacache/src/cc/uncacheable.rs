@@ -1,4 +1,4 @@
-//! The adopted uncacheable rules A–D (`behaviors/jig-cc-mode.md §Additional uncacheable cases`,
+//! The adopted uncacheable rules A–D (`behaviors/ec-cc-mode.md §Additional uncacheable cases`,
 //! Q-CC-12..16, signed off 2026-11-17). The C++ jig caches all of these.
 //!
 //! A, B and D are matched against the user arguments after response-file expansion (not the

@@ -1,7 +1,7 @@
 //! C++ `std::filesystem::path` lexical semantics (POSIX, libstdc++) on byte strings.
 //!
-//! Specified by `behaviors/jig-reloc-fixup.md §Conventions used in this document` (path
-//! operations) and `behaviors/jig-keys.md §NormalizePathArg` step 4. Rust's `Path` normalises
+//! Specified by `behaviors/ec-reloc-fixup.md §Conventions used in this document` (path
+//! operations) and `behaviors/ec-keys.md §NormalizePathArg` step 4. Rust's `Path` normalises
 //! differently (trailing `/`, `..` past the root, empty components), so cc, rustc and
 //! reloc-fixup use these functions instead.
 
@@ -255,7 +255,7 @@ mod tests {
             ("a.", "a.d"),
             ("dir/", "dir/.d"),
             ("..", "...d"),
-            ("/tmp/jig1.i", "/tmp/jig1.d"),
+            ("/tmp/ekacache1.i", "/tmp/ekacache1.d"),
             ("a.b/c", "a.b/c.d"),
             ("", ".d"),
         ] {
@@ -459,8 +459,8 @@ mod weakly_canonical_tests {
             ("/".to_owned(), "/".to_owned()),
             (String::new(), String::new()),
             (
-                "jig-nonexistent-rel/a/../b".to_owned(),
-                "jig-nonexistent-rel/b".to_owned(),
+                "ec-nonexistent-rel/a/../b".to_owned(),
+                "ec-nonexistent-rel/b".to_owned(),
             ),
         ] {
             assert_eq!(wc(&input), Some(want), "weakly_canonical({input:?})");

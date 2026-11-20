@@ -3,7 +3,7 @@
 #   nix-build -A ekacache     # bin/ec and the mode symlink farm in libexec/ekacache; ecd in .ekacached
 #   nix-build -A ekacached    # bin/ecd
 #
-# JIG_STORE_DIR is a build-time constant of ec (keys and the default socket derive from it), so
+# EKACACHE_STORE_DIR is a build-time constant of ec (keys and the default socket derive from it), so
 # it is the store this package is built for: builtins.storeDir.
 {
   pkgs ? import <nixpkgs> { },
@@ -12,7 +12,7 @@ let
   inherit (pkgs) lib;
   fs = lib.fileset;
 
-  # names ec answers to through argv[0] (behaviors/jig-dispatch.md §Mode selection): the
+  # names ec answers to through argv[0] (behaviors/ec-dispatch.md §Mode selection): the
   # non-cc modes, and the compiler names cc mode takes its language from
   modes = [
     "cache"
@@ -59,7 +59,7 @@ let
     nativeBuildInputs = [ pkgs.pkg-config ];
     buildInputs = [ pkgs.zstd ];
 
-    env.JIG_STORE_DIR = builtins.storeDir;
+    env.EKACACHE_STORE_DIR = builtins.storeDir;
 
     cargoBuildFlags = [
       "-p"
@@ -68,7 +68,7 @@ let
       "ekacached"
     ];
     # the whole workspace; the real-compiler tests skip themselves without
-    # JIG_TEST_GCC/JIG_TEST_CLANG
+    # EKACACHE_TEST_GCC/EKACACHE_TEST_CLANG
     cargoTestFlags = [ "--workspace" ];
 
     postInstall = ''

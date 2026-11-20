@@ -1,4 +1,4 @@
-//! `IDS` identities (`behaviors/jigd-identities.md`): `legacy/jigd/identity_test.go` ported, and
+//! `IDS` identities (`behaviors/ecd-identities.md`): `legacy/jigd/identity_test.go` ported, and
 //! the edges of the algorithm (store prefix, `Clean`, symlinks, file types, the memo).
 
 // helpers outside #[test] fns: a panic is the failure report
@@ -20,11 +20,11 @@ fn s(p: &[u8]) -> String {
     String::from_utf8_lossy(p).into_owned()
 }
 
-/// `behaviors/jigd-identities.md §The identity value` test vectors, from
-/// `tests/vectors/jigd-identities.toml` (`implementation/12-testing.md §L1: spec vectors`).
+/// `behaviors/ecd-identities.md §The identity value` test vectors, from
+/// `tests/vectors/ecd-identities.toml` (`implementation/12-testing.md §L1: spec vectors`).
 #[test]
 fn identity_value_vectors() {
-    let file = ekacache_testkit::vectors::VectorFile::load("jigd-identities");
+    let file = ekacache_testkit::vectors::VectorFile::load("ecd-identities");
     let store = tempfile::tempdir().unwrap();
     let ids = Identities::new(&b(store.path()));
     for (i, v) in file.of_kind("identity", 2).into_iter().enumerate() {
@@ -41,12 +41,12 @@ fn identity_value_vectors() {
 
 /// `TestIdentityMatchesJigAndTracksRewrites`.
 #[test]
-fn identity_matches_jig_and_tracks_rewrites() {
+fn identity_matches_ec_and_tracks_rewrites() {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("h.h");
     std::fs::write(&path, b"abc").unwrap();
     let ids = Identities::new(&b(dir.path()));
-    // jig: "C:" + Digest(HashOf("abc")).hex(), BLAKE3 truncated to 128 bits
+    // ec: "C:" + Digest(HashOf("abc")).hex(), BLAKE3 truncated to 128 bits
     assert_eq!(s(&ids.of(&b(&path))), s(ABC));
     assert_eq!(s(&ids.of(&b(&path))), s(ABC), "memoised lookup");
     assert_eq!(ids.len(), 1);

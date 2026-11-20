@@ -6,10 +6,10 @@ use std::path::{Path, PathBuf};
 use std::process::{Child, Command};
 use std::time::{Duration, Instant};
 
-/// The Rust jig under test.
-pub const JIG: &str = env!("CARGO_BIN_EXE_ec");
+/// The Rust ec under test.
+pub const EC: &str = env!("CARGO_BIN_EXE_ec");
 
-/// A running jigd, killed on drop.
+/// A running ecd, killed on drop.
 pub struct Daemon {
     child: Child,
     pub sock: PathBuf,
@@ -41,14 +41,14 @@ pub fn start(bin: &Path) -> Daemon {
     let child = Command::new(bin)
         .arg(&sock)
         .env("XDG_CACHE_HOME", dir.path().join("cache"))
-        .env("JIGD_SLOTS", "2")
+        .env("EKACACHED_SLOTS", "2")
         .stderr(std::process::Stdio::null())
         .spawn()
         .unwrap();
     let t = Instant::now();
     // the socket file can exist before listen() returns; wait until it accepts
     while std::os::unix::net::UnixStream::connect(&sock).is_err() {
-        assert!(t.elapsed() < Duration::from_secs(20), "jigd did not start");
+        assert!(t.elapsed() < Duration::from_secs(20), "ecd did not start");
         std::thread::sleep(Duration::from_millis(20));
     }
     Daemon { child, sock, dir }

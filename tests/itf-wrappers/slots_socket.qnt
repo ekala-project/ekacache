@@ -2,7 +2,7 @@
 /**
  * spec/slots.qnt (module `slots`) for the socket replay in crates/ekacached/tests/slots_itf.rs.
  *
- * jigd drains a closed connection in one go: its deferred cleanup releases every token before
+ * ecd drains a closed connection in one go: its deferred cleanup releases every token before
  * anything else on that connection happens, while the model's `drainOne` steps may interleave
  * with other connections' requests. `socketStep` takes the same actions, but while a
  * connection is draining only `drainOne` of a draining connection may run. Every `socketStep`

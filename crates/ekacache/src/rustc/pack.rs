@@ -1,4 +1,4 @@
-//! The `o/<k2>` blob of rustc mode (`behaviors/jig-rustc-mode.md §Output blob`,
+//! The `o/<k2>` blob of rustc mode (`behaviors/ec-rustc-mode.md §Output blob`,
 //! `rustc_mode.cc:83-123`): one `<name> <octal mode> <size>\n<bytes>` record per output.
 
 use std::os::unix::fs::PermissionsExt;

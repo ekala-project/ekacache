@@ -1,5 +1,5 @@
 //! Replay of `spec/slots.qnt` (module `slots`) ITF traces against [`ekacached::slots::Slots`]
-//! (`behaviors/jigd-slots.md` §State, §Operations, §Per-connection bookkeeping;
+//! (`behaviors/ecd-slots.md` §State, §Operations, §Per-connection bookkeeping;
 //! implementation/03 §SLOT with cancellation; the model has adopted Q-SLOT-1 on:
 //! `CANCEL_ABANDONED = true`).
 //!
@@ -28,7 +28,7 @@
 //! state may queue a waiter whose peer is gone (`witnessAbandonedWaiterGranted`, unreachable
 //! under the adopted `CANCEL_ABANDONED`).
 //!
-//! `slots_socket_traces_replay` replays the same model through a real jigd (`common::InProc`
+//! `slots_socket_traces_replay` replays the same model through a real ecd (`common::InProc`
 //! with `LIMIT` slots) over its socket, one connection per model connection, from traces of
 //! `tests/itf-wrappers/slots_socket.qnt`:
 //!
@@ -43,9 +43,9 @@
 //! the model moves from `Blocked` to `Idle` must then get its `OK`. Whenever no connection is
 //! draining, the server's pool (tokens out, per-build counts, queued builds in order) must come
 //! to the model's. Where the socket replay and the model differ in form only:
-//!  - jigd drains a closed connection at once, so the wrapper runs `drainOne` steps right after
+//!  - ecd drains a closed connection at once, so the wrapper runs `drainOne` steps right after
 //!    `peerCloses`, and the pool is compared only once the drain is over;
-//!  - jigd releases a closed connection's tokens in build order (its `held` is a `BTreeMap`),
+//!  - ecd releases a closed connection's tokens in build order (its `held` is a `BTreeMap`),
 //!    where the model's `drainOne` picks any build. With nobody queued the order changes
 //!    nothing; a trace whose drain takes another order while a waiter is queued is replayed up
 //!    to that step and counted.
@@ -483,7 +483,7 @@ impl Sock {
         }
     }
 
-    /// False when the model drains in an order jigd does not.
+    /// False when the model drains in an order ecd does not.
     fn step(&mut self, action: &str, st: &State, pre: &Model, post: &Model) -> Res<bool> {
         // quint names a step by the action under its `any`; the wrapper's drain branch has none
         let action = if action == "socketStep" {

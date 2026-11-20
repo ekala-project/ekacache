@@ -1,4 +1,4 @@
-//! Writing: `Put`, `rotate`, `seal`, and the active pack at `Close` (`jigd-store.md` §Writing,
+//! Writing: `Put`, `rotate`, `seal`, and the active pack at `Close` (`ecd-store.md` §Writing,
 //! §Close; adopted Q-STORE-1, Q-STORE-2, Q-STORE-7; Q-STORE-11, Q-STORE-12 kept).
 
 use std::fs::File;

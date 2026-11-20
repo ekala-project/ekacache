@@ -1,5 +1,5 @@
-//! File identities for `IDS` (`behaviors/jigd-identities.md` §The identity value,
-//! §Configuration, §Algorithm, §The memo; `implementation/03-jigd-server.md` §Identities).
+//! File identities for `IDS` (`behaviors/ecd-identities.md` §The identity value,
+//! §Configuration, §Algorithm, §The memo; `implementation/03-ecd-server.md` §Identities).
 //!
 //! An identity is `C:` + the first 128 bits of BLAKE3 over the file, in lowercase hex, for a
 //! regular file that really lies under the store, and `""` for anything else. Errors are never

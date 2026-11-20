@@ -1,4 +1,4 @@
-//! The builder-rpc-v0 client (`behaviors/jig-nix-store.md §Socket`, `§Handshake`, `§Stderr drain
+//! The builder-rpc-v0 client (`behaviors/ec-nix-store.md §Socket`, `§Handshake`, `§Stderr drain
 //! loop`, `§AddToStore (op 7)`, `§SubmitOutput (op 1000)`, `§Client state-transition table`;
 //! `spec/builder_rpc.qnt`).
 //!

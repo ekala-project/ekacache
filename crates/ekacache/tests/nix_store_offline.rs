@@ -1,4 +1,4 @@
-//! `ec nix-store` with `JIG_NIX_STORE_OFFLINE` (`behaviors/ec-nix-store.md §Test vectors`
+//! `ec nix-store` with `EKACACHE_NIX_STORE_OFFLINE` (`behaviors/ec-nix-store.md §Test vectors`
 //! [bin] and `§CLI behavior`, `§Derivations`, Q-NIX-3/4/5/13/14/16/17). No daemon is ever
 //! contacted.
 #![allow(clippy::unwrap_used)]
@@ -17,10 +17,10 @@ fn offline(args: &[&[u8]], stdin: &[u8]) -> Outcome {
 }
 
 fn vectors() -> VectorFile {
-    VectorFile::load("jig-nix-store")
+    VectorFile::load("ec-nix-store")
 }
 
-/// §Text paths [bin]: the `text-path` rows of `tests/vectors/jig-nix-store.toml`.
+/// §Text paths [bin]: the `text-path` rows of `tests/vectors/ec-nix-store.toml`.
 #[test]
 fn text_path_vectors() {
     for v in vectors().of_kind("text-path", 6) {
@@ -121,7 +121,7 @@ fn offline_is_a_non_empty_test() {
     for value in [&b"1"[..], b"0", b"false", b"no", b" ", b"\xff"] {
         let inv = Inv::new(&[&b"add-text"[..], b"hello.txt"])
             .stdin(b"hello")
-            .env("JIG_NIX_STORE_OFFLINE", value);
+            .env("EKACACHE_NIX_STORE_OFFLINE", value);
         let o = check(&inv, &[]);
         assert!(!o.connected);
         o.assert_prints(b"/nix/store/q790zdjk75hm2cn42nh77pqw4gbv1b88-hello.txt");
@@ -129,7 +129,7 @@ fn offline_is_a_non_empty_test() {
     // offline needs no NIX_REMOTE at all
     let inv = Inv::new(&[&b"submit"[..], b"p", b"o"])
         .remote(Remote::Unset)
-        .env("JIG_NIX_STORE_OFFLINE", b"0");
+        .env("EKACACHE_NIX_STORE_OFFLINE", b"0");
     check(&inv, &[]).assert_fails(0, &[]);
 }
 

@@ -1,6 +1,6 @@
 //! The connection's buffers, with Go `bufio` semantics where they show through
-//! (`behaviors/jigd-protocol.md` §Request lines, §Replies and flushing, §IDS, Q-PROTO-5,
-//! Q-PROTO-11; `implementation/03-jigd-server.md` §Exact-buffer emulation).
+//! (`behaviors/ecd-protocol.md` §Request lines, §Replies and flushing, §IDS, Q-PROTO-5,
+//! Q-PROTO-11; `implementation/03-ecd-server.md` §Exact-buffer emulation).
 //!
 //! - [`LineReader`] is `bufio.NewReaderSize(conn, 1<<16)` with `ReadSlice('\n')`: a line must fit
 //!   the 65 536-byte buffer with its `\n`; the 65 536th byte without one is a hang-up, and a

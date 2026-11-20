@@ -1,8 +1,8 @@
 //! The bitcask pack store: append-only packs, an in-memory index, hint files for sealed packs,
 //! tiers with byte budgets, the demoter, and crash recovery.
 //!
-//! Specified by `behaviors/jigd-store.md` (all of it) and `spec/store.qnt`; plan
-//! `implementation/04-jigd-store.md`. Adopted changes implemented here: Q-STORE-1 (hints sorted
+//! Specified by `behaviors/ecd-store.md` (all of it) and `spec/store.qnt`; plan
+//! `implementation/04-ecd-store.md`. Adopted changes implemented here: Q-STORE-1 (hints sorted
 //! by record offset), Q-STORE-2 (empty packs dropped at open and close), Q-STORE-5 (demoter
 //! kicked at open), Q-STORE-7 (fsync on seal and demotion).
 //!
@@ -263,7 +263,7 @@ impl Store {
         let demoter = rx.map(|rx| {
             let s = Arc::clone(&shared);
             std::thread::Builder::new()
-                .name("jigd-demoter".into())
+                .name("ecd-demoter".into())
                 .spawn(move || demote::demoter(&s, &rx))
         });
         let demoter = match demoter {

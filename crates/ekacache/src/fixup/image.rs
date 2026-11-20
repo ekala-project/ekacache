@@ -1,4 +1,4 @@
-//! The bounds-checked view of a binary held in memory (`behaviors/jig-reloc-fixup.md
+//! The bounds-checked view of a binary held in memory (`behaviors/ec-reloc-fixup.md
 //! §Conventions used in this document`, *Image primitives*; `fixup_mode.h` `BinaryImage`).
 //!
 //! Every read and write of A5/A6 goes through these primitives with an explicit offset, so the
@@ -158,10 +158,10 @@ mod tests {
     }
 
     /// `TestBinaryImage` (`legacy/jig/src/jig_test.cc:500`): the `binary-image` rows of
-    /// `tests/vectors/jig-reloc-fixup.toml` (§Test vectors, *From `TestBinaryImage`*).
+    /// `tests/vectors/ec-reloc-fixup.toml` (§Test vectors, *From `TestBinaryImage`*).
     #[test]
     fn test_binary_image() {
-        let file = ekacache_testkit::vectors::VectorFile::load("jig-reloc-fixup");
+        let file = ekacache_testkit::vectors::VectorFile::load("ec-reloc-fixup");
         let mut steps = 0;
         for v in file.of_kind("binary-image", 2) {
             let mut bytes = v.hex("image_hex");

@@ -6,7 +6,7 @@
 #   store          crates/ekacached/tests/store_itf.rs
 #   slots          crates/ekacached/tests/slots_itf.rs (in-process)
 #   slots_socket   crates/ekacached/tests/slots_itf.rs (over ecd's socket)
-#   jigd_protocol  crates/ekacached/tests/protocol_itf.rs (and its long-trace wrapper)
+#   ecd_protocol  crates/ekacached/tests/protocol_itf.rs (and its long-trace wrapper)
 #   twokey         crates/ekacache/tests/twokey_itf.rs
 #
 #   QUINT=/path/to/quint scripts/gen-itf.sh     # quint 0.33.1; nixpkgs may carry an older one
@@ -32,9 +32,9 @@ gen slots --main=slots spec/slots.qnt --invariant=safety \
   --n-traces=200 --max-steps=60 --max-samples=200
 gen slots_socket tests/itf-wrappers/slots_socket.qnt --step=socketStep --invariant=safety \
   --n-traces=200 --max-steps=60 --max-samples=200
-gen jigd_protocol spec/jigd_protocol.qnt --invariant=safety \
+gen ecd_protocol spec/ecd_protocol.qnt --invariant=safety \
   --n-traces=300 --max-steps=40 --max-samples=300
-gen jigd_protocol_long tests/itf-wrappers/jigd_protocol_long.qnt --step=longStep --invariant=safety \
+gen ecd_protocol_long tests/itf-wrappers/ecd_protocol_long.qnt --step=longStep --invariant=safety \
   --n-traces=200 --max-steps=60 --max-samples=200
 gen twokey spec/twokey.qnt --invariant=sound \
   --n-traces=300 --max-steps=30 --max-samples=300

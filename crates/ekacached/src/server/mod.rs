@@ -1,6 +1,6 @@
-//! The socket server: the accept loop and one task per connection (`behaviors/jigd-protocol.md`
-//! all of it, `jigd-slots.md` §Per-connection bookkeeping, `jigd-daemon.md` §Signals and shutdown
-//! (Q-DAEMON-5 kept); `implementation/03-jigd-server.md` §Connection task, §Commands, §SLOT with
+//! The socket server: the accept loop and one task per connection (`behaviors/ecd-protocol.md`
+//! all of it, `ecd-slots.md` §Per-connection bookkeeping, `ecd-daemon.md` §Signals and shutdown
+//! (Q-DAEMON-5 kept); `implementation/03-ecd-server.md` §Connection task, §Commands, §SLOT with
 //! cancellation).
 //!
 //! A connection reads one line, dispatches it on verb and field count
@@ -155,9 +155,9 @@ struct Conn<'a> {
 /// On the multi-thread runtime (the daemon's) this is `block_in_place`. The worker hands its
 /// queue to a fresh thread and runs `f` itself, so a slow call (the fsync of a seal, a read
 /// from the cold tier) delays no other task. The thread count stays under the same
-/// blocking-pool cap. The plan names `spawn_blocking` (`implementation/03-jigd-server.md`
+/// blocking-pool cap. The plan names `spawn_blocking` (`implementation/03-ecd-server.md`
 /// §Runtime shape), which costs two thread hand-offs per call. With it, a 4 KiB GET or PUT
-/// round trip took about 22 µs, against 15 µs for Go's jigd. `block_in_place` brings that to
+/// round trip took about 22 µs, against 15 µs for Go's ecd. `block_in_place` brings that to
 /// about 13 µs, and a pipelined GET from 12 µs to 4 µs (Go: 7 µs). Anywhere else (a
 /// current-thread runtime, where `block_in_place` panics), it is still `spawn_blocking`.
 async fn blocking<T: Send + 'static>(f: impl FnOnce() -> T + Send + 'static) -> Option<T> {

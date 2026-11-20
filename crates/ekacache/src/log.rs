@@ -1,4 +1,4 @@
-//! `$JIG_LOG` and `$JIG_LOG_ARGS` (`behaviors/jig-dispatch.md §Logging`, `base.cc:293-328`,
+//! `$EKACACHE_LOG` and `$EKACACHE_LOG_ARGS` (`behaviors/ec-dispatch.md §Logging`, `base.cc:293-328`,
 //! `cc_mode.cc:434-443`).
 //!
 //! Each line is appended with one `write` to a file opened `O_WRONLY|O_APPEND|O_CREAT`, mode
@@ -82,10 +82,10 @@ fn append(path: &[u8], line: &[u8]) {
 }
 
 /// `LogOutcome(tool, outcome, subject, clock)`: `<tool>\t<outcome>\t<subject>\t<ms>\n` to
-/// `$JIG_LOG` when set and non-empty. jig never changes `JIG_LOG`, so reading it per call is the
+/// `$EKACACHE_LOG` when set and non-empty. ec never changes `EKACACHE_LOG`, so reading it per call is the
 /// same as legacy's read-once `static`.
 pub fn outcome(env: &ProcEnv, tool: &str, outcome: Outcome, subject: &[u8], clock: &Stopwatch) {
-    let Some(path) = env.non_empty("JIG_LOG") else {
+    let Some(path) = env.non_empty("EKACACHE_LOG") else {
         return;
     };
     let mut line = Vec::with_capacity(subject.len() + 40);
@@ -100,10 +100,10 @@ pub fn outcome(env: &ProcEnv, tool: &str, outcome: Outcome, subject: &[u8], cloc
     append(path, &line);
 }
 
-/// `LogArgs` (cc only): `<outcome>\t<user args joined by " ">\n` to `$JIG_LOG_ARGS` when set and
+/// `LogArgs` (cc only): `<outcome>\t<user args joined by " ">\n` to `$EKACACHE_LOG_ARGS` when set and
 /// non-empty, except for queries.
 pub fn args<A: AsRef<[u8]>>(env: &ProcEnv, outcome: Outcome, user_args: &[A]) {
-    let Some(path) = env.non_empty("JIG_LOG_ARGS") else {
+    let Some(path) = env.non_empty("EKACACHE_LOG_ARGS") else {
         return;
     };
     if outcome == Outcome::PlainQuery {
@@ -116,9 +116,9 @@ pub fn args<A: AsRef<[u8]>>(env: &ProcEnv, outcome: Outcome, user_args: &[A]) {
     append(path, &line);
 }
 
-/// ADOPTED Q-CLIENT-2: `jig: cache put <key> failed`, on stderr.
+/// ADOPTED Q-CLIENT-2: `ec: cache put <key> failed`, on stderr.
 pub fn put_failed(key: &[u8]) {
-    let mut msg = b"jig: cache put ".to_vec();
+    let mut msg = b"ec: cache put ".to_vec();
     msg.extend_from_slice(key);
     msg.extend_from_slice(b" failed\n");
     let _ = std::io::stderr().write_all(&msg);
@@ -151,8 +151,8 @@ mod tests {
         let log = dir.path().join("log");
         let la = dir.path().join("args");
         let env = ProcEnv::new(Env::from_pairs(&[
-            ("JIG_LOG", log.to_str().unwrap()),
-            ("JIG_LOG_ARGS", la.to_str().unwrap()),
+            ("EKACACHE_LOG", log.to_str().unwrap()),
+            ("EKACACHE_LOG_ARGS", la.to_str().unwrap()),
         ]));
         let clock = Stopwatch::start();
         outcome(&env, "cc", Outcome::Hit, b"a.c", &clock);
@@ -167,7 +167,7 @@ mod tests {
         args(&env, Outcome::PlainLink, &[&b"-o"[..], b"x", b"a.o"]);
         assert_eq!(std::fs::read(&la).unwrap(), b"linked\t-o x a.o\n");
         // unset or empty: nothing
-        let env = ProcEnv::new(Env::from_pairs(&[("JIG_LOG", "")]));
+        let env = ProcEnv::new(Env::from_pairs(&[("EKACACHE_LOG", "")]));
         outcome(&env, "cc", Outcome::Hit, b"a.c", &clock);
     }
 }

@@ -1,5 +1,5 @@
-//! The cc request key k1 (`behaviors/jig-cc-mode.md §Request key (k1)`,
-//! `behaviors/jig-keys.md §k1 field sequences`, `cc_mode.cc:98-128`).
+//! The cc request key k1 (`behaviors/ec-cc-mode.md §Request key (k1)`,
+//! `behaviors/ec-keys.md §k1 field sequences`, `cc_mode.cc:98-128`).
 
 use ekacache_core::bytes::contains;
 use ekacache_core::hasher::Hasher;

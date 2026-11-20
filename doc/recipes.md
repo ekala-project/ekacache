@@ -1,12 +1,10 @@
 # Recipes
 
-## Fix a mismatch with legacy
+## Fix a mismatch with the spec
 
 1. Find the behaviour doc section and any `Q-…` quirk that covers the case.
-2. If the doc and legacy disagree, or the doc doesn't cover the case, stop and report. Don't
-   guess.
-3. Reproduce the case as a test. Use a differential test (`*difftest*.rs` or `legacy_jig.rs`)
-   when legacy can run it, and a vector or unit test otherwise.
+2. If the doc doesn't cover the case, stop and report. Don't guess.
+3. Reproduce the case as a test: a vector or a unit or integration test.
 4. Fix the code and mark quirk lines with `// Q-AREA-n`.
 
 ## Add or change intended behaviour
@@ -15,21 +13,12 @@ Behaviour changes need sign-off. Once a change is adopted:
 
 1. Add a row to [behaviors/README.md §Adopted changes](../behaviors/README.md) and update the
    doc that specifies the behaviour.
-2. Add a `[[rule]]` to [`tests/difftest/allow.toml`](../tests/difftest/allow.toml) that names
-   the row and the tests.
-3. Write the tests, and mark the line in the differential test where the rule applies with
-   `ADOPTED Q-…`.
-4. Run `scripts/check-allow-list.sh`.
+2. Write the tests, and mark the lines that implement the change with `ADOPTED Q-…`.
 
 ## Add a test vector
 
 Vectors from a behaviour doc go in `tests/vectors/<doc>.toml`. Each entry's `section` names
 the doc heading it comes from. `scripts/check-vectors.sh` checks the coverage.
-
-## Port a legacy test
-
-A C++ `TestFooBar` or Go `TestFooBar` becomes `fn test_foo_bar` or `fn foo_bar` somewhere under
-`crates/`. `scripts/check-legacy-ports.sh` lists any that are missing.
 
 ## Touch concurrent code (slots, store, protocol, two-key, gocache, builder RPC)
 
@@ -49,8 +38,8 @@ A C++ `TestFooBar` or Go `TestFooBar` becomes `fn test_foo_bar` or `fn foo_bar` 
 
 - [implementation/STATUS.md](../implementation/STATUS.md): known differences, decisions and
   results.
-- The legacy source in `legacy/`: behaviour docs cite it as `jig/src/x.cc:line`, which now
-  lives at `legacy/jig/src/x.cc`.
+- The original jig/jigd source: behaviour docs cite it as `jig/src/x.cc:line`. It was removed
+  from this repository; the last commit with it under `legacy/` is `86ea083`.
 - [behaviors/environment.md](../behaviors/environment.md): every environment variable.
 - [behaviors/ecosystems.md](../behaviors/ecosystems.md): how other toolchains interact with the
   cache.

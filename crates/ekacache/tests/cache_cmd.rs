@@ -1,5 +1,5 @@
-//! `jig cache …` and `jig slot …` end to end (`behaviors/jig-cache-commands.md`,
-//! `implementation/08-jig-gocache-and-cache-cmds.md §Tests`).
+//! `ec cache …` and `ec slot …` end to end (`behaviors/ec-cache-commands.md`,
+//! `implementation/08-ec-gocache-and-cache-cmds.md §Tests`).
 //!
 //! Tests that need a daemon use `$EC_RUST_ECD` and are skipped without it.
 #![allow(clippy::unwrap_used, clippy::too_many_lines)]
@@ -14,27 +14,27 @@ use std::os::unix::process::ExitStatusExt;
 use std::path::Path;
 use std::process::{Command, Output};
 
-use common::{Daemon, JIG, daemon};
+use common::{Daemon, EC, daemon};
 
 /// A store path whose hash `MaskHashes` recognises.
 const STORE_REF: &str = "/nix/store/0123456789abcdfghijklmnpqrsvwxyz-foo-1.0";
 
-/// Run `bin` with a clean environment: `PATH`, `JIG_SOCK` and `extra`.
+/// Run `bin` with a clean environment: `PATH`, `EKACACHE_SOCK` and `extra`.
 fn run_with(bin: &OsStr, sock: &Path, args: &[&OsStr], extra: &[(&str, &str)]) -> Output {
     let mut cmd = Command::new(bin);
     cmd.args(args)
         .env_clear()
         .env("PATH", std::env::var_os("PATH").unwrap_or_default())
-        .env("JIG_SOCK", sock);
+        .env("EKACACHE_SOCK", sock);
     for (k, v) in extra {
         cmd.env(k, v);
     }
     cmd.output_busy().unwrap()
 }
 
-fn jig(sock: &Path, args: &[&str]) -> Output {
+fn ec(sock: &Path, args: &[&str]) -> Output {
     let args: Vec<&OsStr> = args.iter().map(OsStr::new).collect();
-    run_with(OsStr::new(JIG), sock, &args, &[])
+    run_with(OsStr::new(EC), sock, &args, &[])
 }
 
 fn cache(
@@ -59,7 +59,7 @@ fn cache(
 }
 
 fn rust() -> &'static OsStr {
-    OsStr::new(JIG)
+    OsStr::new(EC)
 }
 
 fn need_daemon() -> Option<Daemon> {
@@ -80,14 +80,14 @@ fn argument_count_and_no_daemon() {
         &["cache", "get", "k"],
         &["cache", "put", "k", "f", "x"],
     ] {
-        let o = jig(&nosock, args);
+        let o = ec(&nosock, args);
         assert_eq!(o.status.code(), Some(1), "{args:?}");
         assert!(o.stdout.is_empty() && o.stderr.is_empty());
     }
     // no daemon: 2, before the file or directory is touched
     for verb in ["get", "put", "typo", "put-dir", "get-dir"] {
         let target = dir.path().join("absent");
-        let o = jig(&nosock, &["cache", verb, "k", target.to_str().unwrap()]);
+        let o = ec(&nosock, &["cache", verb, "k", target.to_str().unwrap()]);
         assert_eq!(o.status.code(), Some(2), "{verb}");
         assert!(o.stdout.is_empty() && o.stderr.is_empty());
         assert!(!target.exists());
@@ -98,34 +98,34 @@ fn argument_count_and_no_daemon() {
 fn slot_without_daemon() {
     let dir = tempfile::tempdir().unwrap();
     let nosock = dir.path().join("nosock");
-    let o = jig(&nosock, &["slot"]);
+    let o = ec(&nosock, &["slot"]);
     assert_eq!(o.status.code(), Some(2));
-    assert_eq!(o.stderr, b"usage: jig slot <program> [args...]\n");
+    assert_eq!(o.stderr, b"usage: ec slot <program> [args...]\n");
     // no daemon: run without a slot; the status passes through, PATH is searched
-    let o = jig(
+    let o = ec(
         &nosock,
-        &["slot", "sh", "-c", "echo \"[$JIG_SLOT]\"; exit 3"],
+        &["slot", "sh", "-c", "echo \"[$EKACACHE_SLOT]\"; exit 3"],
     );
     assert_eq!(o.status.code(), Some(3));
     assert_eq!(o.stdout, b"[]\n");
     // Q-DIR-7 kept: exec failure is a silent 127
-    let o = jig(&nosock, &["slot", "/nonexistent/prog"]);
+    let o = ec(&nosock, &["slot", "/nonexistent/prog"]);
     assert_eq!(o.status.code(), Some(127));
     assert!(o.stderr.is_empty());
-    let o = jig(&nosock, &["slot", "sh", "-c", "kill -TERM $$"]);
+    let o = ec(&nosock, &["slot", "sh", "-c", "kill -TERM $$"]);
     assert_eq!(o.status.code(), Some(128 + 15));
 }
 
 #[test]
 fn slot_with_daemon() {
     let Some(d) = need_daemon() else { return };
-    let o = jig(
+    let o = ec(
         &d.sock,
-        &["slot", "sh", "-c", "echo \"[$JIG_SLOT]\"; exit 4"],
+        &["slot", "sh", "-c", "echo \"[$EKACACHE_SLOT]\"; exit 4"],
     );
     assert_eq!(o.status.code(), Some(4));
     assert_eq!(o.stdout, b"[1]\n");
-    // a parent's slot is reused: no SLOT request, JIG_SLOT passes through
+    // a parent's slot is reused: no SLOT request, EKACACHE_SLOT passes through
     let o = run_with(
         rust(),
         &d.sock,
@@ -133,9 +133,9 @@ fn slot_with_daemon() {
             OsStr::new("slot"),
             OsStr::new("sh"),
             OsStr::new("-c"),
-            OsStr::new("echo $JIG_SLOT"),
+            OsStr::new("echo $EKACACHE_SLOT"),
         ],
-        &[("JIG_SLOT", "x")],
+        &[("EKACACHE_SLOT", "x")],
     );
     assert_eq!(o.stdout, b"x\n");
 }
@@ -152,10 +152,10 @@ fn blobs() {
     // any verb but put/put-dir/get-dir is get (Q-DIR-6 kept); `-` is a file name
     for (verb, name) in [("get", "out"), ("fetch", "-")] {
         let dst = dir.path().join(name);
-        let o = Command::new(JIG)
+        let o = Command::new(EC)
             .args(["cache", verb, "user/key", name])
             .current_dir(dir.path())
-            .env("JIG_SOCK", &d.sock)
+            .env("EKACACHE_SOCK", &d.sock)
             .output_busy()
             .unwrap();
         assert_eq!(o.status.code(), Some(0), "{verb}");
@@ -197,7 +197,7 @@ fn blobs() {
     assert_eq!(o.status.code(), Some(1));
     assert_eq!(
         o.stderr,
-        format!("jig: cache put {long} failed\n").into_bytes()
+        format!("ec: cache put {long} failed\n").into_bytes()
     );
 }
 
@@ -280,7 +280,7 @@ fn tree_round_trip() {
     let files = 306 + usize::from(secret_readable);
     // the duplicates upload twice, unless a batch boundary falls between them
     let first = stderr_lines(&o);
-    let head = format!("jig: put-dir tree/1: {files} files, ");
+    let head = format!("ec: put-dir tree/1: {files} files, ");
     let new: usize = first
         .strip_prefix(&head)
         .unwrap()
@@ -293,7 +293,7 @@ fn tree_round_trip() {
     let o = cache(rust(), &d.sock, "put-dir", "tree/1", &src, &[]);
     assert_eq!(
         stderr_lines(&o),
-        format!("jig: put-dir tree/1: {files} files, 0 new\n")
+        format!("ec: put-dir tree/1: {files} files, 0 new\n")
     );
     // the listing: modes without setuid, symlinks verbatim, no directories
     let lst = dir.path().join("listing");
@@ -325,7 +325,7 @@ fn tree_round_trip() {
     assert_eq!(o.status.code(), Some(0), "{}", stderr_lines(&o));
     assert_eq!(
         stderr_lines(&o),
-        format!("jig: get-dir tree/1: {files} files, 0 missing\n")
+        format!("ec: get-dir tree/1: {files} files, 0 missing\n")
     );
     let mut want = snapshot(&src);
     want.remove("fifo");
@@ -341,16 +341,13 @@ fn tree_round_trip() {
     let empty = dir.path().join("empty_src");
     std::fs::create_dir(&empty).unwrap();
     let o = cache(rust(), &d.sock, "put-dir", "tree/empty", &empty, &[]);
-    assert_eq!(
-        stderr_lines(&o),
-        "jig: put-dir tree/empty: 0 files, 0 new\n"
-    );
+    assert_eq!(stderr_lines(&o), "ec: put-dir tree/empty: 0 files, 0 new\n");
     let nowhere = dir.path().join("nowhere");
     let o = cache(rust(), &d.sock, "get-dir", "tree/empty", &nowhere, &[]);
     assert_eq!(o.status.code(), Some(0));
     assert_eq!(
         stderr_lines(&o),
-        "jig: get-dir tree/empty: 0 files, 0 missing\n"
+        "ec: get-dir tree/empty: 0 files, 0 missing\n"
     );
     assert!(!nowhere.exists());
     // a missing listing: 1, nothing printed or created
@@ -366,7 +363,7 @@ fn content_mode_masks_and_resolves() {
     let src = dir.path().join("src");
     std::fs::create_dir(&src).unwrap();
     std::fs::write(src.join("t"), format!("{STORE_REF}/bin\n")).unwrap();
-    let content = [("JIG_STORE_IDENTITY", "content")];
+    let content = [("EKACACHE_STORE_IDENTITY", "content")];
     let o = cache(rust(), &d.sock, "put-dir", "tree/c", &src, &content);
     assert_eq!(o.status.code(), Some(0));
     // restored without the root: stays masked; with it: mapped back to this build's root
@@ -380,8 +377,8 @@ fn content_mode_masks_and_resolves() {
     );
     let b = dir.path().join("b");
     let env = [
-        ("JIG_STORE_IDENTITY", "content"),
-        ("JIG_STORE_ROOTS", other),
+        ("EKACACHE_STORE_IDENTITY", "content"),
+        ("EKACACHE_STORE_ROOTS", other),
     ];
     let o = cache(rust(), &d.sock, "get-dir", "tree/c", &b, &env);
     assert_eq!(o.status.code(), Some(0));
@@ -444,7 +441,7 @@ fn get_dir_rolls_back_on_a_missing_blob() {
     assert_eq!(o.status.code(), Some(1));
     assert_eq!(
         stderr_lines(&o),
-        "jig: get-dir tree/partial: 3 files, 1 missing\n"
+        "ec: get-dir tree/partial: 3 files, 1 missing\n"
     );
     // everything written by this run is removed (the overwritten `pre` too); directories stay
     let left = snapshot(&dst);
@@ -471,7 +468,7 @@ fn get_dir_trusts_the_listing() {
     assert_eq!(o.status.code(), Some(0), "{}", stderr_lines(&o));
     assert_eq!(
         stderr_lines(&o),
-        "jig: get-dir tree/trust: 3 files, 0 missing\n"
+        "ec: get-dir tree/trust: 3 files, 0 missing\n"
     );
     assert_eq!(std::fs::read(&abs).unwrap(), b"payload\n");
     assert_eq!(std::fs::metadata(&abs).unwrap().mode() & 0o7777, 0o1750);

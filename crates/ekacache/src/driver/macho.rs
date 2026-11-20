@@ -1,5 +1,5 @@
-//! The Mach-O policy (`behaviors/jig-driver-policy.md` A11): dependents record each dylib's
-//! absolute install name, `jig reloc-fixup` respells those `@loader_path`-relative and needs
+//! The Mach-O policy (`behaviors/ec-driver-policy.md` A11): dependents record each dylib's
+//! absolute install name, `ec reloc-fixup` respells those `@loader_path`-relative and needs
 //! header room to do so. Platform-independent text; exercised on macOS in P9.
 
 /// `MachOLink`: every policy link, shared or not.

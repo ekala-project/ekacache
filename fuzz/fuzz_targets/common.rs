@@ -31,7 +31,7 @@ pub fn binary() -> PathBuf {
         .expect("set EC_RUST_EC to a release ec binary")
 }
 
-/// What a run of jig shows: exit status or signal, stdout, stderr.
+/// What a run of ec shows: exit status or signal, stdout, stderr.
 #[derive(Debug, PartialEq, Eq)]
 pub struct Outcome {
     pub code: Option<i32>,
@@ -40,7 +40,7 @@ pub struct Outcome {
     pub stderr: Vec<u8>,
 }
 
-/// Run `bin` as `argv0` (jig dispatches on it) in an empty environment plus `env`.
+/// Run `bin` as `argv0` (ec dispatches on it) in an empty environment plus `env`.
 pub fn run(bin: &Path, argv0: &str, args: &[&[u8]], env: &[(&str, &str)], stdin: &[u8]) -> Outcome {
     use std::os::unix::ffi::OsStrExt;
     use std::os::unix::process::CommandExt;
@@ -52,13 +52,13 @@ pub fn run(bin: &Path, argv0: &str, args: &[&[u8]], env: &[(&str, &str)], stdin:
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
-    let mut child = cmd.spawn().expect("spawn jig");
+    let mut child = cmd.spawn().expect("spawn ec");
     let mut input = child.stdin.take().expect("stdin");
     let data = stdin.to_vec();
     let feeder = std::thread::spawn(move || {
         let _ = input.write_all(&data);
     });
-    let out = child.wait_with_output().expect("wait for jig");
+    let out = child.wait_with_output().expect("wait for ec");
     let _ = feeder.join();
     Outcome {
         code: out.status.code(),
@@ -73,7 +73,7 @@ pub fn run(bin: &Path, argv0: &str, args: &[&[u8]], env: &[(&str, &str)], stdin:
 pub fn assert_no_panic(o: &Outcome) {
     assert!(
         !o.stderr.windows(11).any(|w| w == b"panicked at"),
-        "jig panicked: {}",
+        "ec panicked: {}",
         String::from_utf8_lossy(&o.stderr)
     );
 }

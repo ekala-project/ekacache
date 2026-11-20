@@ -1,4 +1,4 @@
-//! `CompileAndStore` (`behaviors/jig-cc-mode.md §CompileAndStore`, `cc_mode.cc:296-431`): run
+//! `CompileAndStore` (`behaviors/ec-cc-mode.md §CompileAndStore`, `cc_mode.cc:296-431`): run
 //! the real compiler, learn its inputs from the depfiles and the absent-path log, store what is
 //! replayable.
 //!
@@ -30,7 +30,7 @@ struct Observed {
     /// lld's `--dependency-file`, links only.
     link_dep_text: Option<Vec<u8>>,
     inputs: Vec<Vec<u8>>,
-    /// Looked up and not found (the patched clang's `$JIG_ABSENT_LOG`).
+    /// Looked up and not found (the patched clang's `$EKACACHE_ABSENT_LOG`).
     absent: Vec<Vec<u8>>,
 }
 
@@ -70,7 +70,10 @@ fn run_observed(compiler: &[u8], inv: &Invocation, env: &mut ProcEnv) -> Observe
     if out_dir.is_empty() {
         out_dir = b".".to_vec();
     }
-    let tmp_base = fspath::join(&out_dir, format!(".jig{}", std::process::id()).as_bytes());
+    let tmp_base = fspath::join(
+        &out_dir,
+        format!(".ekacache{}", std::process::id()).as_bytes(),
+    );
     let links = inv.links();
     let own_depfile = !inv.wants_depfile && !inv.link;
     let depfile = if own_depfile {
@@ -105,9 +108,9 @@ fn run_observed(compiler: &[u8], inv: &Invocation, env: &mut ProcEnv) -> Observe
         args.push(with_suffix(b"-Wl,--dependency-file=", &link_depfile));
     }
 
-    env.set("JIG_ABSENT_LOG", absent_log.clone());
+    env.set("EKACACHE_ABSENT_LOG", absent_log.clone());
     let run = process::run(compiler, &args, Capture::Stderr, env);
-    env.remove("JIG_ABSENT_LOG");
+    env.remove("EKACACHE_ABSENT_LOG");
     stderr(&run.captured);
     let dep_text = if inv.link {
         Some(Vec::new())
@@ -152,7 +155,7 @@ fn run_observed(compiler: &[u8], inv: &Invocation, env: &mut ProcEnv) -> Observe
 }
 
 /// ADOPTED Q-CLIENT-2: sequential PUTs, each reply checked. The first failure is reported
-/// (`jig: cache put <key> failed`, as in rustc and gocacheprog modes) and the rest are skipped;
+/// (`ec: cache put <key> failed`, as in rustc and gocacheprog modes) and the rest are skipped;
 /// the compile is then logged as not stored.
 struct Puts<'a> {
     client: &'a mut Client,
@@ -178,7 +181,7 @@ fn subject(source: &[u8], tail: &[&[u8]]) -> Vec<u8> {
 }
 
 /// `CompileAndStore(cache, compiler, k1, inv, why)`: the compiler's status, the outcome and the
-/// `$JIG_LOG` subject (`<source> <why>`, or the adopted not-stored subjects:
+/// `$EKACACHE_LOG` subject (`<source> <why>`, or the adopted not-stored subjects:
 /// `<source> not-cached:unreadable:<Key(path)>` (Q-KEY-3) and `<source> incbin` (Q-CC-12)).
 pub fn compile_and_store(
     client: &mut Client,

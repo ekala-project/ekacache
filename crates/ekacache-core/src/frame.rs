@@ -1,7 +1,7 @@
-//! Value framing (`behaviors/jig-cache-client.md §Value encoding`).
+//! Value framing (`behaviors/ec-cache-client.md §Value encoding`).
 //!
-//! Every value jig sends with `PUT` and receives with `GET` is a 4-byte raw length followed by
-//! zstd data. jigd stores the bytes opaquely and never calls into this module.
+//! Every value ec sends with `PUT` and receives with `GET` is a 4-byte raw length followed by
+//! zstd data. ecd stores the bytes opaquely and never calls into this module.
 //!
 //! ADOPTED Q-CLIENT-1: the length header is little-endian on every host (`u32::to_le_bytes`),
 //! byte-identical to the C++ client on all supported hosts.

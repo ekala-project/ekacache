@@ -1,6 +1,6 @@
 //! Used by `rustc_mode.rs`: an ecd stand-in that keeps values in
 //! memory, a recording proxy in front of a real ecd (both log every request an ec makes), the
-//! fake rustc of `fake-rustc.sh`, and helpers to run an ec and read its `$JIG_LOG`.
+//! fake rustc of `fake-rustc.sh`, and helpers to run an ec and read its `$EKACACHE_LOG`.
 #![allow(dead_code, clippy::unwrap_used)]
 
 use ekacache_testkit::busy::CommandBusyExt as _;
@@ -16,8 +16,8 @@ use std::sync::{Arc, Mutex};
 
 use ekacache_core::wire::{Request, parse_request};
 
-/// The Rust jig under test.
-pub const JIG: &str = env!("CARGO_BIN_EXE_ec");
+/// The Rust ec under test.
+pub const EC: &str = env!("CARGO_BIN_EXE_ec");
 
 /// One request as the daemon saw it.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -58,13 +58,13 @@ pub struct Server {
 }
 
 impl Server {
-    /// An in-memory jigd: HELLO → `OK 1`, GET/HAS from memory, PUT stored, IDS answered with
+    /// An in-memory ecd: HELLO → `OK 1`, GET/HAS from memory, PUT stored, IDS answered with
     /// empty lines (no identity), SLOT and DONE → `OK`.
     pub fn fake() -> Self {
         Self::start(None)
     }
 
-    /// A proxy in front of the jigd at `upstream`, which answers everything.
+    /// A proxy in front of the ecd at `upstream`, which answers everything.
     pub fn proxy(upstream: &Path) -> Self {
         Self::start(Some(upstream.to_path_buf()))
     }
@@ -223,7 +223,7 @@ fn serve(stream: UnixStream, conn: usize, st: &Mutex<State>) {
             "IDS" => vec![b'\n'; req.paths.len()],
             "SLOT" | "DONE" => b"OK\n".to_vec(),
             "STATS" => b"OK 0\n".to_vec(),
-            _ => return, // hang up, as jigd does
+            _ => return, // hang up, as ecd does
         };
         drop(s);
         if w.write_all(&reply).is_err() {
@@ -279,7 +279,7 @@ impl Ws {
         let rustc = fake_rustc(&root.join("bin"));
         Self {
             out: root.join("out"),
-            log: root.join("jig.log"),
+            log: root.join("ec.log"),
             rustc_log: root.join("rustc.log"),
             root,
             rustc,
@@ -315,19 +315,19 @@ impl Ws {
         a
     }
 
-    /// `jig <argv…>` (the Rust jig).
-    pub fn jig(&self, sock: &Path, argv: &[OsString], env: &[(&str, &str)]) -> Output {
-        self.jig_as(OsStr::new(JIG), sock, argv, env)
+    /// `ec <argv…>` (the Rust ec).
+    pub fn ec(&self, sock: &Path, argv: &[OsString], env: &[(&str, &str)]) -> Output {
+        self.ec_as(OsStr::new(EC), sock, argv, env)
     }
 
-    /// `jig rustcwrap <fake rustc> <args…>` (the Rust jig).
+    /// `ec rustcwrap <fake rustc> <args…>` (the Rust ec).
     pub fn wrap(&self, sock: &Path, args: &[OsString], env: &[(&str, &str)]) -> Output {
-        self.wrap_as(OsStr::new(JIG), sock, args, env)
+        self.wrap_as(OsStr::new(EC), sock, args, env)
     }
 
     /// `<bin> <argv…>` in the crate directory with the fake rustc's log and
     /// `FAKE_INPUTS=src/m.rs` (overridable).
-    pub fn jig_as(
+    pub fn ec_as(
         &self,
         bin: &OsStr,
         sock: &Path,
@@ -356,7 +356,7 @@ impl Ws {
             self.rustc.clone().into_os_string(),
         ];
         argv.extend_from_slice(args);
-        self.jig_as(bin, sock, &argv, env)
+        self.ec_as(bin, sock, &argv, env)
     }
 
     pub fn rustc_runs(&self) -> usize {
@@ -383,13 +383,13 @@ pub fn fake_rustc(dir: &Path) -> PathBuf {
     path
 }
 
-/// Run `bin args…` in `cwd` with only `PATH`, `JIG_SOCK`, `JIG_LOG` and `env` set.
+/// Run `bin args…` in `cwd` with only `PATH`, `EKACACHE_SOCK`, `EKACACHE_LOG` and `env` set.
 pub fn run_in(
     bin: &OsStr,
     args: &[&OsStr],
     cwd: &Path,
     sock: &Path,
-    jig_log: &Path,
+    ec_log: &Path,
     env: &[(&str, &OsStr)],
 ) -> Output {
     let mut cmd = Command::new(bin);
@@ -397,15 +397,15 @@ pub fn run_in(
         .current_dir(cwd)
         .env_clear()
         .env("PATH", std::env::var_os("PATH").unwrap_or_default())
-        .env("JIG_SOCK", sock)
-        .env("JIG_LOG", jig_log);
+        .env("EKACACHE_SOCK", sock)
+        .env("EKACACHE_LOG", ec_log);
     for (k, v) in env {
         cmd.env(k, v);
     }
     cmd.output_busy().unwrap()
 }
 
-/// `(outcome, subject)` of each `$JIG_LOG` line, after checking the tool name and the time.
+/// `(outcome, subject)` of each `$EKACACHE_LOG` line, after checking the tool name and the time.
 pub fn read_log(path: &Path) -> Vec<(String, String)> {
     let text = std::fs::read_to_string(path).unwrap_or_default();
     text.lines()

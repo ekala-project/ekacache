@@ -1,5 +1,5 @@
 //! JSON as nlohmann::json 3.12 (built with `JSON_NOEXCEPTION`) reads and writes it
-//! (`behaviors/jig-nix-store.md §JSON decoding`, `§fetchurls output`, Q-NIX-4).
+//! (`behaviors/ec-nix-store.md §JSON decoding`, `§fetchurls output`, Q-NIX-4).
 //!
 //! Values are `serde_json::Value` with the default `BTreeMap` map, so objects iterate in sorted
 //! key order exactly as nlohmann's `std::map` does (`String` order is bytewise order). The parser

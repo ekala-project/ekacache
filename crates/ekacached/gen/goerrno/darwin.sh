@@ -1,5 +1,5 @@
 #!/bin/sh
-# Prints jigd's Go errno string table for macOS (crates/ekacached/src/goerr_table_darwin.rs).
+# Prints ecd's Go errno string table for macOS (crates/ekacached/src/goerr_table_darwin.rs).
 #
 # main.go prints the table of the host it runs on, and Go cannot run a darwin binary here, so
 # this reads the table straight from Go's source: `var errors` in

@@ -1,4 +1,4 @@
-//! `BuildDriverArgs` and `ScanUserArgs` (`behaviors/jig-driver-policy.md` A1–A5): conf flags
+//! `BuildDriverArgs` and `ScanUserArgs` (`behaviors/ec-driver-policy.md` A1–A5): conf flags
 //! first, the build system's rpaths taken over, the RUNPATH/interp policy appended when linking.
 
 use ekacache_core::bytes::split;
@@ -214,7 +214,7 @@ pub fn build_driver_args(
 #[cfg(test)]
 mod tests {
     //! The doc's TV-1…TV-34 are in `tests/driver_vectors.rs`, read from
-    //! `tests/vectors/jig-driver-policy.toml`; these are the cases beyond them.
+    //! `tests/vectors/ec-driver-policy.toml`; these are the cases beyond them.
     use super::*;
     use crate::driver::conf::{PackageCcFlags, parse_driver_conf};
 

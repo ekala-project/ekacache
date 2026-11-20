@@ -1,6 +1,6 @@
-//! `jig gocacheprog`: the Go toolchain's `GOCACHEPROG` protocol on stdin/stdout, backed by jigd
-//! (`behaviors/jig-gocacheprog.md`, `spec/gocache.qnt`,
-//! `implementation/08-jig-gocache-and-cache-cmds.md §Part 2`). A port of `gocache_mode.cc`.
+//! `ec gocacheprog`: the Go toolchain's `GOCACHEPROG` protocol on stdin/stdout, backed by ecd
+//! (`behaviors/ec-gocacheprog.md`, `spec/gocache.qnt`,
+//! `implementation/08-ec-gocache-and-cache-cmds.md §Part 2`). A port of `gocache_mode.cc`.
 //!
 //! - **§Startup**: connect (a failure is silent: the session is then an always-miss cache that
 //!   still writes DiskPath files), pick the DiskPath directory, create it ignoring errors, send
@@ -13,18 +13,18 @@
 //! - **ADOPTED §Adopted: JSON handling** (Q-GO-1, Q-GO-3, Q-GO-4): each line is parsed by
 //!   serde_json and each response is produced by it; base64 is decoded strictly. A bad line
 //!   whose integer `ID` can be recovered gets an `Err` reply; any other bad line is fatal
-//!   (`jig gocacheprog: bad request line` on stderr, exit 1). Invalid base64 gets an `Err` reply
+//!   (`ec gocacheprog: bad request line` on stderr, exit 1). Invalid base64 gets an `Err` reply
 //!   and nothing is stored.
-//! - **ADOPTED Q-CLIENT-2** (`behaviors/jig-cache-client.md`): a PUT whose reply is not `OK`
-//!   prints `jig: cache put <key> failed` on stderr, and the client drops the connection, so the
-//!   rest of the session runs as if jigd were absent.
+//! - **ADOPTED Q-CLIENT-2** (`behaviors/ec-cache-client.md`): a PUT whose reply is not `OK`
+//!   prints `ec: cache put <key> failed` on stderr, and the client drops the connection, so the
+//!   rest of the session runs as if ecd were absent.
 //!
 //! Kept quirks: Q-GO-2 (no reply to an unknown or missing `Command`), Q-GO-5 (DiskPath errors
 //! ignored; the Rust port does not abort where legacy's throwing `exists` would), Q-GO-6 (a
 //! set-but-empty `GOCACHEPROG_DIR`/`TMPDIR` is used as it is), Q-GO-7 (`ObjectID` is not read),
 //! Q-GO-8 (`compiled` is logged for every put, live or not).
 //!
-//! Logging (`behaviors/jig-dispatch.md §Logging`): `go\tcached\t<action>\t<ms>` on a get hit,
+//! Logging (`behaviors/ec-dispatch.md §Logging`): `go\tcached\t<action>\t<ms>` on a get hit,
 //! `go\tcompiled\t<action>\t<ms>` on a put; the clock starts with each request.
 
 use std::io::{Read, Write};
@@ -46,7 +46,7 @@ use crate::util::write_file;
 pub const HANDSHAKE: &[u8] = b"{\"ID\":0,\"KnownCommands\":[\"get\",\"put\",\"close\"]}\n";
 
 /// The fatal message for a bad line without a recoverable `ID` (§Adopted: JSON handling).
-pub const BAD_LINE: &[u8] = b"jig gocacheprog: bad request line\n";
+pub const BAD_LINE: &[u8] = b"ec gocacheprog: bad request line\n";
 
 /// One `read` of stdin fills at most this much (`LineReader::kBufSize`).
 const READ_CHUNK: usize = 1 << 20;
@@ -80,7 +80,7 @@ pub fn disk_path_dir(env: &ProcEnv) -> Vec<u8> {
     env.get_or("GOCACHEPROG_DIR", &fallback).to_vec()
 }
 
-/// One `jig gocacheprog` process: the jigd connection, the DiskPath directory and the
+/// One `ec gocacheprog` process: the ecd connection, the DiskPath directory and the
 /// environment the log reads.
 pub struct Session<'a> {
     /// Connected iff the session is live (`GoSession::live`). Q-CLIENT-2 closes it after a
@@ -695,7 +695,7 @@ mod tests {
         assert_eq!(dir(&[("GOCACHEPROG_DIR", "rel/d")]), b"rel/d");
     }
 
-    /// A session without jigd over in-memory stdin/stdout.
+    /// A session without ecd over in-memory stdin/stdout.
     fn offline(dir: &[u8], input: &[u8], env: &ProcEnv) -> (i32, Vec<u8>) {
         let mut s = Session {
             client: Client::new(),
@@ -712,7 +712,7 @@ mod tests {
         let tmp = tempfile::tempdir().unwrap();
         let d = tmp.path().as_os_str().as_encoded_bytes();
         let log = tmp.path().join("log");
-        let env = ProcEnv::new(Env::from_pairs(&[("JIG_LOG", log.to_str().unwrap())]));
+        let env = ProcEnv::new(Env::from_pairs(&[("EKACACHE_LOG", log.to_str().unwrap())]));
         let input = concat(&[
             b"{\"ID\":1,\"Command\":\"get\",\"ActionID\":\"YWJj\"}\n\n",
             b"{\"ID\":2,\"Command\":\"put\",\"ActionID\":\"YWJj\",\"OutputID\":\"YWI=\",\"BodySize\":3}\n\n",

@@ -1,7 +1,7 @@
-//! A7: write-back (`behaviors/jig-reloc-fixup.md §A7`; `fixup_mode.cc` `WriteBack`,
+//! A7: write-back (`behaviors/ec-reloc-fixup.md §A7`; `fixup_mode.cc` `WriteBack`,
 //! `base.cc` `WriteFile`).
 //!
-//! The image goes to `<dir>/.jig<pid>.<name>` and is renamed over the file, so the result is a
+//! The image goes to `<dir>/.ekacache<pid>.<name>` and is renamed over the file, so the result is a
 //! new inode (Q-FIX-18, kept). The reported errno is whatever the C library's `errno` holds when
 //! legacy formats the message: the last call that **failed**, among the temp-file write, the
 //! cleanup `remove` of the temp file, the `rename`, and the final `chmod`. After a failed open
@@ -47,7 +47,7 @@ fn remove(tmp: &[u8], errno: &mut Errno) {
 /// `WriteFile`: write the temp file (create/truncate, mode 0666 & ~umask), close it, rename it
 /// over `path`. A failed write or close removes the temp file; a failed rename leaves it.
 fn write_file(path: &[u8], data: &[u8], errno: &mut Errno) -> bool {
-    let mut name = format!(".jig{}.", std::process::id()).into_bytes();
+    let mut name = format!(".ekacache{}.", std::process::id()).into_bytes();
     name.extend_from_slice(fspath::filename(path));
     let tmp = fspath::join(&fspath::parent_path(path), &name);
     let opened = std::fs::OpenOptions::new()
