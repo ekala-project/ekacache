@@ -1,4 +1,4 @@
-//! stdout and stderr the way legacy's `std::println` writes them (`behaviors/jig-reloc-fixup.md
+//! stdout and stderr the way legacy's `std::println` writes them (`behaviors/ec-reloc-fixup.md
 //! §Errors and messages`, last paragraph; Q-FIX-10).
 //!
 //! Legacy prints with `std::println`, which formats a whole line and hands it to one `fwrite` on

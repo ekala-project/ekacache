@@ -1,4 +1,4 @@
-//! A `jig gocacheprog` session (no jigd: every get misses, every put is refused) fed arbitrary
+//! A `ec gocacheprog` session (no ecd: every get misses, every put is refused) fed arbitrary
 //! request lines: no panic; every reply line is a JSON object; the exit status is 0 (the
 //! input ended) or 1 (a fatal line, Q-GO-1).
 #![no_main]

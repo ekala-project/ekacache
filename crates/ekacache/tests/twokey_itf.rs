@@ -1,5 +1,5 @@
-//! Replay of `spec/twokey.qnt` ITF traces against jig's two-key engine (`ekacache::twokey`,
-//! `ekacache_core::manifest`; `behaviors/jig-keys.md` §Manifest; implementation/12 §L4).
+//! Replay of `spec/twokey.qnt` ITF traces against ec's two-key engine (`ekacache::twokey`,
+//! `ekacache_core::manifest`; `behaviors/ec-keys.md` §Manifest; implementation/12 §L4).
 //!
 //! Traces are generated locally and not committed (`/tests/itf/*/` is ignored):
 //!
@@ -11,12 +11,12 @@
 //! With no traces the test passes and says so.
 //!
 //! The model has two builds with their own file systems but the same cwd and primary source, so
-//! the same k1. The driver keeps one real directory (the "build tree") and, before every jig
+//! the same k1. The driver keeps one real directory (the "build tree") and, before every ec
 //! operation of build `b`, makes its files equal to the model's `fs[b]`: content `v` is a file
 //! holding `v\n`, content 0 is no file. The compiler is a fake that reads that directory and
 //! follows the model's `compile` (search `x.h` in `a/` then `b/`, then include `y.h`; `y.h = 3`
 //! is a deterministic failure, a missing header is a `MissingInput` failure). Everything between
-//! is the real jig code:
+//! is the real ec code:
 //!
 //!  - `invoke`: `twokey::find_result` sends `GET m/<k1>` to a scripted daemon (a socket pair
 //!    whose peer is preloaded with `MISS` or the stored, framed manifest) and validates the
@@ -28,7 +28,7 @@
 //! After every step the daemon's manifest (as text, against the text the model's lines must
 //! format to), its artifacts (by real k2), each build's pending compile and its last result
 //! must equal the model's. The model's invariants are then checked on the real state: `sound`
-//! (whatever jig handed back equals a fresh compile) and `entriesSound` (every stored artifact
+//! (whatever ec handed back equals a fresh compile) and `entriesSound` (every stored artifact
 //! whose manifest validates on a build's tree is what that tree compiles to, with validation
 //! done by `ekacache_core::manifest::validate`). The witnesses `witnessReplay` and
 //! `witnessCachedFailure` must each be reached by some trace.

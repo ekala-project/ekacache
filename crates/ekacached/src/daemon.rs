@@ -1,11 +1,11 @@
-//! The jigd process: command line, environment, startup order, the socket, signals and shutdown
-//! (`behaviors/jigd-daemon.md` §Command line, §Environment, §Startup order, §Signals and
-//! shutdown, §Exit codes, §Logging; `environment.md` §jigd; `implementation/03-jigd-server.md`
+//! The ecd process: command line, environment, startup order, the socket, signals and shutdown
+//! (`behaviors/ecd-daemon.md` §Command line, §Environment, §Startup order, §Signals and
+//! shutdown, §Exit codes, §Logging; `environment.md` §ecd; `implementation/03-ecd-server.md`
 //! §Runtime shape, §Environment and budgets, §Shutdown).
 //!
 //! Startup is sequential and fatal on error, as in Go: everything up to the `chmod` of the
-//! socket runs before the tokio runtime exists. Adopted Q-DAEMON-1: `JIGD_SIZE` and
-//! `JIGD_COLD_SIZE` are parsed strictly (`<n>[M|G|T]`, plain = GiB, 0 = unbounded); an invalid
+//! socket runs before the tokio runtime exists. Adopted Q-DAEMON-1: `EKACACHED_SIZE` and
+//! `EKACACHED_COLD_SIZE` are parsed strictly (`<n>[M|G|T]`, plain = GiB, 0 = unbounded); an invalid
 //! value exits 2 before the store is opened, and each tier's budget is logged after it is.
 //! Kept: Q-DAEMON-2 (any one argument is the socket), -3 (whatever is at the path is removed),
 //! -4, -5 (any accept error is a clean exit 0), -6 (only the first signal counts), -9, -10
@@ -34,17 +34,17 @@ use crate::slots::Slots;
 use crate::store::{Store, StoreConfig, Tier};
 
 /// `usage`, byte for byte (`main.go:162-173`).
-pub const USAGE: &str = "usage: jigd <socket>
+pub const USAGE: &str = "usage: ecd <socket>
 
-The compile cache and job-slot daemon jig talks to. Nix builds reach it through
-sandbox-paths /nix/var/nix/jigd/socket=<socket>.
+The compile cache and job-slot daemon ec talks to. Nix builds reach it through
+sandbox-paths /nix/var/nix/ekacache/socket=<socket>.
 
   NIX_STORE_DIR   the only tree IDS answers for (default /nix/store)
-  XDG_CACHE_HOME  packs live in $XDG_CACHE_HOME/jigd/packs (default ~/.cache)
-  JIGD_SIZE       cache budget in GiB (default 50)
-  JIGD_COLD       a second, slower pack directory that takes what JIGD_SIZE pushes out
-  JIGD_COLD_SIZE  its budget in GiB (default 0: unbounded)
-  JIGD_SLOTS      concurrent compile slots (default: number of CPUs)
+  XDG_CACHE_HOME  packs live in $XDG_CACHE_HOME/ekacache/packs (default ~/.cache)
+  EKACACHED_SIZE       cache budget in GiB (default 50)
+  EKACACHED_COLD       a second, slower pack directory that takes what EKACACHED_SIZE pushes out
+  EKACACHED_COLD_SIZE  its budget in GiB (default 0: unbounded)
+  EKACACHED_SLOTS      concurrent compile slots (default: number of CPUs)
 ";
 
 /// Blocking-pool cap: a build with 1 000 parallel PUTs must not start 1 000 threads.
@@ -84,7 +84,7 @@ fn budget(name: &str, default: i64) -> i64 {
     if let Some(b) = parse_budget(&v) {
         return b;
     }
-    let mut msg = format!("jigd: invalid {name} \"").into_bytes();
+    let mut msg = format!("ecd: invalid {name} \"").into_bytes();
     msg.extend_from_slice(&v);
     msg.extend_from_slice(b"\": want <n>[M|G|T], 0 = unbounded\n");
     let _ = std::io::stderr().write_all(&msg);
@@ -321,17 +321,17 @@ pub fn main() -> ! {
     };
     // 3. tiers, with the adopted strict budgets
     let mut tiers = vec![Tier {
-        dir: gopath::join(&[&cache, b"jigd", b"packs"]),
-        budget: budget("JIGD_SIZE", 50 << 30),
+        dir: gopath::join(&[&cache, b"ekacache", b"packs"]),
+        budget: budget("EKACACHED_SIZE", 50 << 30),
     }];
-    if let Some(cold) = env("JIGD_COLD") {
+    if let Some(cold) = env("EKACACHED_COLD") {
         tiers.push(Tier {
             dir: cold,
-            budget: budget("JIGD_COLD_SIZE", 0),
+            budget: budget("EKACACHED_COLD_SIZE", 0),
         });
     }
     // 4. slots
-    let limit = env("JIGD_SLOTS")
+    let limit = env("EKACACHED_SLOTS")
         .and_then(|v| ekacache_core::wire::parse_int64(&v))
         .filter(|&n| n > 0)
         .unwrap_or_else(num_cpu);

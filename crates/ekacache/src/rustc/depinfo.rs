@@ -1,4 +1,4 @@
-//! rustc's dep-info file (`behaviors/jig-rustc-mode.md §Dep-info parsing`, `rustc_mode.cc:58-78`,
+//! rustc's dep-info file (`behaviors/ec-rustc-mode.md §Dep-info parsing`, `rustc_mode.cc:58-78`,
 //! `ParseDepfile` in `manifest.cc:23-62`), with ADOPTED Q-RS-3 `# env-dep:` tracking.
 
 use ekacache_core::bytes::{find, split};
@@ -18,7 +18,7 @@ pub struct DepInfo {
 
 const ENV_DEP: &[u8] = b"# env-dep:";
 
-/// `ParseDepInfo(text)`; relative inputs are resolved against `cwd` (rustc's, which is jig's).
+/// `ParseDepInfo(text)`; relative inputs are resolved against `cwd` (rustc's, which is ec's).
 #[must_use]
 pub fn parse_dep_info(text: &[u8], cwd: &[u8]) -> DepInfo {
     let mut info = DepInfo::default();

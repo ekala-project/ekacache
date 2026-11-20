@@ -1,4 +1,4 @@
-//! The primary identity and the toolchain ids (`behaviors/jig-cc-mode.md §Primary identity`,
+//! The primary identity and the toolchain ids (`behaviors/ec-cc-mode.md §Primary identity`,
 //! `cc_mode.cc:131-190`).
 
 use ekacache_core::bytes::{contains, os_path};

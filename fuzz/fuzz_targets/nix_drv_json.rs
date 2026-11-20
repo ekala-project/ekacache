@@ -10,7 +10,7 @@ fuzz_target!(|json: &[u8]| {
     // Not called in-process: most type errors abort by design (Q-NIX-4), so
     // `derivation_to_aterm` runs only inside the ec process.
     let rust = common::binary();
-    let env = [("JIG_NIX_STORE_OFFLINE", "1")];
+    let env = [("EKACACHE_NIX_STORE_OFFLINE", "1")];
     let ours = common::run(
         &rust,
         "ec",

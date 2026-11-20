@@ -1,6 +1,6 @@
 // -*- mode: Bluespec; -*-
 /**
- * `jig gocacheprog` (jig/src/gocache_mode.cc): Go's GOCACHEPROG protocol backed by jigd.
+ * `ec gocacheprog` (jig/src/gocache_mode.cc): Go's GOCACHEPROG protocol backed by ecd.
  *
  *   put(ActionID, OutputID, body):  PUT go/o/<hex OutputID> = body, then PUT go/a/<hex ActionID> = OutputID
  *   get(ActionID):                  GET go/a/<hex ActionID> -> OutputID, GET go/o/<hex OutputID> -> body

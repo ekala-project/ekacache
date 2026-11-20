@@ -1,7 +1,7 @@
 //! Go's `path/filepath` lexical functions on Unix (`Clean`, `Join`, `Dir`, `Base`), on bytes.
 //!
-//! jigd builds every file name the way the Go daemon did (`jigd-store.md` §Directory layout and
-//! naming, `jigd-daemon.md` §Environment, `jigd-identities.md` §Path resolution), and those
+//! ecd builds every file name the way the Go daemon did (`ecd-store.md` §Directory layout and
+//! naming, `ecd-daemon.md` §Environment, `ecd-identities.md` §Path resolution), and those
 //! names show up in log lines and error text, so the lexical rules must be Go's, not
 //! `std::path`'s or C++ `std::filesystem`'s (`ekacache_core::fspath`).
 
@@ -159,7 +159,10 @@ mod tests {
         assert_eq!(join(&[b"", b"b"]), b"b");
         assert_eq!(join(&[b"a", b""]), b"a");
         assert_eq!(join(&[b"", b""]), b"");
-        assert_eq!(join(&[b"/cache/", b"jigd", b"packs"]), b"/cache/jigd/packs");
+        assert_eq!(
+            join(&[b"/cache/", b"ekacache", b"packs"]),
+            b"/cache/ekacache/packs"
+        );
         assert_eq!(
             join(&[b"/cold//x/", b"000001.pack"]),
             b"/cold/x/000001.pack"
@@ -169,7 +172,7 @@ mod tests {
 
     #[test]
     fn dir_and_base_match_go() {
-        assert_eq!(dir(b"/run/jigd/socket"), b"/run/jigd");
+        assert_eq!(dir(b"/run/ekacache/socket"), b"/run/ekacache");
         assert_eq!(dir(b"socket"), b".");
         assert_eq!(dir(b"/socket"), b"/");
         assert_eq!(dir(b"a//b//"), b"a/b");

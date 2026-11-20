@@ -1,5 +1,5 @@
 //! Driver policy: what turns `cc <user args>` into the real compiler's command line
-//! (`behaviors/jig-driver-policy.md`, `driver.cc`, `implementation/06-jig-cc.md §Part 1`).
+//! (`behaviors/ec-driver-policy.md`, `driver.cc`, `implementation/06-ec-cc.md §Part 1`).
 //!
 //! No Q-DRV quirk is adopted, so everything here reproduces the C++ jig, including the aborts of
 //! Q-DRV-9 and Q-DRV-10. Q-DRV-10's libstdc++ `terminate called …` text is not imitated: the

@@ -1,5 +1,5 @@
 // Command govectors writes the Go reference vectors that ekacache-core's wire tests replay:
-// strings.Fields over a byte corpus (behaviors/jigd-protocol.md \u00a7Tokenization) and
+// strings.Fields over a byte corpus (behaviors/ecd-protocol.md \u00a7Tokenization) and
 // strconv.ParseInt / strconv.Atoi over number spellings (\u00a7Number parsing).
 //
 // Run from the repository root:

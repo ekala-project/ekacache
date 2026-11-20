@@ -2,7 +2,7 @@
 # End-to-end smoke test on the host: builds ec and ecd, starts ecd on a socket in a temporary
 # directory (with its own pack directory), and compiles one file twice through `ec <compiler>`.
 # The first run must compile, the second must be a cache hit with the same object. Prints
-# ec's JIG_LOG rows, ecd's STATS and its log. Works on Linux and macOS.
+# ec's EKACACHE_LOG rows, ecd's STATS and its log. Works on Linux and macOS.
 #
 #   nix-shell --run scripts/smoke.sh                       # cc on PATH
 #   nix-shell --run 'scripts/smoke.sh "$(command -v clang)"'
@@ -39,12 +39,12 @@ done
 printf 'int f(int x) { return x * 2; }\n' >a.c
 for run in 1 2; do
     rm -f a.o
-    JIG_SOCK=$dir/sock JIG_LOG=$dir/jig.log "$bin/ec" "$cc" -O2 -c a.c -o a.o
+    EKACACHE_SOCK=$dir/sock EKACACHE_LOG=$dir/ec.log "$bin/ec" "$cc" -O2 -c a.c -o a.o
     cksum <a.o >"obj$run"
 done
 
-echo '--- JIG_LOG'
-cat jig.log
+echo '--- EKACACHE_LOG'
+cat ec.log
 echo '--- STATS'
 printf 'STATS\n' | nc -U -w1 "$dir/sock" || true
 echo '--- ecd log'
@@ -55,11 +55,11 @@ if ! cmp -s obj1 obj2; then
     echo "FAIL: the cached object differs from the compiled one" >&2
     status=1
 fi
-if ! sed -n 1p jig.log | grep -q '	compiled	'; then
+if ! sed -n 1p ec.log | grep -q '	compiled	'; then
     echo "FAIL: the first run did not compile" >&2
     status=1
 fi
-if ! sed -n 2p jig.log | grep -q '	cached	'; then
+if ! sed -n 2p ec.log | grep -q '	cached	'; then
     echo "FAIL: the second run was not a cache hit" >&2
     status=1
 fi

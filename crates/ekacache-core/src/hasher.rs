@@ -1,4 +1,4 @@
-//! The length-framed BLAKE3 hasher (`behaviors/jig-keys.md §The Hasher`).
+//! The length-framed BLAKE3 hasher (`behaviors/ec-keys.md §The Hasher`).
 //!
 //! `Hasher` wraps one unkeyed BLAKE3 hasher. `field(d)` feeds `itoa(len(d)) ":" d`; `update(d)`
 //! feeds `d` raw. `finish()` is non-consuming and returns the first 16 bytes of the standard
@@ -100,7 +100,7 @@ pub fn hash_of(d: &[u8]) -> Digest {
 }
 
 /// `HashOf` over a reader, streamed in 64 KiB chunks. Returns the digest and the number of
-/// bytes hashed (callers that need an exact size, such as jigd's IDS, compare it).
+/// bytes hashed (callers that need an exact size, such as ecd's IDS, compare it).
 ///
 /// # Errors
 /// Any read error from `r`.

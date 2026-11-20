@@ -1,7 +1,7 @@
-//! Store paths, identity modes, masking and lexical keys (`behaviors/jig-keys.md §Store paths`,
+//! Store paths, identity modes, masking and lexical keys (`behaviors/ec-keys.md §Store paths`,
 //! `§Key: lexical normalisation`, `§InputId`).
 //!
-//! `STORE_DIR` is the build-time constant `JIG_STORE_DIR` (see `build.rs`). `Store` is built from
+//! `STORE_DIR` is the build-time constant `EKACACHE_STORE_DIR` (see `build.rs`). `Store` is built from
 //! an explicit `Env` snapshot; it never reads `std::env` itself.
 
 use std::borrow::Cow;
@@ -43,11 +43,11 @@ pub fn state_dir() -> Vec<u8> {
     out
 }
 
-/// The default jigd socket: `StateDir() + "/jigd/socket"`.
+/// The default ecd socket: `StateDir() + "/ekacache/socket"`.
 #[must_use]
 pub fn default_socket() -> Vec<u8> {
     let mut out = state_dir();
-    out.extend_from_slice(b"/jigd/socket");
+    out.extend_from_slice(b"/ekacache/socket");
     out
 }
 
@@ -143,7 +143,7 @@ pub fn normalize_path_arg(arg: &[u8]) -> Vec<u8> {
     out
 }
 
-/// `JIG_STORE_IDENTITY`: exactly `content` selects content mode; anything else is path mode.
+/// `EKACACHE_STORE_IDENTITY`: exactly `content` selects content mode; anything else is path mode.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum IdentityMode {
     Path,
@@ -168,7 +168,7 @@ impl Store {
     /// `Store::Store()` (`store.cc:29-44`).
     #[must_use]
     pub fn from_env(env: &Env) -> Self {
-        let mode = if env.get("JIG_STORE_IDENTITY") == Some(b"content") {
+        let mode = if env.get("EKACACHE_STORE_IDENTITY") == Some(b"content") {
             IdentityMode::Content
         } else {
             IdentityMode::Path
@@ -191,7 +191,7 @@ impl Store {
         {
             s.out_hash = s.out[n + 1..n + 1 + STORE_HASH_LENGTH].to_vec();
         }
-        let roots_env = env.get("JIG_STORE_ROOTS").unwrap_or_default();
+        let roots_env = env.get("EKACACHE_STORE_ROOTS").unwrap_or_default();
         let mut roots: Vec<Vec<u8>> = split(roots_env, b' ', false)
             .into_iter()
             .map(<[u8]>::to_vec)
@@ -420,12 +420,12 @@ mod tests {
     }
 
     fn content_store(pairs: &[(&str, &str)]) -> Store {
-        let mut v = vec![("JIG_STORE_IDENTITY", "content")];
+        let mut v = vec![("EKACACHE_STORE_IDENTITY", "content")];
         v.extend_from_slice(pairs);
         Store::from_env(&Env::from_pairs(&v))
     }
 
-    /// The vectors below spell `/nix/store`; they hold only for the default `JIG_STORE_DIR`.
+    /// The vectors below spell `/nix/store`; they hold only for the default `EKACACHE_STORE_DIR`.
     fn default_store_dir() -> bool {
         STORE_DIR == b"/nix/store"
     }
@@ -458,7 +458,7 @@ mod tests {
     }
 
     /// Masking follows the build-time `STORE_DIR` (implementation/01-workspace.md §Build
-    /// configuration); run with `JIG_STORE_DIR=/gnu/store` to exercise a non-default store.
+    /// configuration); run with `EKACACHE_STORE_DIR=/gnu/store` to exercise a non-default store.
     #[test]
     fn masking_follows_store_dir() {
         let real = [
@@ -485,7 +485,7 @@ mod tests {
     fn modes() {
         assert_eq!(path_store().mode(), IdentityMode::Path);
         for v in ["", "Content", "path", "content "] {
-            let st = Store::from_env(&Env::from_pairs(&[("JIG_STORE_IDENTITY", v)]));
+            let st = Store::from_env(&Env::from_pairs(&[("EKACACHE_STORE_IDENTITY", v)]));
             assert_eq!(st.mode(), IdentityMode::Path, "{v:?}");
         }
         assert_eq!(content_store(&[]).mode(), IdentityMode::Content);
@@ -500,7 +500,7 @@ mod tests {
         let st = content_store(&[
             ("out", out),
             (
-                "JIG_STORE_ROOTS",
+                "EKACACHE_STORE_ROOTS",
                 " /nix/store/1123456789abcdfghijklmnpqrsvwxyz-zlib-1.3/include /nix/store/2123456789abcdfghijklmnpqrsvwxyz-zlib-1.3",
             ),
         ]);
@@ -572,7 +572,7 @@ mod tests {
             return;
         }
         assert_eq!(s(state_dir()), "/nix/var/nix");
-        assert_eq!(s(default_socket()), "/nix/var/nix/jigd/socket");
+        assert_eq!(s(default_socket()), "/nix/var/nix/ekacache/socket");
         assert!(is_store_path(b"/nix/store/"));
         assert!(!is_store_path(b"/nix/store"));
         assert!(!is_store_path(b"/nix/storex/a"));

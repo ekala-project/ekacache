@@ -1,5 +1,5 @@
-//! End to end: a real `go build` twice in launcher mode (`jig <go> build`, which sets
-//! `GOCACHEPROG="<jig> gocacheprog"`), on a real jigd (`implementation/08-jig-gocache-and-
+//! End to end: a real `go build` twice in launcher mode (`ec <go> build`, which sets
+//! `GOCACHEPROG="<ec> gocacheprog"`), on a real ecd (`implementation/08-ec-gocache-and-
 //! cache-cmds.md §Part 2 §Tests`).
 //!
 //! Needs `go` on `PATH` and an ecd (`$EC_RUST_ECD`); skipped without. The second build, with
@@ -13,7 +13,7 @@ mod gocache_support;
 use std::path::PathBuf;
 use std::process::Command;
 
-use gocache_support::{JIG, log_rows};
+use gocache_support::{EC, log_rows};
 
 fn on_path(name: &str) -> Option<PathBuf> {
     std::env::split_paths(&std::env::var_os("PATH")?)
@@ -61,12 +61,12 @@ fn go_build_twice_hits() {
     std::fs::write(module.join("main.go"), MAIN).unwrap();
     std::fs::write(module.join("greet/greet.go"), GREET).unwrap();
 
-    // one build (`-x`) with a fresh GOCACHE, DiskPath directory and JIG_LOG: the log rows, and
+    // one build (`-x`) with a fresh GOCACHE, DiskPath directory and EKACACHE_LOG: the log rows, and
     // the tools go ran
     let build = |n: u32| -> (Vec<String>, Vec<String>) {
         let dir = |name: &str| t.join(format!("{name}{n}"));
         let log = dir("log");
-        let mut cmd = Command::new(JIG);
+        let mut cmd = Command::new(EC);
         cmd.arg(&go)
             .args(["build", "-x", "-o"])
             .arg(dir("out"))
@@ -82,9 +82,9 @@ fn go_build_twice_hits() {
             .env("GOPROXY", "off")
             .env("GOFLAGS", "")
             .env("CGO_ENABLED", "0")
-            .env("JIG_SOCK", &daemon.sock)
+            .env("EKACACHE_SOCK", &daemon.sock)
             .env("GOCACHEPROG_DIR", dir("dp"))
-            .env("JIG_LOG", &log);
+            .env("EKACACHE_LOG", &log);
         let out = cmd.output().unwrap();
         let stderr = String::from_utf8_lossy(&out.stderr).into_owned();
         assert!(out.status.success(), "build {n}: {stderr}");
@@ -119,7 +119,7 @@ fn go_build_twice_hits() {
     assert!(tools.iter().any(|t| t == "compile"), "{tools:?}");
     assert!(compiled(&first).len() > 10, "{first:?}");
 
-    // warm: no compiler runs and every package comes from jigd. cmd/go itself still puts a
+    // warm: no compiler runs and every package comes from ecd. cmd/go itself still puts a
     // few entries on every build: the link step always runs (go build does not cache
     // executables) and `updateBuildID` re-puts the linker's `link-stdout`, and two small
     // index entries are keyed differently from build to build (go 1.25). Those are the only

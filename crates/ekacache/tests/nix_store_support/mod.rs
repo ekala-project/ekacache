@@ -1,4 +1,4 @@
-//! Support for the `jig nix-store` integration tests (`implementation/09-jig-nix-store.md
+//! Support for the `ec nix-store` integration tests (`implementation/09-ec-nix-store.md
 //! §Tests`): worker-protocol byte builders, a scriptable fake builder-rpc daemon, and a runner
 //! that runs the ec against a script and collects the client→daemon bytes, stdout, stderr and
 //! the exit status or signal.
@@ -21,7 +21,7 @@ use std::time::{Duration, Instant};
 
 use ekacache_testkit::vectors::VectorFile;
 
-pub const JIG: &str = env!("CARGO_BIN_EXE_ec");
+pub const EC: &str = env!("CARGO_BIN_EXE_ec");
 
 pub const MAGIC_1: u64 = 0x6e69_7863;
 pub const MAGIC_2: u64 = 0x6478_696f;
@@ -34,13 +34,13 @@ pub const STOP_ACTIVITY: u64 = 0x5354_4f50;
 pub const RESULT: u64 = 0x5253_4c54;
 pub const MAX_STRING: u64 = 64 << 20;
 
-// ---- messages and vectors (`behaviors/jig-nix-store.md §Errors and messages`, `§Test vectors`),
-// read from `tests/vectors/jig-nix-store.toml`
+// ---- messages and vectors (`behaviors/ec-nix-store.md §Errors and messages`, `§Test vectors`),
+// read from `tests/vectors/ec-nix-store.toml`
 
-/// `tests/vectors/jig-nix-store.toml`, loaded once.
+/// `tests/vectors/ec-nix-store.toml`, loaded once.
 fn vectors() -> &'static VectorFile {
     static FILE: OnceLock<VectorFile> = OnceLock::new();
-    FILE.get_or_init(|| VectorFile::load("jig-nix-store"))
+    FILE.get_or_init(|| VectorFile::load("ec-nix-store"))
 }
 
 /// The stderr line of the first `cli` vector run with `args` that has one.
@@ -398,10 +398,10 @@ impl Inv {
         self
     }
 
-    /// `JIG_NIX_STORE_OFFLINE=1`, with `NIX_REMOTE` still naming the fake daemon.
+    /// `EKACACHE_NIX_STORE_OFFLINE=1`, with `NIX_REMOTE` still naming the fake daemon.
     #[must_use]
     pub fn offline(self) -> Self {
-        self.env("JIG_NIX_STORE_OFFLINE", b"1")
+        self.env("EKACACHE_NIX_STORE_OFFLINE", b"1")
     }
 
     #[must_use]
@@ -492,7 +492,7 @@ impl Outcome {
     /// SIGPIPE (Q-NIX-7). Linux fails the write with EPIPE once the peer has shut its read
     /// side. Darwin does not reliably do so for a peer that only shut down reading, and the
     /// client then reads the hang-up instead: the "silent, exit 1" the state table allows
-    /// beside SIGPIPE (`behaviors/jig-nix-store.md §Client state-transition table`).
+    /// beside SIGPIPE (`behaviors/ec-nix-store.md §Client state-transition table`).
     #[track_caller]
     pub fn assert_hung_up(&self) {
         if cfg!(target_os = "linux") || self.signal.is_some() {
@@ -569,7 +569,7 @@ impl Running {
                 "--",
             ]);
         }
-        cmd.arg(JIG).arg("nix-store");
+        cmd.arg(EC).arg("nix-store");
         cmd.args(inv.args.iter().map(|a| OsStr::from_bytes(a)));
         cmd.env_clear();
         match &inv.remote {

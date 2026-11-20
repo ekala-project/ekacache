@@ -1,8 +1,8 @@
-//! rustc mode: `jig rustcwrap <rustc> <args…>` (cargo's `RUSTC_WRAPPER`) and the launcher for a
-//! program named `rustc` (`behaviors/jig-rustc-mode.md`, `rustc_mode.cc`,
-//! `implementation/07-jig-rustc.md`).
+//! rustc mode: `ec rustcwrap <rustc> <args…>` (cargo's `RUSTC_WRAPPER`) and the launcher for a
+//! program named `rustc` (`behaviors/ec-rustc-mode.md`, `rustc_mode.cc`,
+//! `implementation/07-ec-rustc.md`).
 //!
-//! Library crates are cached with the two-key scheme of `behaviors/jig-keys.md §Manifest`: k1 is
+//! Library crates are cached with the two-key scheme of `behaviors/ec-keys.md §Manifest`: k1 is
 //! `rs/<hex>` over the fields of `key` (§Request key (k1)), the crate root is the primary
 //! source, the dep-info's first rule gives the manifest inputs (`depinfo`, §Dep-info parsing),
 //! and every output it names is stored as one blob (`pack`, §Output blob). `run` follows
@@ -38,7 +38,7 @@ use crate::util::{on_path, read_file};
 use self::key::KeyInputs;
 use self::parse::{RustInvocation, parse_rust_invocation};
 
-/// The `$JIG_LOG` tool name.
+/// The `$EKACACHE_LOG` tool name.
 const TOOL: &str = "rustc";
 
 /// `RunRustcMode(args, socket)` (`rustc_mode.cc:277-358`); `args` = `[<rustc>, <rustc args…>]`.
@@ -172,7 +172,7 @@ struct Lookup<'a> {
 ///
 /// ADOPTED Q-CC-2 / Q-CLIENT-2: the slot covers the compile and the three PUTs, and DONE goes
 /// out after them (legacy releases it before storing). Each PUT reply is checked; at the first
-/// refused one `jig: cache put <key> failed` is printed, the remaining PUTs are skipped, and
+/// refused one `ec: cache put <key> failed` is printed, the remaining PUTs are skipped, and
 /// the outcome is `compiled-unstored`. stderr is forwarded right after the compile, as before.
 fn compile_and_store(
     client: &mut Client,

@@ -1,4 +1,4 @@
-//! `ParseRustInvocation` (`behaviors/jig-rustc-mode.md §Argument classification`,
+//! `ParseRustInvocation` (`behaviors/ec-rustc-mode.md §Argument classification`,
 //! `rustc_mode.cc:127-236`): which rustc invocations are cacheable, and what of their argv goes
 //! into k1.
 //!

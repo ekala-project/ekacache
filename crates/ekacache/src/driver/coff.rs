@@ -1,4 +1,4 @@
-//! The COFF policy (`behaviors/jig-driver-policy.md` A12): PE is position independent by
+//! The COFF policy (`behaviors/ec-driver-policy.md` A12): PE is position independent by
 //! construction and clang rejects the PIC flags; MSVC's STL has no C++11 mode; Windows library
 //! names are case-insensitive but the build host compares bytes.
 

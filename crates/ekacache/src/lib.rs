@@ -1,7 +1,7 @@
-//! jig: the compiler launcher (`behaviors/jig-dispatch.md` and the mode documents,
-//! `implementation/05-jig-foundation.md` onwards).
+//! ec: the compiler launcher (`behaviors/ec-dispatch.md` and the mode documents,
+//! `implementation/05-ec-foundation.md` onwards).
 //!
-//! jig is synchronous and single-threaded. Everything a mode needs from the process (arguments,
+//! ec is synchronous and single-threaded. Everything a mode needs from the process (arguments,
 //! environment, store configuration, socket path) is in `Ctx`, captured once in `main`.
 
 pub mod cache_cmd;
@@ -31,11 +31,11 @@ use crate::process::ProcEnv;
 pub struct Ctx {
     /// `argv[0]` as given (empty when `argc == 0`).
     pub argv0: Vec<u8>,
-    /// jig's environment (`getenv`/`setenv`), inherited by every child.
+    /// ec's environment (`getenv`/`setenv`), inherited by every child.
     pub env: ProcEnv,
-    /// `JIG_STORE_IDENTITY`, `out`, `JIG_STORE_ROOTS`, read once.
+    /// `EKACACHE_STORE_IDENTITY`, `out`, `EKACACHE_STORE_ROOTS`, read once.
     pub store: Store,
-    /// `$JIG_SOCK` if set (even empty), else `<StateDir>/jigd/socket`.
+    /// `$EKACACHE_SOCK` if set (even empty), else `<StateDir>/ekacache/socket`.
     pub socket: Vec<u8>,
 }
 
@@ -45,7 +45,7 @@ impl Ctx {
     pub fn new(argv0: Vec<u8>, env: Env) -> Self {
         let store = Store::from_env(&env);
         let socket = env
-            .get("JIG_SOCK")
+            .get("EKACACHE_SOCK")
             .map_or_else(default_socket, <[u8]>::to_vec);
         Self {
             argv0,

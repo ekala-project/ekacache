@@ -1,4 +1,4 @@
-//! Reading: `Get` and the value reader (`jigd-store.md` §Reading, §Recency).
+//! Reading: `Get` and the value reader (`ecd-store.md` §Reading, §Recency).
 
 use std::fs::File;
 use std::io::{self, Read};

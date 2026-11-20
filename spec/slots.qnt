@@ -1,15 +1,15 @@
 // -*- mode: Bluespec; -*-
 /**
- * jigd host-wide compiler slot admission.
+ * ecd host-wide compiler slot admission.
  *
  * Sources: jigd/slots.go (Slots.Acquire/Release/grant) and the SLOT/DONE/hang-up handling
- * in jigd/main.go serve(), plus the client rule in jig/src/process.cc (Slot RAII + JIG_SLOT).
+ * in jigd/main.go serve(), plus the client rule in jig/src/process.cc (Slot RAII + EKACACHE_SLOT).
  *
  * Module `slots` models the daemon: LIMIT tokens shared by all connections, a FIFO wait
  * queue served "fewest tokens held by the waiter's build first, FIFO among equals", and the
  * per-connection token bookkeeping that returns every token when the connection goes away.
  *
- * Module `slotNesting` models why a jig process that holds a token exports JIG_SLOT=1 and
+ * Module `slotNesting` models why an ec process that holds a token exports EKACACHE_SLOT=1 and
  * never asks for a second one: a nested request would wait on a token its own ancestor holds.
  * (Its queue is plain FIFO, a simplification: with LIMIT = 1 the order cannot matter.)
  *
@@ -20,7 +20,7 @@
  */
 module slots {
   // ---------------------------------------------------------------------------------------
-  // Parameters (small, for simulation). JIGD_SLOTS sets LIMIT, default runtime.NumCPU().
+  // Parameters (small, for simulation). EKACACHED_SLOTS sets LIMIT, default runtime.NumCPU().
   // ---------------------------------------------------------------------------------------
   pure val LIMIT = 2
   pure val CONNS = Set(1, 2, 3, 4)
@@ -315,23 +315,23 @@ module slots {
 /**
  * Why a process holding a token must not ask for another: the client side of slots.
  *
- * Processes form a tree (a `jig slot make` whose make runs compilers through jig). A process
- * takes a token only if JIG_SLOT is unset in its environment (jig/src/process.cc Slot ctor), and
- * exports JIG_SLOT=1 to its children while it holds one. A parent cannot finish (and so cannot
+ * Processes form a tree (a `ec slot make` whose make runs compilers through ec). A process
+ * takes a token only if EKACACHE_SLOT is unset in its environment (jig/src/process.cc Slot ctor), and
+ * exports EKACACHE_SLOT=1 to its children while it holds one. A parent cannot finish (and so cannot
  * release) before its child finishes.
  */
 module slotNesting {
   pure val LIMIT = 1
   pure val PROCS = Set(1, 2, 3)
   pure val PARENT = Map(1 -> 0, 2 -> 1, 3 -> 1)   // 0 = no parent: 2 and 3 are children of 1
-  // Set to false to watch noNestedWait fail (the deadlock jig avoids).
-  pure val HONOR_JIG_SLOT = true
+  // Set to false to watch noNestedWait fail (the deadlock ec avoids).
+  pure val HONOR_EKACACHE_SLOT = true
 
   type PState = | NotStarted | Waiting | Running | Finished
 
   var st: int -> PState
   var holds: int -> bool
-  var envSlot: int -> bool      // JIG_SLOT in the process's environment
+  var envSlot: int -> bool      // EKACACHE_SLOT in the process's environment
   var out: int
   var queue: List[int]
 
@@ -352,7 +352,7 @@ module slotNesting {
   // a process starts once its parent runs; it inherits the parent's environment
   action start(p: int): bool = {
     val inherited = if (PARENT.get(p) == 0) false else envSlot.get(PARENT.get(p))
-    val wants = not(HONOR_JIG_SLOT and inherited)
+    val wants = not(HONOR_EKACACHE_SLOT and inherited)
     all {
     st.get(p) == NotStarted,
     PARENT.get(p) == 0 or st.get(PARENT.get(p)) == Running,

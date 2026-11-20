@@ -1,4 +1,4 @@
-//! Launcher mode: `jig /path/to/<program> <args...>` (`behaviors/jig-dispatch.md §Launcher mode`,
+//! Launcher mode: `ec /path/to/<program> <args...>` (`behaviors/ec-dispatch.md §Launcher mode`,
 //! `launcher.cc`).
 
 use ekacache_core::fspath;
@@ -96,7 +96,7 @@ mod tests {
 
     #[test]
     fn classify_table() {
-        // behaviors/jig-dispatch.md §ClassifyLaunch
+        // behaviors/ec-dispatch.md §ClassifyLaunch
         for name in [
             "gcc",
             "g++",

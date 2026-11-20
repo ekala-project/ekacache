@@ -1,4 +1,4 @@
-//! Port of `legacy/jigd/store_test.go` (`jigd-store.md`; implementation/04 §Tests).
+//! Port of `legacy/jigd/store_test.go` (`ecd-store.md`; implementation/04 §Tests).
 //!
 //! One Rust test per Go test, same scenario and assertions, snake_case names. Scaled: the Go
 //! tests fill 256 MiB packs with 1 MiB values; these use a 256 KiB pack limit and 1 KiB values,
@@ -325,7 +325,7 @@ fn put_after_close() {
     putb(&s, "k", b"v").unwrap();
     s.close().unwrap();
     let res = putb(&s, "k2", b"v");
-    // (the Go test only checks for a panic; the error text is the one jigd sends)
+    // (the Go test only checks for a panic; the error text is the one ecd sends)
     assert_eq!(
         res.map_err(|e| e.to_string()),
         Err("store closed".to_string())

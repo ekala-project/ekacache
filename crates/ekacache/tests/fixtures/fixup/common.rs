@@ -12,7 +12,7 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::time::{Duration, Instant};
 
-pub const JIG: &str = env!("CARGO_BIN_EXE_ec");
+pub const EC: &str = env!("CARGO_BIN_EXE_ec");
 
 /// The `--dest` of most cases; `STORE_DIR` must be `/nix/store`.
 pub const DEST: &str = "/nix/store/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-foo";
@@ -22,13 +22,13 @@ pub fn nix_store() -> bool {
     if ekacache_core::store_path::STORE_DIR == b"/nix/store" {
         return true;
     }
-    eprintln!("skipped: the vectors assume JIG_STORE_DIR=/nix/store");
+    eprintln!("skipped: the vectors assume EKACACHE_STORE_DIR=/nix/store");
     false
 }
 
 /// A fresh scratch directory (not removed when it has `chmod`ed contents left: see [`wipe`]).
 pub fn scratch(name: &str) -> PathBuf {
-    let dir = std::env::temp_dir().join(format!("jig-fixup-{}-{name}", std::process::id()));
+    let dir = std::env::temp_dir().join(format!("ec-fixup-{}-{name}", std::process::id()));
     wipe(&dir);
     std::fs::create_dir_all(&dir).unwrap();
     dir
@@ -80,7 +80,7 @@ pub fn chmod(p: &Path, mode: u32) {
 /// One file system entry of a snapshot.
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub struct Entry {
-    /// Relative to the tree, `.jig<pid>.` temp names masked.
+    /// Relative to the tree, `.ekacache<pid>.` temp names masked.
     pub path: String,
     /// `f`, `d`, `l` or `?`.
     pub kind: char,
@@ -90,19 +90,20 @@ pub struct Entry {
     pub data: Option<Vec<u8>>,
 }
 
-/// Mask `.jig<digits>.` (write-back temp names) in a path or message.
+/// Mask `.ekacache<digits>.` (write-back temp names) in a path or message.
 pub fn mask_tmp(text: &[u8]) -> Vec<u8> {
+    const TMP: &[u8] = b".ekacache";
     let mut out = Vec::with_capacity(text.len());
     let mut i = 0;
     while i < text.len() {
-        if text[i..].starts_with(b".jig") {
-            let digits = text[i + 4..]
+        if text[i..].starts_with(TMP) {
+            let digits = text[i + TMP.len()..]
                 .iter()
                 .take_while(|c| c.is_ascii_digit())
                 .count();
-            if digits > 0 && text.get(i + 4 + digits) == Some(&b'.') {
-                out.extend_from_slice(b".jig<pid>.");
-                i += 4 + digits + 1;
+            if digits > 0 && text.get(i + TMP.len() + digits) == Some(&b'.') {
+                out.extend_from_slice(b".ekacache<pid>.");
+                i += TMP.len() + digits + 1;
                 continue;
             }
         }
@@ -542,7 +543,7 @@ pub fn dynsym_value(b: &[u8], name: &[u8]) -> Option<u64> {
     })
 }
 
-/// Binaries linked the way the jig link driver links them (`behaviors/jig-reloc-fixup.md`
+/// Binaries linked the way the ec link driver links them (`behaviors/ec-reloc-fixup.md`
 /// *Interaction with the link driver*), and some that break its conventions. `tree/` is laid
 /// out for a prefix at `baked` (its in-prefix RUNPATH entries name `baked/lib/.`); `side/`
 /// holds libraries linked against but not shipped.

@@ -14,7 +14,7 @@ pub fn read_file(path: &[u8]) -> Option<Vec<u8>> {
     std::fs::read(os_path(path)).ok()
 }
 
-/// `WriteFile(path, data)` (`base.cc:89-101`): write `<parent>/.jig<pid>.<filename>`, then rename
+/// `WriteFile(path, data)` (`base.cc:89-101`): write `<parent>/.ekacache<pid>.<filename>`, then rename
 /// it over `path`. A failed write removes the temp file and returns `false`; a failed rename
 /// returns `false` and leaves the temp file (legacy does not remove it either).
 #[must_use]
@@ -22,13 +22,13 @@ pub fn write_file(path: &[u8], data: &[u8]) -> bool {
     write_file_errno(path, data).is_ok()
 }
 
-/// `WriteFile`, and on failure the `errno` legacy's `jig: cannot write <path>: <strerror>`
+/// `WriteFile`, and on failure the `errno` legacy's `ec: cannot write <path>: <strerror>`
 /// message reports: after a failed open or write, `fs::remove(tmp)` runs first, so a failed
 /// `remove(3)` (usually `ENOENT`: the temp file was never created) replaces the write's error;
 /// after a failed rename, rename's.
 pub fn write_file_errno(path: &[u8], data: &[u8]) -> Result<(), i32> {
     use std::io::Write;
-    let mut name = format!(".jig{}.", std::process::id()).into_bytes();
+    let mut name = format!(".ekacache{}.", std::process::id()).into_bytes();
     name.extend_from_slice(fspath::filename(path));
     let tmp = fspath::join(&fspath::parent_path(path), &name);
     let written = std::fs::OpenOptions::new()

@@ -1,4 +1,4 @@
-//! A5: the ELF fixup (`behaviors/jig-reloc-fixup.md §A5`, `§ELF64 structures read or written`,
+//! A5: the ELF fixup (`behaviors/ec-reloc-fixup.md §A5`, `§ELF64 structures read or written`,
 //! `§RUNPATH slot after rewrite`, `§PT_INTERP segment after rewrite`; `elf_fixup.cc`).
 //!
 //! RUNPATH entries become `$ORIGIN`-relative, NEEDED entries direct `$ORIGIN/…` paths when the

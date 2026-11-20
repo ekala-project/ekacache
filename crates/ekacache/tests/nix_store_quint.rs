@@ -1,4 +1,4 @@
-//! Model-based tests for `jig nix-store` (`implementation/09-jig-nix-store.md §Tests` 4,
+//! Model-based tests for `ec nix-store` (`implementation/09-ec-nix-store.md §Tests` 4,
 //! `implementation/12-testing.md §L4`): `spec/builder_rpc.qnt` traces drive the fake daemon, and
 //! the client's observable sequence must match each trace: the bytes it wrote (the model's
 //! `written`), its exit code, whether it printed a result, whether it printed a daemon error.

@@ -1,5 +1,5 @@
-//! The Mach-O fixup (A6) through the `jig` binary. First the spec's vectors
-//! (`behaviors/jig-reloc-fixup.md §Test vectors`, *From TestMachOFixup* and *Derived and
+//! The Mach-O fixup (A6) through the `ec` binary. First the spec's vectors
+//! (`behaviors/ec-reloc-fixup.md §Test vectors`, *From TestMachOFixup* and *Derived and
 //! confirmed: Mach-O re-signing*), whose expected values `test_mach_o_fixup` reads from
 //! `tests/vectors/ec-reloc-fixup.toml` while building the images here; then
 //! (`implementation/12-testing.md`) a golden tree of load-command, header-room and signature
@@ -272,7 +272,7 @@ fn slots_hash_pages(f: &[u8], cd: usize, slots: usize, page: usize, limit: usize
 
 fn fixup(cwd: &Path, args: &[Vec<u8>]) -> Run {
     run_mode(
-        Path::new(common::JIG),
+        Path::new(common::EC),
         cwd,
         args,
         Sink::File,
@@ -303,7 +303,7 @@ fn test_mach_o_fixup() {
         (r, std::fs::read(&file_path).unwrap())
     };
 
-    let vectors = VectorFile::load("jig-reloc-fixup");
+    let vectors = VectorFile::load("ec-reloc-fixup");
     let status = |v: &Vector| Some(i32::try_from(v.int("status")).unwrap());
     let sizes = |v: &Vector| -> Vec<u64> {
         v.ints("cmdsizes")
@@ -676,7 +676,7 @@ fn ec(
     sink: Sink,
 ) -> Run {
     let r = run_at(
-        Path::new(common::JIG),
+        Path::new(common::EC),
         work,
         cwd,
         args,
@@ -806,7 +806,7 @@ fn macho_tree_invocations() {
     let prep2 = |w: &Path| {
         macho_tree(w);
         let r = run_mode(
-            Path::new(common::JIG),
+            Path::new(common::EC),
             w.parent().unwrap(),
             &[arg(w), arg("--dest"), arg(DEST)],
             Sink::File,
@@ -1110,7 +1110,7 @@ fn macho_mutants() {
             write(&w.join("lib/libcrypto.3.dylib"), b"");
         };
         let r = run_at(
-            Path::new(common::JIG),
+            Path::new(common::EC),
             &work,
             &dir,
             &args,
@@ -1133,9 +1133,9 @@ fn macho_mutants() {
     );
 }
 
-/// `JIG_FIXUP_MUTANTS` overrides the number of mutants (for a longer run by hand).
+/// `EKACACHE_FIXUP_MUTANTS` overrides the number of mutants (for a longer run by hand).
 fn mutant_count(default: usize) -> usize {
-    std::env::var("JIG_FIXUP_MUTANTS")
+    std::env::var("EKACACHE_FIXUP_MUTANTS")
         .ok()
         .and_then(|v| v.parse().ok())
         .unwrap_or(default)

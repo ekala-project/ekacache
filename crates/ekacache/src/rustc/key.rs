@@ -1,5 +1,5 @@
-//! k1 of rustc mode (`behaviors/jig-rustc-mode.md §Request key (k1)`, `rustc_mode.cc:243-318`;
-//! framing in `behaviors/jig-keys.md §The Hasher`).
+//! k1 of rustc mode (`behaviors/ec-rustc-mode.md §Request key (k1)`, `rustc_mode.cc:243-318`;
+//! framing in `behaviors/ec-keys.md §The Hasher`).
 //!
 //! Q-RS-2 kept: no field passes through `MaskOut`.
 
@@ -14,7 +14,7 @@ use crate::client::Client;
 use crate::twokey;
 
 /// Field 1. ADOPTED Q-RS-3: the C++ jig writes `rs-schema=7`; entries made under it lack the
-/// env-dep lines, so neither jig reads the other's.
+/// env-dep lines, so neither ec reads the other's.
 pub const SCHEMA: &[u8] = b"rs-schema=8";
 
 /// The variables hashed into k1 as `NAME=value` (empty when unset), in this order.
@@ -34,7 +34,7 @@ pub struct KeyInputs<'a> {
     pub stdlib: &'a [u8],
     /// `current_path()`.
     pub cwd: &'a [u8],
-    /// jig's environment.
+    /// ec's environment.
     pub env: &'a Env,
     /// The crate root's bytes.
     pub source: &'a [u8],
@@ -242,7 +242,7 @@ mod tests {
     fn q_rs_2_no_mask_out() {
         let out = "/nix/store/0123456789abcdfghijklmnpqrsvwxyz-foo";
         let store = Store::from_env(&Env::from_pairs(&[
-            ("JIG_STORE_IDENTITY", "content"),
+            ("EKACACHE_STORE_IDENTITY", "content"),
             ("out", out),
         ]));
         let inv = parse_rust_invocation(&[

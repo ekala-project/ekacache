@@ -1,4 +1,4 @@
-//! Budgets, victims, demotion and eviction (`jigd-store.md` §Budgets, victims, demotion and
+//! Budgets, victims, demotion and eviction (`ecd-store.md` §Budgets, victims, demotion and
 //! eviction; adopted Q-STORE-7 for the fsyncs; Q-STORE-8, Q-STORE-10, Q-STORE-12, Q-STORE-13
 //! kept).
 //!

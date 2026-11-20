@@ -1,8 +1,8 @@
-//! The JSON reader behind `etc/jig.json` and `$PKGS_CC` (`behaviors/jig-driver-policy.md
-//! §jig.json schema`): the semantics of `nlohmann::json::parse(text, nullptr,
+//! The JSON reader behind `etc/ekacache.json` and `$PKGS_CC` (`behaviors/ec-driver-policy.md
+//! §ekacache.json schema`): the semantics of `nlohmann::json::parse(text, nullptr,
 //! allow_exceptions=false)`, which both legacy readers use.
 //!
-//! The plan (`implementation/06-jig-cc.md §JSON parity with nlohmann`) proposed `serde_json`
+//! The plan (`implementation/06-ec-cc.md §JSON parity with nlohmann`) proposed `serde_json`
 //! behind a BOM strip. Probing the legacy binary showed three more differences that a shim
 //! cannot cover, so this is a small hand-written parser instead:
 //!
@@ -375,7 +375,7 @@ mod tests {
 
     #[test]
     fn accepted_and_rejected_like_legacy() {
-        // every row was checked against the C++ jig (`jig.json: not a JSON object` or not)
+        // every row was checked against the C++ jig (`ekacache.json: not a JSON object` or not)
         for t in [
             &br#"{"cc":"/c"}"#[..],
             b"\xef\xbb\xbf{}",

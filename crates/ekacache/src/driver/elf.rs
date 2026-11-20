@@ -1,5 +1,5 @@
-//! The ELF link policy: RUNPATH over the store dirs with slack for `jig reloc-fixup`, our
-//! dynamic linker, the crt_interp stub (`behaviors/jig-driver-policy.md` A6–A10).
+//! The ELF link policy: RUNPATH over the store dirs with slack for `ec reloc-fixup`, our
+//! dynamic linker, the crt_interp stub (`behaviors/ec-driver-policy.md` A6–A10).
 
 use ekacache_core::bytes::split;
 use ekacache_core::fspath;
@@ -178,7 +178,7 @@ mod tests {
     use super::*;
 
     /// Beyond TV-19 and TV-35, which `tests/driver_vectors.rs` reads from
-    /// `tests/vectors/jig-driver-policy.toml`.
+    /// `tests/vectors/ec-driver-policy.toml`.
     #[test]
     fn shared_lib_names() {
         for (name, want) in [

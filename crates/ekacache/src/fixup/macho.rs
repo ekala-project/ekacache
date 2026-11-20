@@ -1,4 +1,4 @@
-//! A6: the Mach-O fixup (`behaviors/jig-reloc-fixup.md §A6`, `§Mach-O structures`,
+//! A6: the Mach-O fixup (`behaviors/ec-reloc-fixup.md §A6`, `§Mach-O structures`,
 //! `§Code signature`; `macho_fixup.cc`). Host independent: nothing here needs macOS.
 //!
 //! Path load commands are respelled `@loader_path`-relative (LC_ID_DYLIB becomes the final
@@ -444,7 +444,7 @@ mod tests {
     /// store): a dangling in-package target passes when prefix == dest.
     #[test]
     fn no_existence_check_when_prefix_is_dest() {
-        let p: &[u8] = b"/nix/store/00000000000000000000000000000000-jig-test-missing";
+        let p: &[u8] = b"/nix/store/00000000000000000000000000000000-ec-test-missing";
         let here = [p, b"/lib"].concat();
         let load = b"@loader_path/libgone.dylib";
         assert_eq!(

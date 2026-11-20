@@ -1,10 +1,10 @@
-//! Model-based test: `spec/gocache.qnt` traces replayed against two real `jig gocacheprog`
-//! processes sharing one fake jigd (`implementation/08-jig-gocache-and-cache-cmds.md §Part 2
-//! §Tests`, `behaviors/jig-gocacheprog.md §Concurrency model`).
+//! Model-based test: `spec/gocache.qnt` traces replayed against two real `ec gocacheprog`
+//! processes sharing one fake ecd (`implementation/08-ec-gocache-and-cache-cmds.md §Part 2
+//! §Tests`, `behaviors/ec-gocacheprog.md §Concurrency model`).
 //!
-//! The model's steps are single daemon requests, so the fake jigd holds each process's
+//! The model's steps are single daemon requests, so the fake ecd holds each process's
 //! connection before `PUT go/a/` (between `putStart` and `putFinish`) and before `GET go/o/`
-//! (between `getStart` and `getFinish`); evictions are done in the fake (jigd has no delete).
+//! (between `getStart` and `getFinish`); evictions are done in the fake (ecd has no delete).
 //! After every step the daemon contents, each process's state, `lastHit` and `lastErr` must
 //! equal the model's, and `hitIsConsistent`, `noTornBodies` and `pointersAnnounced` are checked
 //! on the real side. Model action `a<n>` is the ActionID `sha256("action a<n>")`, body `b` is
@@ -20,7 +20,7 @@
 //!   --max-samples=200 --max-steps=40 --seed=0x5eed spec/gocache.qnt
 //! ```
 //!
-//! `$JIG_GOCACHE_ITF_DIR` names a directory of more `*.itf.json` traces to replay.
+//! `$EKACACHE_GOCACHE_ITF_DIR` names a directory of more `*.itf.json` traces to replay.
 #![allow(
     clippy::unwrap_used,
     clippy::too_many_lines,
@@ -40,7 +40,7 @@ use std::time::{Duration, Instant};
 use serde_json::Value;
 use sha2::{Digest, Sha256};
 
-use gocache_support::{FakeJigd, HANDSHAKE, JIG, Run, b64, hex};
+use gocache_support::{EC, FakeEcd, HANDSHAKE, Run, b64, hex};
 
 const TIMEOUT: Duration = Duration::from_secs(20);
 
@@ -102,8 +102,8 @@ struct Proc {
 }
 
 impl Proc {
-    fn start(fake: &FakeJigd, conn: usize, dir: PathBuf) -> Self {
-        let mut cmd = Run::new(OsStr::new(JIG), Some(&fake.sock))
+    fn start(fake: &FakeEcd, conn: usize, dir: PathBuf) -> Self {
+        let mut cmd = Run::new(OsStr::new(EC), Some(&fake.sock))
             .env("GOCACHEPROG_DIR", dir.as_os_str())
             .command();
         cmd.stdin(Stdio::piped())
@@ -136,7 +136,7 @@ impl Proc {
         p
     }
 
-    fn hold(&self, fake: &FakeJigd) {
+    fn hold(&self, fake: &FakeEcd) {
         fake.hold(self.conn, "PUT go/a/");
         fake.hold(self.conn, "GET go/o/");
     }
@@ -159,7 +159,7 @@ impl Proc {
     }
 
     /// Wait until the process is held before a request starting with `prefix`, or replies.
-    fn held_or_reply(&self, fake: &FakeJigd, prefix: &str) -> Option<String> {
+    fn held_or_reply(&self, fake: &FakeEcd, prefix: &str) -> Option<String> {
         let t = Instant::now();
         loop {
             if let Some(req) = fake.blocked(self.conn) {
@@ -256,7 +256,7 @@ fn model_view(s: &Value) -> View {
 
 struct Replay<'w> {
     world: &'w World,
-    fake: FakeJigd,
+    fake: FakeEcd,
     procs: Vec<Proc>,
     last_hit: LastHit,
     last_err: bool,
@@ -267,7 +267,7 @@ struct Replay<'w> {
 
 impl<'w> Replay<'w> {
     fn new(world: &'w World) -> Self {
-        let fake = FakeJigd::start();
+        let fake = FakeEcd::start();
         let tmp = tempfile::tempdir().unwrap();
         let procs = (0..2)
             .map(|c| Proc::start(&fake, c, tmp.path().join(format!("dp{}", c + 1))))
@@ -305,7 +305,7 @@ impl<'w> Replay<'w> {
                 assert_eq!(pr.state, PState::Idle);
                 let id = pr.send(&line);
                 if torn {
-                    // refused before anything is sent to jigd
+                    // refused before anything is sent to ecd
                     assert_eq!(
                         pr.recv(),
                         format!(
@@ -541,7 +541,7 @@ fn quint_traces() {
     ] {
         assert!(seen.contains(want), "no {want} in the traces: {seen:?}");
     }
-    if let Some(more) = std::env::var_os("JIG_GOCACHE_ITF_DIR") {
+    if let Some(more) = std::env::var_os("EKACACHE_GOCACHE_ITF_DIR") {
         for t in traces(Path::new(&more)) {
             replay(&world, &t);
         }

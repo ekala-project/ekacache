@@ -1,9 +1,9 @@
-//! cc mode end to end (`implementation/06-jig-cc.md §Tests`, `behaviors/jig-cc-mode.md`,
-//! `behaviors/jig-driver-policy.md` TV-37).
+//! cc mode end to end (`implementation/06-ec-cc.md §Tests`, `behaviors/ec-cc-mode.md`,
+//! `behaviors/ec-driver-policy.md` TV-37).
 //!
 //! - TV-37: a fake root `R/bin/ec` (a copy of the binary under test) with `cc`, `c++` and
 //!   `gfortran` symlinks and a fake compiler that prints its argv.
-//! - Real compiles (launcher mode, `$JIG_TEST_GCC` / `$JIG_TEST_CLANG` or `gcc`/`clang` on
+//! - Real compiles (launcher mode, `$EKACACHE_TEST_GCC` / `$EKACACHE_TEST_CLANG` or `gcc`/`clang` on
 //!   `PATH`) against a daemon (`$EC_RUST_ECD`): miss, hit, invalidation, cached failures, `-E` to
 //!   stdout, links; the adopted rules A–D and Q-CC-5.
 //! - Q-CC-2: a recording fake ecd sees `DONE` after the last `PUT`.
@@ -20,30 +20,30 @@ use std::process::{Command, Output, Stdio};
 use std::sync::{Arc, Mutex};
 
 mod common;
-use common::{Daemon, JIG, daemon};
+use common::{Daemon, EC, daemon};
 
 fn write_exe(path: &Path, text: &str) {
     std::fs::write(path, text).unwrap();
     std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o755)).unwrap();
 }
 
-/// `R/bin/jig` (a copy, so `/proc/self/exe` is inside `R`), its mode symlinks, `R/fakecc`, and
-/// `R/etc/jig.json` when given (`<R>` is replaced by the root).
+/// `R/bin/ec` (a copy, so `/proc/self/exe` is inside `R`), its mode symlinks, `R/fakecc`, and
+/// `R/etc/ekacache.json` when given (`<R>` is replaced by the root).
 struct Root {
     dir: tempfile::TempDir,
 }
 
 impl Root {
-    fn new(jig: &Path, conf: Option<&str>) -> Self {
+    fn new(ec: &Path, conf: Option<&str>) -> Self {
         let dir = tempfile::Builder::new()
             .prefix("jr")
             .tempdir_in("/tmp")
             .unwrap();
         let r = dir.path();
         std::fs::create_dir_all(r.join("bin")).unwrap();
-        std::fs::copy(jig, r.join("bin/jig")).unwrap();
+        std::fs::copy(ec, r.join("bin/ec")).unwrap();
         for name in ["cc", "c++", "gfortran", "gcc"] {
-            std::os::unix::fs::symlink("jig", r.join("bin").join(name)).unwrap();
+            std::os::unix::fs::symlink("ec", r.join("bin").join(name)).unwrap();
         }
         // argv on stderr; -print-search-dirs output without a final newline (TV-37)
         write_exe(
@@ -56,7 +56,7 @@ impl Root {
         let root = Self { dir };
         if let Some(conf) = conf {
             std::fs::create_dir_all(&etc).unwrap();
-            std::fs::write(etc.join("jig.json"), root.subst(conf)).unwrap();
+            std::fs::write(etc.join("ekacache.json"), root.subst(conf)).unwrap();
         }
         root
     }
@@ -78,8 +78,8 @@ impl Root {
             .current_dir(self.path())
             .env_clear()
             .env("PATH", "/usr/bin:/bin")
-            .env("JIG_SOCK", "/nonexistent/sock")
-            .env("JIG_LOG", &log);
+            .env("EKACACHE_SOCK", "/nonexistent/sock")
+            .env("EKACACHE_LOG", &log);
         for (k, v) in env {
             cmd.env(k, self.subst(v));
         }
@@ -89,7 +89,7 @@ impl Root {
     }
 }
 
-/// A run's observable result, with the root spelt `<R>` and `$JIG_LOG`'s times dropped.
+/// A run's observable result, with the root spelt `<R>` and `$EKACACHE_LOG`'s times dropped.
 #[derive(Debug, PartialEq, Eq)]
 struct Run {
     status: Option<i32>,
@@ -118,24 +118,24 @@ impl Run {
 /// TV-37 on the Rust binary: the `end-to-end` rows of `tests/vectors/ec-driver-policy.toml`.
 #[test]
 fn tv37_end_to_end() {
-    let jig = Path::new(JIG);
-    let file = ekacache_testkit::vectors::VectorFile::load("jig-driver-policy");
+    let ec = Path::new(EC);
+    let file = ekacache_testkit::vectors::VectorFile::load("ec-driver-policy");
     for v in file.of_kind("end-to-end", 5) {
         let at = v.label();
-        let root = Root::new(jig, v.opt_str("conf"));
+        let root = Root::new(ec, v.opt_str("conf"));
         let env: Vec<(&str, &str)> = v
             .strs("env")
             .into_iter()
             .map(|kv| kv.split_once('=').unwrap())
             .collect();
         let r = root.run(v.str("tool"), &v.strs("args"), &env);
-        // Q-DRV-2: `etc/jig.json` is found only through /proc/self/exe, so on a host without
-        // procfs a conf is never read and, without `JIG_CC`, cc mode stops before the compiler
+        // Q-DRV-2: `etc/ekacache.json` is found only through /proc/self/exe, so on a host without
+        // procfs a conf is never read and, without `EKACACHE_CC`, cc mode stops before the compiler
         if !cfg!(target_os = "linux") {
-            if v.opt_str("conf").is_some() && !env.iter().any(|(k, _)| *k == "JIG_CC") {
+            if v.opt_str("conf").is_some() && !env.iter().any(|(k, _)| *k == "EKACACHE_CC") {
                 assert_eq!(r.status, Some(1), "{at}: {r:?}");
                 assert_eq!(
-                    r.stderr, "jig: no etc/jig.json next to the binary and JIG_CC unset\n",
+                    r.stderr, "ec: no etc/ekacache.json next to the binary and EKACACHE_CC unset\n",
                     "{at}"
                 );
             }
@@ -181,14 +181,14 @@ fn find_compiler(var: &str, name: &str) -> Option<PathBuf> {
 }
 
 fn gcc() -> Option<PathBuf> {
-    find_compiler("JIG_TEST_GCC", "gcc")
+    find_compiler("EKACACHE_TEST_GCC", "gcc")
 }
 
 fn clang() -> Option<PathBuf> {
-    find_compiler("JIG_TEST_CLANG", "clang")
+    find_compiler("EKACACHE_TEST_CLANG", "clang")
 }
 
-/// A build directory and a way to run `jig <compiler> args` in it.
+/// A build directory and a way to run `ec <compiler> args` in it.
 struct Work {
     dir: tempfile::TempDir,
     sock: PathBuf,
@@ -222,19 +222,19 @@ impl Work {
         std::fs::read(self.path().join(name)).unwrap()
     }
 
-    /// `jig <compiler> args`; the log rows without times.
-    fn jig(&self, jig: &Path, compiler: &Path, args: &[&str]) -> (Output, Vec<String>) {
+    /// `ec <compiler> args`; the log rows without times.
+    fn ec(&self, ec: &Path, compiler: &Path, args: &[&str]) -> (Output, Vec<String>) {
         let log = self.path().join("tmp/log");
         let _ = std::fs::remove_file(&log);
-        let out = Command::new(jig)
+        let out = Command::new(ec)
             .arg(compiler)
             .args(args)
             .current_dir(self.path())
             .env_clear()
             .env("PATH", std::env::var_os("PATH").unwrap_or_default())
             .env("TMPDIR", self.path().join("tmp"))
-            .env("JIG_SOCK", &self.sock)
-            .env("JIG_LOG", &log)
+            .env("EKACACHE_SOCK", &self.sock)
+            .env("EKACACHE_LOG", &log)
             .stdin(Stdio::null())
             .output_busy()
             .unwrap();
@@ -248,7 +248,7 @@ impl Work {
 }
 
 fn rust() -> &'static Path {
-    Path::new(JIG)
+    Path::new(EC)
 }
 
 fn row(outcome: &str, subject: &str) -> Vec<String> {
@@ -269,7 +269,7 @@ fn real_compiles_hit() {
             "-Iinc", "-O2", "-c", "a.c", "-o", "out/a.o", "-MD", "-MF", "out/a.d",
         ];
         std::fs::create_dir(w.path().join("out")).unwrap();
-        let (out, log) = w.jig(rust(), &compiler, &args);
+        let (out, log) = w.ec(rust(), &compiler, &args);
         assert!(out.status.success(), "{out:?}");
         assert_eq!(
             log,
@@ -280,42 +280,42 @@ fn real_compiles_hit() {
         let (object, depfile) = (w.read("out/a.o"), w.read("out/a.d"));
         std::fs::remove_file(w.path().join("out/a.o")).unwrap();
         std::fs::remove_file(w.path().join("out/a.d")).unwrap();
-        let (out, log) = w.jig(rust(), &compiler, &args);
+        let (out, log) = w.ec(rust(), &compiler, &args);
         assert!(out.status.success() && out.stderr.is_empty(), "{out:?}");
         assert_eq!(log, row("cached", "a.c"));
         assert_eq!(w.read("out/a.o"), object);
         assert_eq!(w.read("out/a.d"), depfile);
         // -MT retargets the replayed depfile
-        let (_, log) = w.jig(rust(), &compiler, &[&args[..], &["-MT", "T"]].concat());
+        let (_, log) = w.ec(rust(), &compiler, &[&args[..], &["-MT", "T"]].concat());
         assert_eq!(log, row("cached", "a.c"));
         assert!(w.read("out/a.d").starts_with(b"T:"));
         // without -MD the entry still serves
-        let (_, log) = w.jig(rust(), &compiler, &args[..6]);
+        let (_, log) = w.ec(rust(), &compiler, &args[..6]);
         assert_eq!(log, row("cached", "a.c"));
         // a header change invalidates
         w.write("inc/a.h", "#define N 2\n");
-        let (_, log) = w.jig(rust(), &compiler, &args);
+        let (_, log) = w.ec(rust(), &compiler, &args);
         assert_eq!(log, row("compiled", "a.c inputs-changed:inc/a.h"));
 
         // a deterministic failure is cached, with its stderr and status
         w.write("bad.c", "int x = ;\n");
-        let (first, log) = w.jig(rust(), &compiler, &["-c", "bad.c"]);
+        let (first, log) = w.ec(rust(), &compiler, &["-c", "bad.c"]);
         assert_eq!(log, row("compiled-error", "bad.c new-key"));
-        let (second, log) = w.jig(rust(), &compiler, &["-c", "bad.c"]);
+        let (second, log) = w.ec(rust(), &compiler, &["-c", "bad.c"]);
         assert_eq!(log, row("cached-error", "bad.c"));
         assert_eq!(second.status.code(), first.status.code());
         assert_eq!(second.stderr, first.stderr);
         // a missing header is never stored
         w.write("miss.c", "#include \"nope.h\"\n");
-        let (_, log) = w.jig(rust(), &compiler, &["-c", "miss.c"]);
+        let (_, log) = w.ec(rust(), &compiler, &["-c", "miss.c"]);
         assert_eq!(log, row("failed", "miss.c new-key"));
-        let (_, log) = w.jig(rust(), &compiler, &["-c", "miss.c"]);
+        let (_, log) = w.ec(rust(), &compiler, &["-c", "miss.c"]);
         assert_eq!(log, row("failed", "miss.c new-key"));
 
         // -E to stdout
-        let (first, log) = w.jig(rust(), &compiler, &["-Iinc", "-E", "a.c"]);
+        let (first, log) = w.ec(rust(), &compiler, &["-Iinc", "-E", "a.c"]);
         assert_eq!(log, row("compiled", "a.c new-key"));
-        let (second, log) = w.jig(rust(), &compiler, &["-Iinc", "-E", "a.c"]);
+        let (second, log) = w.ec(rust(), &compiler, &["-Iinc", "-E", "a.c"]);
         assert_eq!(log, row("cached", "a.c"));
         assert_eq!(second.stdout, first.stdout);
         assert!(!first.stdout.is_empty());
@@ -323,16 +323,16 @@ fn real_compiles_hit() {
 
         // a link (GNU ld and lld both write --dependency-file)
         w.write("m.c", "int f(void);\nint main(void) { return f() - 2; }\n");
-        let (_, log) = w.jig(rust(), &compiler, &["-c", "m.c"]);
+        let (_, log) = w.ec(rust(), &compiler, &["-c", "m.c"]);
         assert_eq!(log, row("compiled", "m.c new-key"));
         let link = ["m.o", "out/a.o", "-o", "prog"];
-        let (out, log) = w.jig(rust(), &compiler, &link);
+        let (out, log) = w.ec(rust(), &compiler, &link);
         assert!(out.status.success(), "{out:?}");
         // linked when the linker cannot write --dependency-file (GNU ld before 2.40)
         let stored = log == row("compiled", "prog new-key");
         let binary = w.read("prog");
         std::fs::remove_file(w.path().join("prog")).unwrap();
-        let (_, log) = w.jig(rust(), &compiler, &link);
+        let (_, log) = w.ec(rust(), &compiler, &link);
         if stored {
             assert_eq!(log, row("cached", "prog"));
             assert_eq!(w.read("prog"), binary);
@@ -349,9 +349,9 @@ fn real_compiles_hit() {
                 .success()
         );
         // configure probe: one source straight to an executable
-        let (_, log) = w.jig(rust(), &compiler, &["-o", "probe", "m.c", "out/a.o"]);
+        let (_, log) = w.ec(rust(), &compiler, &["-o", "probe", "m.c", "out/a.o"]);
         assert_eq!(log, row("linked", "m.c"));
-        let (_, log) = w.jig(rust(), &compiler, &["--version"]);
+        let (_, log) = w.ec(rust(), &compiler, &["--version"]);
         assert_eq!(log, row("query", ""));
     }
 }
@@ -370,26 +370,26 @@ fn adopted_rules() {
     let w = Work::new(&d);
     w.write("a.c", "int f(void) { return 1; }\n");
     // rule A: a side output
-    let (out, log) = w.jig(rust(), &compiler, &["-c", "a.c", "-gsplit-dwarf"]);
+    let (out, log) = w.ec(rust(), &compiler, &["-c", "a.c", "-gsplit-dwarf"]);
     assert!(out.status.success());
     assert_eq!(log, row("uncacheable", "a.c"));
     // rule B: a hidden input
-    let (_, log) = w.jig(rust(), &compiler, &["-c", "a.c", "-specs=/dev/null"]);
+    let (_, log) = w.ec(rust(), &compiler, &["-c", "a.c", "-specs=/dev/null"]);
     assert_eq!(log, row("uncacheable", "a.c"));
     // rule D: another toolchain's temp dir
     w.write("go-build123/b001/x.c", "int g(void) { return 2; }\n");
-    let (_, log) = w.jig(rust(), &compiler, &["-c", "go-build123/b001/x.c"]);
+    let (_, log) = w.ec(rust(), &compiler, &["-c", "go-build123/b001/x.c"]);
     assert_eq!(log, row("uncacheable", "go-build123/b001/x.c"));
     // rule C before lookup: the source itself
     w.write("data.bin", "DATA");
     w.write("inc.S", ".data\n.incbin \"data.bin\"\n");
-    let (out, log) = w.jig(rust(), &compiler, &["-c", "inc.S"]);
+    let (out, log) = w.ec(rust(), &compiler, &["-c", "inc.S"]);
     assert!(out.status.success(), "{out:?}");
     assert_eq!(log, row("uncacheable", "inc.S"));
     // rule C before storing: an included header
     w.write("blob.h", ".incbin \"data.bin\"\n");
     w.write("via.S", "#include \"blob.h\"\n");
-    let (out, log) = w.jig(rust(), &compiler, &["-c", "via.S"]);
+    let (out, log) = w.ec(rust(), &compiler, &["-c", "via.S"]);
     assert!(out.status.success(), "{out:?}");
     assert_eq!(log, row("compiled-unstored", "via.S incbin"));
 
@@ -399,21 +399,21 @@ fn adopted_rules() {
     write_exe(
         &bin.join("gcc"),
         "#!/bin/sh\nwhile [ $# -gt 0 ]; do if [ \"$1\" = -MF ]; then printf 'a.o: a.c\\n' > \"$2\"; fi; shift; done\n\
-         echo \"a.c: fatal error: cannot write a.o: $JIG_FAKE_ERR\" >&2\nexit 1\n",
+         echo \"a.c: fatal error: cannot write a.o: $EKACACHE_FAKE_ERR\" >&2\nexit 1\n",
     );
     let fake = bin.join("gcc");
-    let run_fake = |jig: &Path, err: &str| {
+    let run_fake = |ec: &Path, err: &str| {
         let log = w.path().join("tmp/log");
         let _ = std::fs::remove_file(&log);
-        let out = Command::new(jig)
+        let out = Command::new(ec)
             .arg(&fake)
             .args(["-c", "a.c"])
             .current_dir(w.path())
             .env_clear()
             .env("PATH", "/usr/bin:/bin")
-            .env("JIG_SOCK", &w.sock)
-            .env("JIG_LOG", &log)
-            .env("JIG_FAKE_ERR", err)
+            .env("EKACACHE_SOCK", &w.sock)
+            .env("EKACACHE_LOG", &log)
+            .env("EKACACHE_FAKE_ERR", err)
             .output_busy()
             .unwrap();
         assert_eq!(out.status.code(), Some(1));
@@ -442,8 +442,8 @@ fn adopted_rules() {
     );
 }
 
-/// `-E` to stdout compiles to `<temp_directory>/jig<pid>.i`: `$TMPDIR` or `/tmp`, and a
-/// relative `jig<pid>.i` when `TMPDIR` is set but empty (path join semantics).
+/// `-E` to stdout compiles to `<temp_directory>/ekacache<pid>.i`: `$TMPDIR` or `/tmp`, and a
+/// relative `ekacache<pid>.i` when `TMPDIR` is set but empty (path join semantics).
 #[test]
 fn preprocess_temp_path() {
     let Some(d) = daemon("EC_RUST_ECD") else {
@@ -458,14 +458,14 @@ fn preprocess_temp_path() {
         &fake,
         "#!/bin/sh\nfor a in \"$@\"; do printf '[%s]' \"$a\" >&2; done\nprintf '\\n' >&2\n",
     );
-    let output_arg = |jig: &Path, tmpdir: Option<&str>| {
-        let mut cmd = Command::new(jig);
+    let output_arg = |ec: &Path, tmpdir: Option<&str>| {
+        let mut cmd = Command::new(ec);
         cmd.arg(&fake)
             .args(["-E", "a.c"])
             .current_dir(w.path())
             .env_clear()
             .env("PATH", "/usr/bin:/bin")
-            .env("JIG_SOCK", &w.sock);
+            .env("EKACACHE_SOCK", &w.sock);
         if let Some(t) = tmpdir {
             cmd.env("TMPDIR", t);
         }
@@ -477,18 +477,18 @@ fn preprocess_temp_path() {
     };
     let tmp = w.path().join("tmp");
     let tmp = tmp.to_str().unwrap();
-    assert_eq!(output_arg(rust(), None), "/tmp/jig.i");
-    assert_eq!(output_arg(rust(), Some("")), "jig.i");
+    assert_eq!(output_arg(rust(), None), "/tmp/ekacache.i");
+    assert_eq!(output_arg(rust(), Some("")), "ekacache.i");
     assert_eq!(
         output_arg(rust(), Some(tmp)),
-        format!("{tmp}/jig.i").replace(|c: char| c.is_ascii_digit(), "")
+        format!("{tmp}/ekacache.i").replace(|c: char| c.is_ascii_digit(), "")
     );
 }
 
 // ---------------------------------------------------------------------------------------------
 // Q-CC-2: a recording daemon
 
-/// A fake jigd that answers every request plainly (GET: MISS) and records the command words.
+/// A fake ecd that answers every request plainly (GET: MISS) and records the command words.
 /// With `refuse_puts`, every PUT gets `ERR` (a daemon that cannot store).
 fn recording_daemon(refuse_puts: bool) -> (tempfile::TempDir, PathBuf, Arc<Mutex<Vec<String>>>) {
     let dir = tempfile::Builder::new()
@@ -556,7 +556,7 @@ fn done_after_the_last_put() {
         (&["-c", "bad.c"], "compiled-error"),
     ] {
         seen.lock().unwrap().clear();
-        let (_, log) = w.jig(rust(), &compiler, args);
+        let (_, log) = w.ec(rust(), &compiler, args);
         assert_eq!(log[0].split('\t').nth(1).unwrap(), outcome, "{log:?}");
         let seen = seen.lock().unwrap().clone();
         let slot = seen.iter().position(|c| c == "SLOT").unwrap();
@@ -591,14 +591,14 @@ fn refused_put() {
         (&["-c", "bad.c"], "failed", Some(1)),
     ] {
         seen.lock().unwrap().clear();
-        let (out, log) = w.jig(rust(), &compiler, args);
+        let (out, log) = w.ec(rust(), &compiler, args);
         let source = args[1];
         assert_eq!(log, row(outcome, &format!("{source} new-key")));
         assert_eq!(out.status.code(), status);
         let stderr = String::from_utf8(out.stderr).unwrap();
         let last = stderr.lines().last().unwrap();
         assert!(
-            last.starts_with("jig: cache put m/") && last.ends_with(" failed"),
+            last.starts_with("ec: cache put m/") && last.ends_with(" failed"),
             "{stderr}"
         );
         let seen = seen.lock().unwrap().clone();

@@ -1,5 +1,5 @@
-//! jigd's log: Go's standard logger with default flags (`jigd-daemon.md` §Logging;
-//! `implementation/03-jigd-server.md` §Logging and error text).
+//! ecd's log: Go's standard logger with default flags (`ecd-daemon.md` §Logging;
+//! `implementation/03-ecd-server.md` §Logging and error text).
 //!
 //! Each line is `YYYY/MM/DD HH:MM:SS ` in local time, the message, and `\n` if the message does
 //! not end in one, written to stderr in one `write`. Messages are bytes: a key or path in a log

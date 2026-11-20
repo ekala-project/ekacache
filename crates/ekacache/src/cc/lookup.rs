@@ -1,4 +1,4 @@
-//! Lookup and replay (`behaviors/jig-cc-mode.md §Lookup and replay`, `cc_mode.cc:192-283`).
+//! Lookup and replay (`behaviors/ec-cc-mode.md §Lookup and replay`, `cc_mode.cc:192-283`).
 
 use std::os::unix::fs::PermissionsExt;
 
@@ -149,9 +149,9 @@ pub fn retarget_depfile(text: &[u8], inv: &Invocation) -> Vec<u8> {
     }
 }
 
-/// `jig: cannot write <path>: <strerror>`.
+/// `ec: cannot write <path>: <strerror>`.
 fn cannot_write(path: &[u8], errno: i32) {
-    let mut msg = b"jig: cannot write ".to_vec();
+    let mut msg = b"ec: cannot write ".to_vec();
     msg.extend_from_slice(path);
     msg.extend_from_slice(b": ");
     msg.extend_from_slice(&sys::strerror(errno));

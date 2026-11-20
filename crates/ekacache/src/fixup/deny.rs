@@ -1,4 +1,4 @@
-//! A4: the deny check (`behaviors/jig-reloc-fixup.md §A4`; `fixup_mode.cc` `CheckDenied`).
+//! A4: the deny check (`behaviors/ec-reloc-fixup.md §A4`; `fixup_mode.cc` `CheckDenied`).
 
 use ekacache_core::bytes::{concat, find};
 

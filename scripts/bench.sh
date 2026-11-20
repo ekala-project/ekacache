@@ -30,11 +30,11 @@ while [ ! -S "$d/sock" ]; do
   sleep 0.05
 done
 
-# cc mode takes its language from argv[0]; JIG_CC is the compiler of a conf-less ec
+# cc mode takes its language from argv[0]; EKACACHE_CC is the compiler of a conf-less ec
 mkdir -p "$work/bin" "$work/src"
 ln -s "$ec" "$work/bin/cc"
 printf 'int main(void) { return 0; }\n' >"$work/src/t.c"
-export JIG_CC="$cc" JIG_SOCK="$d/sock"
+export EKACACHE_CC="$cc" EKACACHE_SOCK="$d/sock"
 cd "$work/src"
 "$work/bin/cc" -c t.c -o t.o
 
@@ -42,4 +42,4 @@ echo "== hit latency"
 hyperfine --warmup 20 --runs 300 -N -n ec "$work/bin/cc -c t.c -o t.o"
 
 echo "== daemon round trips"
-python3 -I "$here/jigd_bench.py" "$d/sock" "$d/store"
+python3 -I "$here/ecd_bench.py" "$d/sock" "$d/store"

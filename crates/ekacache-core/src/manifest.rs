@@ -1,4 +1,4 @@
-//! Manifests: the stored list of inputs that ties k1 to k2 (`behaviors/jig-keys.md §Manifest`,
+//! Manifests: the stored list of inputs that ties k1 to k2 (`behaviors/ec-keys.md §Manifest`,
 //! `manifest.cc:94-170`).
 //!
 //! A manifest is a sequence of `\n`-terminated lines, `<Key(path)>\t<InputId>` for each input
@@ -7,7 +7,7 @@
 //!
 //! rustc manifests (k1 text `rs/…`) also carry `$env:<NAME>\t<id>` lines between the input
 //! and the `!` lines, one per `env!`/`option_env!` dependency (ADOPTED Q-RS-3,
-//! `behaviors/jig-rustc-mode.md §Q-RS-3`): `build_with_env`, `validate_with_env`.
+//! `behaviors/ec-rustc-mode.md §Q-RS-3`): `build_with_env`, `validate_with_env`.
 //!
 //! The daemon's `IDS` request is abstracted as `ask`: given the paths the daemon may identify,
 //! it returns one answer per path (`""` = no answer), or an empty vector when the request
@@ -104,7 +104,7 @@ pub fn build<I: AsRef<[u8]>, A: AsRef<[u8]>>(
     )
 }
 
-/// `build` with ADOPTED Q-RS-3 env-dep lines (`behaviors/jig-rustc-mode.md §Q-RS-3`): each of
+/// `build` with ADOPTED Q-RS-3 env-dep lines (`behaviors/ec-rustc-mode.md §Q-RS-3`): each of
 /// `env_lines` (made by `env_line`, without `\n`) is emitted after the input lines and before
 /// the `!` lines, in the order given, and hashed into k2 like every other line.
 pub fn build_with_env<I: AsRef<[u8]>, A: AsRef<[u8]>, L: AsRef<[u8]>>(
@@ -233,7 +233,7 @@ pub fn validate(
     validate_impl(store, k1, text, None, ask)
 }
 
-/// `validate` with ADOPTED Q-RS-3 env-dep entries (`behaviors/jig-rustc-mode.md §Q-RS-3`).
+/// `validate` with ADOPTED Q-RS-3 env-dep entries (`behaviors/ec-rustc-mode.md §Q-RS-3`).
 ///
 /// Only when the k1 text starts with `rs/`: an input-shaped line (one with a tab) that starts
 /// with `$env:` is an env entry. `NAME` is the text between `$env:` and the first tab; its id is
@@ -354,7 +354,7 @@ pub const ENV_PREFIX: &[u8] = b"$env:";
 /// `$env:` lines are interpreted only in manifests whose k1 text starts with this.
 const RUSTC_KEY_PREFIX: &[u8] = b"rs/";
 
-/// jig's environment as an env-dep sees it: `getenv(name)`, `None` when unset.
+/// ec's environment as an env-dep sees it: `getenv(name)`, `None` when unset.
 pub type EnvLookup<'a> = dyn Fn(&[u8]) -> Option<Vec<u8>> + 'a;
 
 /// The `<id>` of an env-dep line (ADOPTED Q-RS-3): `unset`, or the lowercase hex digest of
@@ -420,7 +420,7 @@ mod tests {
     fn prefetch_asks_once_for_daemon_paths_only() {
         let out = [STORE_DIR, b"/0123456789abcdfghijklmnpqrsvwxyz-o"].concat();
         let env = Env::from_pairs(&[
-            (&b"JIG_STORE_IDENTITY"[..], &b"content"[..]),
+            (&b"EKACACHE_STORE_IDENTITY"[..], &b"content"[..]),
             (&b"out"[..], &out[..]),
         ]);
         let store = Store::from_env(&env);
@@ -447,7 +447,7 @@ mod tests {
 
     #[test]
     fn env_dep_ids() {
-        // ADOPTED Q-RS-3: behaviors/jig-rustc-mode.md §Q-RS-3
+        // ADOPTED Q-RS-3: behaviors/ec-rustc-mode.md §Q-RS-3
         assert_eq!(env_id(None), b"unset");
         assert_eq!(
             env_id(Some(b"a")),

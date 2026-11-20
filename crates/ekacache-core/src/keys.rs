@@ -1,5 +1,5 @@
-//! Key types and server-side prefixes (`behaviors/jig-keys.md §Key types and prefixes`), and
-//! `KeyEnvironment` (`behaviors/jig-keys.md §k1 field sequences`, `cc_mode.cc:556-580`).
+//! Key types and server-side prefixes (`behaviors/ec-keys.md §Key types and prefixes`), and
+//! `KeyEnvironment` (`behaviors/ec-keys.md §k1 field sequences`, `cc_mode.cc:556-580`).
 //!
 //! The functions in `slot` are the **only** place the prefixes `m/ o/ e/ d/ r/ b/ go/a/ go/o/`
 //! and `rs/` are spelled.

@@ -1,10 +1,10 @@
-//! Helpers for the `gocache_*` tests: an in-process fake jigd, and running a `jig gocacheprog`
+//! Helpers for the `gocache_*` tests: an in-process fake ecd, and running a `ec gocacheprog`
 //! with given stdin.
 //!
-//! The fake jigd speaks the subset of `behaviors/jigd-protocol.md` the Go cache program uses:
+//! The fake ecd speaks the subset of `behaviors/ecd-protocol.md` the Go cache program uses:
 //! `HELLO 1` (→ `OK 1`), `GET`, `PUT` (values framed by `ekacache_core::frame`, stored decoded), and
-//! hangs up on anything else. Beyond a real jigd it can evict any key, refuse PUTs (hang up
-//! after reading one, as jigd does for a rejected value), and hold a connection before a
+//! hangs up on anything else. Beyond a real ecd it can evict any key, refuse PUTs (hang up
+//! after reading one, as ecd does for a rejected value), and hold a connection before a
 //! request with a given prefix until released, which is how the Quint replay interleaves two
 //! processes at the granularity of single daemon requests (`spec/gocache.qnt`).
 #![allow(dead_code, clippy::unwrap_used)]
@@ -21,10 +21,10 @@ use std::time::{Duration, Instant};
 use base64::Engine as _;
 use base64::engine::general_purpose::STANDARD;
 
-/// The Rust jig under test.
-pub const JIG: &str = env!("CARGO_BIN_EXE_ec");
+/// The Rust ec under test.
+pub const EC: &str = env!("CARGO_BIN_EXE_ec");
 
-/// The handshake (`jig-gocacheprog.md §Handshake`).
+/// The handshake (`ec-gocacheprog.md §Handshake`).
 pub const HANDSHAKE: &str = "{\"ID\":0,\"KnownCommands\":[\"get\",\"put\",\"close\"]}\n";
 
 pub fn b64(b: &[u8]) -> String {
@@ -48,14 +48,14 @@ struct State {
     blocked: BTreeMap<usize, Vec<u8>>,
 }
 
-/// A fake jigd on a socket in a fresh temp directory; its threads end with the test process.
-pub struct FakeJigd {
+/// A fake ecd on a socket in a fresh temp directory; its threads end with the test process.
+pub struct FakeEcd {
     pub sock: PathBuf,
     _dir: tempfile::TempDir,
     state: Arc<(Mutex<State>, Condvar)>,
 }
 
-impl FakeJigd {
+impl FakeEcd {
     pub fn start() -> Self {
         let dir = tempfile::Builder::new()
             .prefix("jgc")
@@ -213,12 +213,12 @@ fn serve(id: usize, conn: UnixStream, st: &(Mutex<State>, Condvar)) {
     }
 }
 
-/// How a `jig gocacheprog` is run.
+/// How a `ec gocacheprog` is run.
 pub struct Run<'a> {
     pub bin: &'a OsStr,
-    /// `JIG_SOCK`; `None` gives a path that does not exist (not live).
+    /// `EKACACHE_SOCK`; `None` gives a path that does not exist (not live).
     pub sock: Option<&'a Path>,
-    /// Extra environment, after `PATH` and `JIG_SOCK`.
+    /// Extra environment, after `PATH` and `EKACACHE_SOCK`.
     pub env: Vec<(&'a str, &'a OsStr)>,
     pub cwd: Option<&'a Path>,
 }
@@ -267,9 +267,9 @@ impl<'a> Run<'a> {
             .env_clear()
             .env("PATH", std::env::var_os("PATH").unwrap_or_default())
             .env(
-                "JIG_SOCK",
+                "EKACACHE_SOCK",
                 self.sock
-                    .map_or(OsStr::new("/nonexistent/jigd/socket"), Path::as_os_str),
+                    .map_or(OsStr::new("/nonexistent/ekacache/socket"), Path::as_os_str),
             );
         for (k, v) in &self.env {
             cmd.env(k, v);
@@ -281,7 +281,7 @@ impl<'a> Run<'a> {
     }
 }
 
-/// `JIG_LOG` rows without the `<ms>` column (checked to be a number).
+/// `EKACACHE_LOG` rows without the `<ms>` column (checked to be a number).
 pub fn log_rows(path: &Path) -> Vec<String> {
     let Ok(text) = std::fs::read_to_string(path) else {
         return Vec::new();

@@ -1,5 +1,5 @@
 //! The server against an in-process daemon on a temporary socket (implementation/03 §Tests):
-//! `legacy/jigd/serve_test.go` ported, the wire examples of `jigd-protocol.md`, the adopted
+//! `legacy/jigd/serve_test.go` ported, the wire examples of `ecd-protocol.md`, the adopted
 //! HELLO and Q-SLOT-1, the Go buffer sizes that show through, and every hang-up that can be
 //! provoked from a client.
 
@@ -88,7 +88,7 @@ fn serve_hangs_up_on_endless_line() {
     writer.join().unwrap();
 }
 
-/// `jigd-protocol.md` §Wire examples, byte for byte, then the three PUTs on their own
+/// `ecd-protocol.md` §Wire examples, byte for byte, then the three PUTs on their own
 /// connections and their log lines.
 #[test]
 fn wire_examples() {

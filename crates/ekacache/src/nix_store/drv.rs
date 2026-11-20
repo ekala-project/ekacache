@@ -1,4 +1,4 @@
-//! Derivations (`behaviors/jig-nix-store.md §Derivations`): the `add-drv` JSON → ATerm encoder
+//! Derivations (`behaviors/ec-nix-store.md §Derivations`): the `add-drv` JSON → ATerm encoder
 //! (`§add-drv input → ATerm`) and the `builtin:fetchurl` derivation (`§The fetchurl
 //! derivation`).
 //!
@@ -132,7 +132,7 @@ fn aterm(drv: &Value) -> Option<Vec<u8>> {
 
 /// A JSON string from bytes that came out of validated JSON (or the store path built from
 /// them). Legacy's `dump()` of the derivation object would abort on invalid UTF-8; only a
-/// non-UTF-8 `JIG_STORE_DIR` could get here.
+/// non-UTF-8 `EKACACHE_STORE_DIR` could get here.
 fn json_string(s: &[u8]) -> Value {
     match std::str::from_utf8(s) {
         Ok(s) => Value::String(s.to_owned()),
@@ -217,11 +217,11 @@ mod tests {
     }
 
     fn vectors() -> ekacache_testkit::vectors::VectorFile {
-        ekacache_testkit::vectors::VectorFile::load("jig-nix-store")
+        ekacache_testkit::vectors::VectorFile::load("ec-nix-store")
     }
 
     /// `§Test vectors` `### ATerm [test]`: the `aterm` row of
-    /// `tests/vectors/jig-nix-store.toml`.
+    /// `tests/vectors/ec-nix-store.toml`.
     #[test]
     fn aterm_vector() {
         let file = vectors();

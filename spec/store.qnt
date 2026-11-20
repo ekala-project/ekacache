@@ -1,6 +1,6 @@
 // -*- mode: Bluespec; -*-
 /**
- * jigd's bitcask pack store (jigd/store.go): append-only packs, an in-memory index, hint files
+ * ecd's bitcask pack store (jigd/store.go): append-only packs, an in-memory index, hint files
  * for sealed packs, tiers with byte budgets, the demoter's victim order, and crash recovery.
  *
  * Abstractions:
@@ -22,7 +22,7 @@ module store {
   // Parameters
   // ---------------------------------------------------------------------------------------
   pure val NTIERS = 2                 // tiers[0] takes writes; the last tier deletes
-  pure val BUDGET = [30, 45]          // bytes per tier, 0 = unbounded (JIGD_SIZE, JIGD_COLD_SIZE)
+  pure val BUDGET = [30, 45]          // bytes per tier, 0 = unbounded (EKACACHED_SIZE, EKACACHED_COLD_SIZE)
   pure val PACK_LIMIT = 24            // packLimit (256 MiB)
   pure val REC_HEADER = 8             // u32 keylen + u32 vallen
   pure val KLEN = 1
@@ -253,7 +253,7 @@ module store {
         // link (or copy + rename) .pack and .hint into the next tier; mtime := used.
         // moveFile treats an existing destination as success and keeps it; startup deletes
         // later-tier duplicates and pack ids are never reused, so here it would hold the same
-        // pack and overwriting is equivalent (see jigd-store.md).
+        // pack and overwriting is equivalent (see ecd-store.md).
         files' = files.put((p.tier + 1, v), files.get((p.tier, v)).with("mtime", p.used)),
         copying' = v,
         index' = index, packs' = packs, totals' = totals, demoting' = demoting,

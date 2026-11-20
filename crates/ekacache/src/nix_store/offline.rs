@@ -1,5 +1,5 @@
-//! The offline store (`behaviors/jig-nix-store.md §Modes of operation`): with
-//! `JIG_NIX_STORE_OFFLINE` non-empty no socket is opened, text paths are computed locally under
+//! The offline store (`behaviors/ec-nix-store.md §Modes of operation`): with
+//! `EKACACHE_NIX_STORE_OFFLINE` non-empty no socket is opened, text paths are computed locally under
 //! `STORE_DIR`, and `submit` succeeds without doing anything.
 
 use ekacache_core::store_path::STORE_DIR;

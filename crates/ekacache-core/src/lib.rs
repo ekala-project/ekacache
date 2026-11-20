@@ -1,8 +1,8 @@
-//! `ekacache-core`: everything that jig and jigd must agree on byte for byte.
+//! `ekacache-core`: everything that ec and ecd must agree on byte for byte.
 //!
-//! Specified by `behaviors/jig-keys.md` (§The Hasher, §Key types and prefixes, §Store paths,
-//! §Key: lexical normalisation, §Manifest), `behaviors/jig-cache-client.md` (§Value encoding,
-//! §Version negotiation) and `behaviors/jigd-protocol.md` (§Framing, §Tokenization,
+//! Specified by `behaviors/ec-keys.md` (§The Hasher, §Key types and prefixes, §Store paths,
+//! §Key: lexical normalisation, §Manifest), `behaviors/ec-cache-client.md` (§Value encoding,
+//! §Version negotiation) and `behaviors/ecd-protocol.md` (§Framing, §Tokenization,
 //! §Number parsing, §HELLO). See `implementation/02-core.md`.
 //!
 //! Paths, keys and manifest lines are byte strings end to end: legacy never validates UTF-8.

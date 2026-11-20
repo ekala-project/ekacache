@@ -1,4 +1,4 @@
-//! `WithPackageLibDirs` (`behaviors/jig-driver-policy.md` A13): `cc -print-search-dirs` output
+//! `WithPackageLibDirs` (`behaviors/ec-driver-policy.md` A13): `cc -print-search-dirs` output
 //! with the package's dependency `-L` dirs on the `libraries:` line, for tools that search
 //! instead of link (libtool on mingw).
 
@@ -37,7 +37,7 @@ mod tests {
     use super::*;
 
     /// Beyond TV-20 and TV-34, which `tests/driver_vectors.rs` reads from
-    /// `tests/vectors/jig-driver-policy.toml`.
+    /// `tests/vectors/ec-driver-policy.toml`.
     #[test]
     fn crlf_has_no_libraries_line() {
         assert_eq!(with_package_lib_dirs(b"\r\n", &["-L/x"]), b"\r\n");

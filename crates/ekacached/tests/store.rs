@@ -1,4 +1,4 @@
-//! Store behaviour beyond the ported Go tests (`jigd-store.md`; implementation/04 §Tests): the
+//! Store behaviour beyond the ported Go tests (`ecd-store.md`; implementation/04 §Tests): the
 //! adopted changes (Q-STORE-1 sorted hints, Q-STORE-2 empty packs, Q-STORE-5 kick at start,
 //! Q-STORE-7 copy path), the loader quirks (Q-STORE-4, Q-STORE-9, duplicate ids), recency, put
 //! validation and error texts, and the manual demoter the Quint replay drives.
@@ -208,7 +208,7 @@ fn empty_packs_are_dropped() {
     s.close().unwrap();
     // the active pack never got a byte: it is deleted, not sealed
     assert_eq!(names(hot.path()), ["000002.hint", "000002.pack"]);
-    // so the next start reuses its id (behaviors/jigd-store.md Q-STORE-2 says ids are never
+    // so the next start reuses its id (behaviors/ecd-store.md Q-STORE-2 says ids are never
     // reused; rule 1 leaves no trace of the deleted id to count)
     let (cfg, cap) = config(vec![tier(hot.path(), 0), tier(cold.path(), 0)], 1 << 20);
     let s = Store::open(cfg).unwrap();

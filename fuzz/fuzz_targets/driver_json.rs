@@ -1,4 +1,4 @@
-//! The nlohmann-compatible JSON reader behind `etc/jig.json` and `$PKGS_CC`, and the driver conf
+//! The nlohmann-compatible JSON reader behind `etc/ekacache.json` and `$PKGS_CC`, and the driver conf
 //! on top of it: no panic.
 #![no_main]
 

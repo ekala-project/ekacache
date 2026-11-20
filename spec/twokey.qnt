@@ -1,6 +1,6 @@
 // -*- mode: Bluespec; -*-
 /**
- * Soundness of jig's two-key cache (jig/src/manifest.cc, jig/src/cc_mode.cc).
+ * Soundness of ec's two-key cache (jig/src/manifest.cc, jig/src/cc_mode.cc).
  *
  *   k1 = H(tool, cwd, normalised args, primary source bytes)     m/<k1> -> manifest
  *   k2 = H(k1, manifest lines)                                    o/ e/ d/ r/ <k2> -> artifacts
@@ -16,14 +16,14 @@
  * fails deterministically when y.h has content 3. Hashing is modelled as structural equality
  * (no collisions: k2 is the manifest itself).
  *
- * Theorem checked (`sound`): whatever jig hands back -- replayed or freshly compiled -- equals
+ * Theorem checked (`sound`): whatever ec hands back -- replayed or freshly compiled -- equals
  * what the real compiler produces on the build's file system at that moment.
  *
  * It holds under two assumptions, each a parameter below; flip one to see the counterexample:
- *  - ABSENT_LOG: the compiler reports missed lookups (JIG_ABSENT_LOG). Without it a header that
+ *  - ABSENT_LOG: the compiler reports missed lookups (EKACACHE_ABSENT_LOG). Without it a header that
  *    appears earlier on the search path is not noticed.
- *  - not MUTATE_DURING_COMPILE: inputs do not change between the compiler reading them and jig
- *    hashing them for the manifest (jig hashes after the compiler exits).
+ *  - not MUTATE_DURING_COMPILE: inputs do not change between the compiler reading them and ec
+ *    hashing them for the manifest (ec hashes after the compiler exits).
  *
  * Run:
  *   quint run --invariant=sound --max-steps=30 --max-samples=20000 spec/twokey.qnt
@@ -103,7 +103,7 @@ module twokey {
     manifest' = manifest, hasManifest' = hasManifest, artifacts' = artifacts, pending' = pending, last' = last,
   }
 
-  // jig is invoked: FindResult. Hit -> replay; miss -> run the compiler (manifest built later).
+  // ec is invoked: FindResult. Hit -> replay; miss -> run the compiler (manifest built later).
   action invoke(b: int): bool = all {
     not(pending.get(b).busy),
     invokeOn(b, fs.get(b)),
@@ -141,7 +141,7 @@ module twokey {
   }
 
   // the daemon drops the manifest or an artifact (eviction); a dropped artifact under a live
-  // manifest is "object-gone": jig recompiles
+  // manifest is "object-gone": ec recompiles
   action evictManifest: bool = all {
     hasManifest,
     hasManifest' = false, manifest' = List(),

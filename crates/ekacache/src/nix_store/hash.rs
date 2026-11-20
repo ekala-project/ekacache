@@ -1,4 +1,4 @@
-//! Store path computation (`behaviors/jig-nix-store.md §Store path computation`: SHA-256, Nix32,
+//! Store path computation (`behaviors/ec-nix-store.md §Store path computation`: SHA-256, Nix32,
 //! XOR-fold to 20 bytes, MakeStorePath, text paths, fixed-output paths).
 //!
 //! Nothing here validates names, references, `algo` or `hex`: they are used verbatim
@@ -121,7 +121,7 @@ mod tests {
     }
 
     fn vectors() -> ekacache_testkit::vectors::VectorFile {
-        ekacache_testkit::vectors::VectorFile::load("jig-nix-store")
+        ekacache_testkit::vectors::VectorFile::load("ec-nix-store")
     }
 
     /// The hash part of a store path.
@@ -131,7 +131,7 @@ mod tests {
     }
 
     /// `§Test vectors` `### SHA-256 [test]`: the `sha256` rows of
-    /// `tests/vectors/jig-nix-store.toml`.
+    /// `tests/vectors/ec-nix-store.toml`.
     #[test]
     fn sha256_vectors() {
         for v in vectors().of_kind("sha256", 3) {

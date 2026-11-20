@@ -31,7 +31,7 @@ tempfile = "3"
 proptest = { version = "1", default-features = false, features = ["std"] }
 
 [workspace.lints.rust]
-# ekacache-core denies unsafe outright (#![deny(unsafe_code)] in lib.rs); jig and jigd warn, and
+# ekacache-core denies unsafe outright (#![deny(unsafe_code)] in lib.rs); ec and ecd warn, and
 # every use carries a // SAFETY: comment.
 unsafe_code = "warn"
 unsafe_op_in_unsafe_fn = "deny"

@@ -1,4 +1,4 @@
-//! The two-key engine over a jigd connection (`behaviors/jig-keys.md §Manifest`,
+//! The two-key engine over an ecd connection (`behaviors/ec-keys.md §Manifest`,
 //! `manifest.cc:94-178`, `spec/twokey.qnt`).
 //!
 //! The manifest logic itself (k2, `!absent` lines, ADOPTED Q-KEY-3) is `ekacache_core::manifest`; this
@@ -50,7 +50,7 @@ pub fn prefetch_identities<P: AsRef<[u8]>>(client: &mut Client, store: &Store, p
     manifest::prefetch_identities(store, paths, &mut |p: &[&[u8]]| client.identities(p));
 }
 
-/// `find_result` for rustc with ADOPTED Q-RS-3 env-dep entries (`behaviors/jig-rustc-mode.md
+/// `find_result` for rustc with ADOPTED Q-RS-3 env-dep entries (`behaviors/ec-rustc-mode.md
 /// §Q-RS-3`): in an `rs/` manifest each `$env:<NAME>\t<id>` line is checked against `env(NAME)`
 /// and a mismatch is `env-changed:<NAME>` (`manifest::validate_with_env`).
 pub fn find_result_with_env(
@@ -161,7 +161,7 @@ mod tests {
         let k1 = RequestKey::new(Tool::Rustc, &hash_of(b"k1"));
         let (s, mut peer) = UnixStream::pair().unwrap();
         let mut c = Client::from_fd(OwnedFd::from(s), 1);
-        let lines = [manifest::env_line(b"JIG_T", Some(b"1"))];
+        let lines = [manifest::env_line(b"EKACACHE_T", Some(b"1"))];
         let m = build_manifest_with_env(&mut c, &store, &k1, &[&a], b"", &[] as &[&[u8]], &lines)
             .unwrap();
         let mut want = store.key(&a);
@@ -178,27 +178,27 @@ mod tests {
             peer.write_all(&wire).unwrap();
         };
         reply();
-        let same = |n: &[u8]| (n == b"JIG_T").then(|| b"1".to_vec());
+        let same = |n: &[u8]| (n == b"EKACACHE_T").then(|| b"1".to_vec());
         assert_eq!(
             find_result_with_env(&mut c, &store, &k1, &same),
             Ok(m.result_key.clone())
         );
         reply();
-        let changed = |n: &[u8]| (n == b"JIG_T").then(|| b"2".to_vec());
+        let changed = |n: &[u8]| (n == b"EKACACHE_T").then(|| b"2".to_vec());
         assert_eq!(
             find_result_with_env(&mut c, &store, &k1, &changed),
-            Err(b"env-changed:JIG_T".to_vec())
+            Err(b"env-changed:EKACACHE_T".to_vec())
         );
         reply();
         assert_eq!(
             find_result_with_env(&mut c, &store, &k1, &|_: &[u8]| None),
-            Err(b"env-changed:JIG_T".to_vec())
+            Err(b"env-changed:EKACACHE_T".to_vec())
         );
         // the plain find_result does not interpret `$env:` lines: an ordinary input line
         reply();
         assert_eq!(
             find_result(&mut c, &store, &k1),
-            Err(b"inputs-changed:$env:JIG_T".to_vec())
+            Err(b"inputs-changed:$env:EKACACHE_T".to_vec())
         );
     }
 }

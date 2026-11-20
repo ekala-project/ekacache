@@ -1,7 +1,7 @@
-//! cc mode, jig's C/C++ compiler front end (`behaviors/jig-cc-mode.md`, `cc_mode.cc`).
+//! cc mode, ec's C/C++ compiler front end (`behaviors/ec-cc-mode.md`, `cc_mode.cc`).
 //!
 //! `run` is the ten-step pipeline of §Pipeline: expand response files, load the driver conf
-//! (`behaviors/jig-driver-policy.md`), classify the arguments (`parse`), apply the adopted
+//! (`behaviors/ec-driver-policy.md`), classify the arguments (`parse`), apply the adopted
 //! uncacheable rules A–D (`uncacheable`), compute the primary identity and k1 (`primary`,
 //! `key`), then replay a hit (`lookup`), compile and store a miss (`store`) or run the compiler
 //! unchanged (`uncached`).
@@ -106,7 +106,7 @@ fn stdout_flushed(bytes: &[u8]) {
 }
 
 /// `RunCcMode(argv0, raw_args, socket_path, launched)` (`:645-706`). `name` is the mode name
-/// (the basename of `argv[0]` or `jig`'s first argument); `launched` is the program of launcher
+/// (the basename of `argv[0]` or `ec`'s first argument); `launched` is the program of launcher
 /// mode, which selects the conf-less driver conf.
 pub fn run(name: &[u8], args: &[Vec<u8>], launched: Option<&[u8]>, ctx: &mut Ctx) -> i32 {
     let clock = Stopwatch::start();
@@ -118,15 +118,15 @@ pub fn run(name: &[u8], args: &[Vec<u8>], launched: Option<&[u8]>, ctx: &mut Ctx
         Some(program) => Some(driver::conf_less(program)),
     };
     let Some(conf) = conf else {
-        stderr(b"jig: no etc/jig.json next to the binary and JIG_CC unset\n");
+        stderr(b"ec: no etc/ekacache.json next to the binary and EKACACHE_CC unset\n");
         return 1;
     };
     let name = ekacache_core::fspath::filename(name);
     let lang = Language::of(name);
     if lang == Language::Fortran && conf.fc.is_empty() {
-        let mut msg = b"jig: ".to_vec();
+        let mut msg = b"ec: ".to_vec();
         msg.extend_from_slice(name);
-        msg.extend_from_slice(b" called but etc/jig.json names no fc\n");
+        msg.extend_from_slice(b" called but etc/ekacache.json names no fc\n");
         stderr(&msg);
         return 1;
     }

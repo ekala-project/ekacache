@@ -1,4 +1,4 @@
-//! Argument classification (`behaviors/jig-cc-mode.md §Argument classification`,
+//! Argument classification (`behaviors/ec-cc-mode.md §Argument classification`,
 //! `cc_mode.cc:40-87`, `:446-643`): the suffix predicates, the scan, the after-scan rules and
 //! `Classify`.
 
@@ -137,8 +137,8 @@ fn classify(inv: &mut Invocation, sources: u32, objects: bool, stop: u8, env: &P
         inv.query = inv.query || (stop == b'E' && (sources == 0 || inv.source == b"/dev/null"));
         if stop == b'E' && (inv.output.is_empty() || path_eq(&inv.output, b"-")) {
             inv.to_stdout = true;
-            // Q-CC-8. A set-but-empty $TMPDIR gives a relative `jig<pid>.i`
-            let name = format!("jig{}.i", std::process::id());
+            // Q-CC-8. A set-but-empty $TMPDIR gives a relative `ekacache<pid>.i`
+            let name = format!("ekacache{}.i", std::process::id());
             inv.output = fspath::join(env.get_or("TMPDIR", b"/tmp"), name.as_bytes());
         } else if inv.output.is_empty() {
             let mut out = fspath::stem(&inv.source).to_vec();
@@ -387,7 +387,7 @@ mod tests {
         let inv = parse(&["-std=gnu23", "-E", "conftest.c"]);
         assert!(inv.cacheable && inv.compile_only && inv.to_stdout);
         assert_eq!(inv.key_args, v(&["-std=gnu23", "-E"]));
-        assert_eq!(inv.output, format!("/t/jig{pid}.i").as_bytes());
+        assert_eq!(inv.output, format!("/t/ekacache{pid}.i").as_bytes());
         let inv = parse(&["-E", "conftest.c", "-o", "-"]);
         assert!(inv.cacheable && inv.to_stdout);
         let inv = parse(&["-E", "-o", "x.i", "x.c"]);
@@ -402,15 +402,15 @@ mod tests {
         assert_eq!(parse(&["-E", "-c", "x.c"]).output, b"x.o");
         // $TMPDIR unset and set-but-empty
         let unset = parse_invocation(&["-E", "x.c"], &ProcEnv::new(Env::default()));
-        assert_eq!(unset.output, format!("/tmp/jig{pid}.i").as_bytes());
+        assert_eq!(unset.output, format!("/tmp/ekacache{pid}.i").as_bytes());
         let empty = parse_invocation(
             &["-E", "x.c"],
             &ProcEnv::new(Env::from_pairs(&[("TMPDIR", "")])),
         );
-        assert_eq!(empty.output, format!("jig{pid}.i").as_bytes());
+        assert_eq!(empty.output, format!("ekacache{pid}.i").as_bytes());
         // -E -MD to stdout: the depfile beside the temp file (Q-CC-8)
         let inv = parse(&["-E", "-MD", "x.c"]);
-        assert_eq!(inv.depfile, format!("/t/jig{pid}.d").as_bytes());
+        assert_eq!(inv.depfile, format!("/t/ekacache{pid}.d").as_bytes());
     }
 
     // jig_test.cc TestParseGuards

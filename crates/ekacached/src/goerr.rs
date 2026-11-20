@@ -1,5 +1,5 @@
 //! Go-shaped error values, so that log lines carry the Go daemon's error text byte for byte
-//! (`jigd-daemon.md` §Logging; `implementation/03-jigd-server.md` §Logging and error text).
+//! (`ecd-daemon.md` §Logging; `implementation/03-ecd-server.md` §Logging and error text).
 //!
 //! Rust's `io::Error` prints `No such file or directory (os error 2)`; Go prints
 //! `open /x: no such file or directory`. Each variant mirrors one Go error type and renders

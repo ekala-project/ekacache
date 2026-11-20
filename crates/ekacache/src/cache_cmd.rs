@@ -1,13 +1,13 @@
-//! `jig cache …` and `jig slot …` (`behaviors/jig-cache-commands.md`, `main.cc:37-74`,
+//! `ec cache …` and `ec slot …` (`behaviors/ec-cache-commands.md`, `main.cc:37-74`,
 //! `dir_mode.cc`). Phase P4.
 //!
-//! - `jig cache get|put <key> <file>`: plain blobs (§jig cache).
-//! - `jig cache put-dir|get-dir <key> <dir>`: a tree as `b/<hash>` blobs plus a listing
+//! - `ec cache get|put <key> <file>`: plain blobs (§ec cache).
+//! - `ec cache put-dir|get-dir <key> <dir>`: a tree as `b/<hash>` blobs plus a listing
 //!   (§Directory trees).
-//! - `jig slot <program> [args…]` (§jig slot).
+//! - `ec slot <program> [args…]` (§ec slot).
 //!
-//! Adopted here: Q-CLIENT-2 (`jig cache put` exits 1 when the PUT is not acknowledged, and every
-//! failed PUT is reported as `jig: cache put <key> failed`), Q-DIR-1 / Q-KEY-1 (path mode stores
+//! Adopted here: Q-CLIENT-2 (`ec cache put` exits 1 when the PUT is not acknowledged, and every
+//! failed PUT is reported as `ec: cache put <key> failed`), Q-DIR-1 / Q-KEY-1 (path mode stores
 //! and restores text unchanged: `Store::stored` / `Store::restored`). Everything else is
 //! reproduced, including Q-DIR-2 (readdir order), Q-DIR-3 (double read), Q-DIR-4 (aborts),
 //! Q-DIR-5 (no path sanitising), Q-DIR-6 and Q-DIR-7.
@@ -31,9 +31,9 @@ const BATCH: usize = 256;
 const DEFAULT_MODE: u64 = 0o644;
 /// The permission bits a listing records (`kPermBits`): setuid, setgid and sticky are dropped.
 const PERM_BITS: u32 = 0o777;
-const SLOT_USAGE: &[u8] = b"usage: jig slot <program> [args...]\n";
+const SLOT_USAGE: &[u8] = b"usage: ec slot <program> [args...]\n";
 
-/// `RunCacheMode(args, socket)` (§jig cache): exactly three arguments.
+/// `RunCacheMode(args, socket)` (§ec cache): exactly three arguments.
 pub fn run(args: &[Vec<u8>], ctx: &mut Ctx) -> i32 {
     // Q-DIR-6 kept: a wrong argument count exits 1 without a message
     let [verb, key, path] = args else {
@@ -66,7 +66,7 @@ pub fn run(args: &[Vec<u8>], ctx: &mut Ctx) -> i32 {
     }
 }
 
-/// `RunSlotMode(args, socket)` (§jig slot): run the program holding a jigd job slot.
+/// `RunSlotMode(args, socket)` (§ec slot): run the program holding an ecd job slot.
 pub fn slot(args: &[Vec<u8>], ctx: &mut Ctx) -> i32 {
     let Some((program, rest)) = args.split_first() else {
         let _ = std::io::stderr().write_all(SLOT_USAGE);
@@ -204,7 +204,7 @@ fn put_dir(socket: &[u8], store: &Store, key: &[u8], dir: &[u8]) -> i32 {
     if !client.put(key, &listing) {
         log::put_failed(key); // ADOPTED Q-CLIENT-2
     }
-    let mut msg = b"jig: put-dir ".to_vec();
+    let mut msg = b"ec: put-dir ".to_vec();
     msg.extend_from_slice(key);
     msg.extend_from_slice(format!(": {files} files, {uploaded} new\n").as_bytes());
     let _ = std::io::stderr().write_all(&msg);
@@ -326,7 +326,7 @@ fn get_dir(socket: &[u8], store: &Store, key: &[u8], dir: &[u8]) -> i32 {
             }
         }
     }
-    let mut msg = b"jig: get-dir ".to_vec();
+    let mut msg = b"ec: get-dir ".to_vec();
     msg.extend_from_slice(key);
     msg.extend_from_slice(format!(": {} files, {missing} missing\n", entries.len()).as_bytes());
     let _ = std::io::stderr().write_all(&msg);

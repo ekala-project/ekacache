@@ -1,4 +1,4 @@
-//! The jigd line protocol, shared by client and server (`behaviors/jigd-protocol.md §Framing`,
+//! The ecd line protocol, shared by client and server (`behaviors/ecd-protocol.md §Framing`,
 //! `§Tokenization`, `§Dispatch`, `§Number parsing`, `§HELLO`).
 
 /// Content bytes in one request line; the 65 536th byte without a `\n` is a hang-up.

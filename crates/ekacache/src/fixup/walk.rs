@@ -1,4 +1,4 @@
-//! A2: the tree walk and `own_lib_dirs` (`behaviors/jig-reloc-fixup.md §A2`;
+//! A2: the tree walk and `own_lib_dirs` (`behaviors/ec-reloc-fixup.md §A2`;
 //! `fixup_mode.cc` `RunFixupMode`, libstdc++ `recursive_directory_iterator` with
 //! `skip_permission_denied`).
 //!

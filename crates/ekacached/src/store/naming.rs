@@ -1,4 +1,4 @@
-//! Pack and hint file names (`jigd-store.md` §Directory layout and naming, §OpenStore: the
+//! Pack and hint file names (`ecd-store.md` §Directory layout and naming, §OpenStore: the
 //! `Sscanf("%06d.pack")` table, Q-STORE-3, Q-STORE-9).
 
 use std::os::unix::ffi::OsStrExt;
@@ -20,7 +20,7 @@ pub(crate) fn pack_path(dir: &[u8], id: u32, ext: &str) -> Vec<u8> {
 /// as `filepath.Join(dir, name)` together with the name, in bytewise order. An unreadable
 /// directory yields nothing (Glob ignores I/O errors).
 ///
-/// Glob would also interpret metacharacters in `dir` itself; jigd's tier directories are taken
+/// Glob would also interpret metacharacters in `dir` itself; ecd's tier directories are taken
 /// literally here (the Go behaviour for a directory name containing `*?[\` is not specified
 /// and is not reproduced).
 pub(crate) fn glob_packs(dir: &[u8]) -> Vec<(Vec<u8>, Vec<u8>)> {
@@ -105,7 +105,7 @@ fn is_go_space(r: char) -> bool {
 mod tests {
     use super::*;
 
-    // jigd-store.md §OpenStore, one assertion per table row (Q-STORE-9).
+    // ecd-store.md §OpenStore, one assertion per table row (Q-STORE-9).
     #[test]
     fn sscanf_table() {
         assert_eq!(scanf_pack_id(b"000042.pack"), Some(42));

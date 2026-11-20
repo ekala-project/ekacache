@@ -7,7 +7,7 @@
         │  argv[0] / argv[1] / RUSTC_WRAPPER / GOCACHEPROG
         ▼
   ec  (crates/ekacache)          synchronous, one short-lived process per compile
-        │  line protocol over a Unix socket (JIG_SOCK, default /nix/var/nix/jigd/socket)
+        │  line protocol over a Unix socket (EKACACHE_SOCK, default /nix/var/nix/ekacache/socket)
         ▼
   ecd (crates/ekacached)         tokio daemon, one per machine
         ├─ store: append-only bitcask packs + hints, size tiers, demotion, eviction
@@ -31,21 +31,21 @@ k2 = H(k1, manifest)                                 -> outputs, stderr, depfile
 
 The inputs come from the compiler's depfile or rustc's dep-info. Store files are identified by
 path and build-tree files by content. The details are in
-[`behaviors/jig-keys.md`](../behaviors/jig-keys.md) and `crates/ekacache/src/twokey.rs`.
+[`behaviors/ec-keys.md`](../behaviors/ec-keys.md) and `crates/ekacache/src/twokey.rs`.
 
 ## ec modes
 
 | Mode | Code | Behaviour doc | Plan |
 |---|---|---|---|
-| dispatch, launcher, process | `dispatch.rs`, `launcher.rs`, `process.rs` | [jig-dispatch](../behaviors/jig-dispatch.md) | [05](../implementation/05-jig-foundation.md) |
-| cache client | `client.rs` | [jig-cache-client](../behaviors/jig-cache-client.md) | [05](../implementation/05-jig-foundation.md) |
-| driver policy (`jig.json`) | `driver/` | [jig-driver-policy](../behaviors/jig-driver-policy.md) | [06](../implementation/06-jig-cc.md) |
-| C/C++ compile and link | `cc/` | [jig-cc-mode](../behaviors/jig-cc-mode.md) | [06](../implementation/06-jig-cc.md) |
-| rustc | `rustc/` | [jig-rustc-mode](../behaviors/jig-rustc-mode.md) | [07](../implementation/07-jig-rustc.md) |
-| GOCACHEPROG | `gocache.rs` | [jig-gocacheprog](../behaviors/jig-gocacheprog.md) | [08](../implementation/08-jig-gocache-and-cache-cmds.md) |
-| `cache …`, `slot` | `cache_cmd.rs`, `slot.rs` | [jig-cache-commands](../behaviors/jig-cache-commands.md) | [08](../implementation/08-jig-gocache-and-cache-cmds.md) |
-| `nix-store` | `nix_store/` | [jig-nix-store](../behaviors/jig-nix-store.md) | [09](../implementation/09-jig-nix-store.md) |
-| `reloc-fixup` (ELF, Mach-O) | `fixup/` | [jig-reloc-fixup](../behaviors/jig-reloc-fixup.md) | [10](../implementation/10-jig-reloc-fixup.md) |
+| dispatch, launcher, process | `dispatch.rs`, `launcher.rs`, `process.rs` | [ec-dispatch](../behaviors/ec-dispatch.md) | [05](../implementation/05-ec-foundation.md) |
+| cache client | `client.rs` | [ec-cache-client](../behaviors/ec-cache-client.md) | [05](../implementation/05-ec-foundation.md) |
+| driver policy (`ekacache.json`) | `driver/` | [ec-driver-policy](../behaviors/ec-driver-policy.md) | [06](../implementation/06-ec-cc.md) |
+| C/C++ compile and link | `cc/` | [ec-cc-mode](../behaviors/ec-cc-mode.md) | [06](../implementation/06-ec-cc.md) |
+| rustc | `rustc/` | [ec-rustc-mode](../behaviors/ec-rustc-mode.md) | [07](../implementation/07-ec-rustc.md) |
+| GOCACHEPROG | `gocache.rs` | [ec-gocacheprog](../behaviors/ec-gocacheprog.md) | [08](../implementation/08-ec-gocache-and-cache-cmds.md) |
+| `cache …`, `slot` | `cache_cmd.rs`, `slot.rs` | [ec-cache-commands](../behaviors/ec-cache-commands.md) | [08](../implementation/08-ec-gocache-and-cache-cmds.md) |
+| `nix-store` | `nix_store/` | [ec-nix-store](../behaviors/ec-nix-store.md) | [09](../implementation/09-ec-nix-store.md) |
+| `reloc-fixup` (ELF, Mach-O) | `fixup/` | [ec-reloc-fixup](../behaviors/ec-reloc-fixup.md) | [10](../implementation/10-ec-reloc-fixup.md) |
 
 All the state a mode reads (argv, env, store config, socket path) is captured once into `Ctx`
 (`crates/ekacache/src/lib.rs`).
@@ -54,11 +54,11 @@ All the state a mode reads (argv, env, store config, socket path) is captured on
 
 | Area | Code | Behaviour doc | Plan |
 |---|---|---|---|
-| CLI, socket, peer auth, signals | `daemon.rs`, `peer.rs`, `log.rs` | [jigd-daemon](../behaviors/jigd-daemon.md) | [03](../implementation/03-jigd-server.md) |
-| protocol | `server/` | [jigd-protocol](../behaviors/jigd-protocol.md) | [03](../implementation/03-jigd-server.md) |
-| store | `store/` | [jigd-store](../behaviors/jigd-store.md) | [04](../implementation/04-jigd-store.md) |
-| slots | `slots.rs` | [jigd-slots](../behaviors/jigd-slots.md) | [03](../implementation/03-jigd-server.md) |
-| identities | `identity.rs` | [jigd-identities](../behaviors/jigd-identities.md) | [03](../implementation/03-jigd-server.md) |
+| CLI, socket, peer auth, signals | `daemon.rs`, `peer.rs`, `log.rs` | [ecd-daemon](../behaviors/ecd-daemon.md) | [03](../implementation/03-ecd-server.md) |
+| protocol | `server/` | [ecd-protocol](../behaviors/ecd-protocol.md) | [03](../implementation/03-ecd-server.md) |
+| store | `store/` | [ecd-store](../behaviors/ecd-store.md) | [04](../implementation/04-ecd-store.md) |
+| slots | `slots.rs` | [ecd-slots](../behaviors/ecd-slots.md) | [03](../implementation/03-ecd-server.md) |
+| identities | `identity.rs` | [ecd-identities](../behaviors/ecd-identities.md) | [03](../implementation/03-ecd-server.md) |
 | Go-compatible errors and paths | `goerr*.rs`, `gofs.rs`, `gopath.rs` | (Go's error text, kept byte for byte) | |
 
 ## Platforms
@@ -67,9 +67,3 @@ Linux (x86_64, aarch64) is the primary target. macOS is phase P9
 ([11-macos.md](../implementation/11-macos.md)). Platform splits use
 `cfg(target_os = "linux")` and `cfg(target_vendor = "apple")`, and several quirks differ by
 platform (for example, abstract sockets exist only on Linux).
-
-## Mixed fleets
-
-ec works with the Go jigd, and the C++ jig works with ecd. Each daemon opens a store the other
-wrote. That compatibility is the reason the jig-era names and formats are frozen; see
-[13-rollout.md](../implementation/13-rollout.md).

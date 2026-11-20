@@ -1,4 +1,4 @@
-//! Record and hint-entry layouts (`jigd-store.md` §Pack file format, §Hint file format).
+//! Record and hint-entry layouts (`ecd-store.md` §Pack file format, §Hint file format).
 //!
 //! A record is `u32 LE keylen, u32 LE vallen, key, value`; a hint entry is `u32 LE keylen,
 //! u32 LE vallen, u64 LE offset of the record, key`. No headers, checksums or padding.
@@ -44,7 +44,7 @@ pub(crate) fn parse_hint_header(h: &[u8; HINT_HEADER]) -> (u32, u32, u64) {
 mod tests {
     use super::*;
 
-    // the worked examples in jigd-store.md
+    // the worked examples in ecd-store.md
     #[test]
     fn examples_from_the_spec() {
         let mut rec = record_head(b"k", 3);

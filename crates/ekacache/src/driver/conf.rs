@@ -1,4 +1,4 @@
-//! `DriverConf`: `etc/jig.json`, `$PKGS_CC`, `$JIG_CC` (`behaviors/jig-driver-policy.md
+//! `DriverConf`: `etc/ekacache.json`, `$PKGS_CC`, `$EKACACHE_CC` (`behaviors/ec-driver-policy.md
 //! §Configuration`, `driver.cc:350-430`).
 
 use ekacache_core::bytes::find;
@@ -102,7 +102,7 @@ fn string_list(v: &Value) -> Result<Vec<Vec<u8>>, Fatal> {
 pub fn parse_driver_conf(text: &[u8], root: &[u8]) -> Result<DriverConf, Fatal> {
     let doc = match json::parse(text) {
         Some(doc) if doc.is_object() => doc,
-        _ => return Err(Fatal::Exit(b"jig.json: not a JSON object\n".to_vec())),
+        _ => return Err(Fatal::Exit(b"ekacache.json: not a JSON object\n".to_vec())),
     };
     let mut conf = DriverConf {
         present: true,
@@ -137,13 +137,13 @@ pub fn parse_driver_conf(text: &[u8], root: &[u8]) -> Result<DriverConf, Fatal> 
         b"macho" => BinFmt::MachO,
         b"coff" => BinFmt::Coff,
         other => {
-            let mut msg = b"jig.json: binfmt ".to_vec();
+            let mut msg = b"ekacache.json: binfmt ".to_vec();
             msg.extend_from_slice(other);
             msg.extend_from_slice(b" is none of elf, macho, coff\n");
             return Err(Fatal::Exit(msg));
         }
     };
-    // "@/" at the start, after '=' or after a short option expands to jig's own prefix
+    // "@/" at the start, after '=' or after a short option expands to ec's own prefix
     // (§`@/` expansion in `fflags`, Q-DRV-13: the first occurrence only)
     for flag in &mut conf.fflags {
         let Some(p) = find(flag, b"@/") else { continue };
@@ -201,9 +201,9 @@ pub fn load_driver_conf_for(
 ) -> Result<Option<DriverConf>, Fatal> {
     if let Some(exe) = exe {
         let root = fspath::parent_path(&fspath::parent_path(exe));
-        if let Some(text) = read_file(&fspath::join(&root, b"etc/jig.json")) {
+        if let Some(text) = read_file(&fspath::join(&root, b"etc/ekacache.json")) {
             let mut conf = parse_driver_conf(&text, &root)?;
-            // Q-DRV-1: a conf without `cc` does not fall back to $JIG_CC
+            // Q-DRV-1: a conf without `cc` does not fall back to $EKACACHE_CC
             if conf.cc.is_empty() {
                 return Ok(None);
             }
@@ -211,11 +211,11 @@ pub fn load_driver_conf_for(
             return Ok(Some(conf));
         }
     }
-    Ok(env.non_empty("JIG_CC").map(conf_less))
+    Ok(env.non_empty("EKACACHE_CC").map(conf_less))
 }
 
-/// `LoadDriverConf()`: `<exe>/../../etc/jig.json` (Q-DRV-2: located through `/proc/self/exe`
-/// only), else `$JIG_CC`. Exits or aborts on a broken conf.
+/// `LoadDriverConf()`: `<exe>/../../etc/ekacache.json` (Q-DRV-2: located through `/proc/self/exe`
+/// only), else `$EKACACHE_CC`. Exits or aborts on a broken conf.
 #[must_use]
 pub fn load_driver_conf(env: &ProcEnv) -> Option<DriverConf> {
     let exe = std::fs::read_link("/proc/self/exe")
@@ -284,7 +284,7 @@ mod tests {
     }
 
     /// Beyond TV-36, which `tests/driver_vectors.rs` reads from
-    /// `tests/vectors/jig-driver-policy.toml`.
+    /// `tests/vectors/ec-driver-policy.toml`.
     #[test]
     fn empty_interp_and_no_cc() {
         let c = parse_driver_conf(br#"{"interp":"","binfmt":"coff"}"#, b"").unwrap();
@@ -316,21 +316,21 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let r = dir.path().as_os_str().as_encoded_bytes().to_vec();
         let mut exe = r.clone();
-        exe.extend_from_slice(b"/bin/jig");
+        exe.extend_from_slice(b"/bin/ec");
         let env = |pairs: &[(&str, &str)]| ProcEnv::new(Env::from_pairs(pairs));
-        // no conf, no JIG_CC
+        // no conf, no EKACACHE_CC
         assert_eq!(load_driver_conf_for(Some(&exe), &env(&[])), Ok(None));
         assert_eq!(
-            load_driver_conf_for(Some(&exe), &env(&[("JIG_CC", "")])),
+            load_driver_conf_for(Some(&exe), &env(&[("EKACACHE_CC", "")])),
             Ok(None)
         );
-        let c = load_driver_conf_for(None, &env(&[("JIG_CC", "/bin/cc")]))
+        let c = load_driver_conf_for(None, &env(&[("EKACACHE_CC", "/bin/cc")]))
             .unwrap()
             .unwrap();
         assert_eq!(c, conf_less(b"/bin/cc"));
         assert!(!c.present);
         // the build host's format (`driver.cc:439`): Mach-O on Apple, so conf-less links there
-        // are uncacheable (`jig-driver-policy.md §$JIG_CC and conf-less mode`)
+        // are uncacheable (`ec-driver-policy.md §$EKACACHE_CC and conf-less mode`)
         let host = if cfg!(target_vendor = "apple") {
             BinFmt::MachO
         } else {
@@ -338,13 +338,13 @@ mod tests {
         };
         assert_eq!(c.binfmt, host);
         std::fs::create_dir(dir.path().join("etc")).unwrap();
-        // Q-DRV-1: a conf without cc ignores JIG_CC
-        std::fs::write(dir.path().join("etc/jig.json"), r#"{"flags":[]}"#).unwrap();
+        // Q-DRV-1: a conf without cc ignores EKACACHE_CC
+        std::fs::write(dir.path().join("etc/ekacache.json"), r#"{"flags":[]}"#).unwrap();
         assert_eq!(
-            load_driver_conf_for(Some(&exe), &env(&[("JIG_CC", "/bin/true")])),
+            load_driver_conf_for(Some(&exe), &env(&[("EKACACHE_CC", "/bin/true")])),
             Ok(None)
         );
-        std::fs::write(dir.path().join("etc/jig.json"), r#"{"cc":"/c"}"#).unwrap();
+        std::fs::write(dir.path().join("etc/ekacache.json"), r#"{"cc":"/c"}"#).unwrap();
         let pkgs = format!(r#"{{"{}":{{"cflags":["-DP"]}}}}"#, dir.path().display());
         let c = load_driver_conf_for(Some(&exe), &env(&[("PKGS_CC", &pkgs)]))
             .unwrap()

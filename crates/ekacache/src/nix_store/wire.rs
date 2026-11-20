@@ -1,10 +1,10 @@
-//! Worker protocol encoding (`behaviors/jig-nix-store.md §Worker protocol` `§Encoding`): words,
+//! Worker protocol encoding (`behaviors/ec-nix-store.md §Worker protocol` `§Encoding`): words,
 //! padded strings, string lists, exact reads, and buffered writes sent at flush points.
 //!
 //! Reads loop on `read(2)` until they have every byte; a return of 0 or -1 (`EINTR` included,
 //! never retried) is a read failure. Writes go out with plain `write(2)`, not `send` with
 //! `MSG_NOSIGNAL`, so a daemon that hung up kills the process with `SIGPIPE` when the inherited
-//! disposition is the default (Q-NIX-7; jig keeps the inherited disposition, see `main.rs`).
+//! disposition is the default (Q-NIX-7; ec keeps the inherited disposition, see `main.rs`).
 
 use std::os::fd::OwnedFd;
 
