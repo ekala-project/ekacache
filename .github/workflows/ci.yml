@@ -1,7 +1,7 @@
 # CI for the Rust workspace (implementation/01-workspace.md §CI, 12-testing.md).
 #
-# Every job runs in nix-shell (shell.nix), so CI uses the same rustc, clippy, libzstd and
-# legacy build inputs as a local checkout. nixpkgs is pinned to the revision the work was
+# Every job runs in nix-shell (shell.nix), so CI uses the same rustc, clippy and libzstd as a
+# local checkout. nixpkgs is pinned to the revision the work was
 # tested against.
 name: ci
 
@@ -35,8 +35,6 @@ jobs:
         run: nix-shell --run 'cargo deny --locked check'
       - name: spec cross-checks
         run: |
-          scripts/check-legacy-ports.sh
-          scripts/check-allow-list.sh
           nix-shell --run scripts/check-vectors.sh
       - name: macOS cfg branches (type-check and lint)
         run: nix-shell --run scripts/check-macos.sh
@@ -50,7 +48,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: cachix/install-nix-action@v31
-      - name: cargo test (unit, vectors, ported legacy tests)
+      - name: cargo test (unit, vectors, ported tests)
         run: nix-shell --run 'cargo test --workspace --locked --no-fail-fast'
 
   quint:
@@ -89,7 +87,7 @@ jobs:
           # a replay test with no traces passes and says so: that must not happen here
           ! grep -q 'no traces' replay.log
 
-  difftest:
+  e2e:
     strategy:
       fail-fast: false
       matrix:
@@ -98,16 +96,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: cachix/install-nix-action@v31
-      - name: build legacy and the real compilers
+      - name: build the real compilers
         run: |
-          echo "JIG_LEGACY_JIG=$(nix-build --no-out-link -A legacy.jig)/bin/jig" >>"$GITHUB_ENV"
-          echo "JIG_LEGACY_JIGD=$(nix-build --no-out-link -A legacy.jigd)/bin/jigd" >>"$GITHUB_ENV"
           echo "JIG_TEST_GCC=$(nix-build --no-out-link '<nixpkgs>' -A gcc15)/bin/gcc" >>"$GITHUB_ENV"
           echo "JIG_TEST_CLANG=$(nix-build --no-out-link '<nixpkgs>' -A clang_20)/bin/clang" >>"$GITHUB_ENV"
-      - name: ec + ecd, against legacy
+      - name: ec + ecd, real compilers
         run: nix-shell --run 'cargo build -p ekacached --locked && EC_RUST_ECD=$PWD/target/debug/ecd cargo test --workspace --locked --no-fail-fast'
-      - name: ec + Go jigd
-        run: nix-shell --run 'cargo test -p ekacache --locked --no-fail-fast'
 
   bench:
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
@@ -115,11 +109,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: cachix/install-nix-action@v31
-      - name: "hit latency and daemon round trips (gate: Rust <= legacy + 5%)"
-        run: |
-          legacy_jig=$(nix-build --no-out-link -A legacy.jig)/bin/jig
-          legacy_jigd=$(nix-build --no-out-link -A legacy.jigd)/bin/jigd
-          nix-shell --run "cargo build --release --locked -p ekacache -p ekacached && scripts/bench.sh target/release/ec target/release/ecd $legacy_jig $legacy_jigd \$(command -v cc)"
+      - name: hit latency and daemon round trips
+        run: nix-shell --run 'cargo build --release --locked -p ekacache -p ekacached && scripts/bench.sh target/release/ec target/release/ecd "$(command -v cc)"'
 
   fuzz:
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
@@ -127,10 +118,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: cachix/install-nix-action@v31
-      - name: 60 s per target, against legacy
-        run: |
-          legacy_jig=$(nix-build --no-out-link -A legacy.jig)/bin/jig
-          nix-shell --run "cargo build --release --locked -p ekacache && EC_RUST_EC=\$PWD/target/release/ec JIG_LEGACY_JIG=$legacy_jig scripts/fuzz.sh 60"
+      - name: 60 s per target
+        run: nix-shell --run 'cargo build --release --locked -p ekacache && EC_RUST_EC=$PWD/target/release/ec scripts/fuzz.sh 60'
       - uses: actions/upload-artifact@v4
         if: failure()
         with:
@@ -146,11 +135,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: cachix/install-nix-action@v31
-      # the C++ jig does not build on macOS (SOCK_CLOEXEC, environ), so only the Go jigd is
-      # compared against here
-      - name: build the Go jigd
-        run: echo "JIG_LEGACY_JIGD=$(nix-build --no-out-link -A legacy.jigd)/bin/jigd" >>"$GITHUB_ENV"
-      - name: test and difftest
+      - name: test
         # a hang must fail the job, not use up the runner's six hours
         timeout-minutes: 60
         run: nix-shell --run 'cargo build -p ekacached --locked && EC_RUST_ECD=$PWD/target/debug/ecd cargo test --workspace --locked --no-fail-fast'

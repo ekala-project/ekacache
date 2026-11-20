@@ -1,6 +1,6 @@
-//! The client against real daemons (`implementation/05-jig-foundation.md §Tests`): the Go jigd
-//! (`$JIG_LEGACY_JIGD`, HELLO falls back to version 0) and the Rust jigd (version 1). Each test
-//! is skipped when its daemon binary is not given.
+//! The client against a real daemon (`implementation/05-ec-foundation.md §Tests`): the Rust
+//! ecd (`$EC_RUST_ECD`, HELLO negotiates version 1). Each test is skipped when the daemon binary
+//! is not given.
 #![allow(
     clippy::unwrap_used,
     clippy::many_single_char_names,
@@ -44,15 +44,6 @@ fn round_trips(d: &Daemon, version: u32) {
 }
 
 #[test]
-fn legacy_go_jigd() {
-    let Some(d) = daemon("JIG_LEGACY_JIGD") else {
-        eprintln!("JIG_LEGACY_JIGD not set: skipped");
-        return;
-    };
-    round_trips(&d, 0);
-}
-
-#[test]
 fn rust_jigd() {
     let Some(d) = daemon("EC_RUST_ECD") else {
         eprintln!("EC_RUST_ECD not set: skipped");
@@ -65,25 +56,26 @@ fn rust_jigd() {
 #[test]
 #[ignore = "benchmark; run with --ignored --nocapture"]
 fn hello_cost() {
-    for var in ["JIG_LEGACY_JIGD", "EC_RUST_ECD"] {
-        let Some(d) = daemon(var) else { continue };
-        let sock = d.sock_bytes();
-        let n = 2000;
-        let t = Instant::now();
-        for _ in 0..n {
-            let mut c = Client::connected_to(sock).unwrap();
-            let _ = c.get(b"o/none");
-        }
-        let per = t.elapsed() / n;
-        eprintln!("{var}: connect (with HELLO negotiation) + GET: {per:?}");
-        let t = Instant::now();
-        for _ in 0..n {
-            let mut s = std::os::unix::net::UnixStream::connect(&d.sock).unwrap();
-            use std::io::{BufRead, Write};
-            s.write_all(b"GET o/none\n").unwrap();
-            let mut l = String::new();
-            std::io::BufReader::new(s).read_line(&mut l).unwrap();
-        }
-        eprintln!("{var}: bare connect + GET: {:?}", t.elapsed() / n);
+    let Some(d) = daemon("EC_RUST_ECD") else {
+        eprintln!("EC_RUST_ECD not set: skipped");
+        return;
+    };
+    let sock = d.sock_bytes();
+    let n = 2000;
+    let t = Instant::now();
+    for _ in 0..n {
+        let mut c = Client::connected_to(sock).unwrap();
+        let _ = c.get(b"o/none");
     }
+    let per = t.elapsed() / n;
+    eprintln!("connect (with HELLO negotiation) + GET: {per:?}");
+    let t = Instant::now();
+    for _ in 0..n {
+        let mut s = std::os::unix::net::UnixStream::connect(&d.sock).unwrap();
+        use std::io::{BufRead, Write};
+        s.write_all(b"GET o/none\n").unwrap();
+        let mut l = String::new();
+        std::io::BufReader::new(s).read_line(&mut l).unwrap();
+    }
+    eprintln!("bare connect + GET: {:?}", t.elapsed() / n);
 }

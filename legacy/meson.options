@@ -1,6 +1,0 @@
-option(
-  'store_dir',
-  type: 'string',
-  value: '/nix/store',
-  description: 'Nix store directory jig is built for (builtins.storeDir)',
-)

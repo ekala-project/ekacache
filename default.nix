@@ -2,8 +2,6 @@
 #
 #   nix-build -A ekacache     # bin/ec and the mode symlink farm in libexec/ekacache; ecd in .ekacached
 #   nix-build -A ekacached    # bin/ecd
-#   nix-build -A legacy.jig   # the C++ jig, for rollback and the difftest
-#   nix-build -A legacy.jigd  # the Go jigd
 #
 # JIG_STORE_DIR is a build-time constant of ec (keys and the default socket derive from it), so
 # it is the store this package is built for: builtins.storeDir.
@@ -69,8 +67,8 @@ let
       "-p"
       "ekacached"
     ];
-    # the whole workspace; the differential tests skip themselves without JIG_LEGACY_* and the
-    # real-compiler tests without JIG_TEST_GCC/JIG_TEST_CLANG
+    # the whole workspace; the real-compiler tests skip themselves without
+    # JIG_TEST_GCC/JIG_TEST_CLANG
     cargoTestFlags = [ "--workspace" ];
 
     postInstall = ''
@@ -93,62 +91,9 @@ let
     };
   };
 
-  # The C++ jig needs P2718 (lifetime extension in range-for initialisers, GCC 15 / Clang 19).
-  # Without it, add-drv, fetchurls and jig_test's TestNixStore crash on a dangling temporary in
-  # DerivationToATerm (behaviors Q-NIX-1).
-  legacyStdenv =
-    if pkgs.stdenv.cc.isGNU && lib.versionOlder pkgs.stdenv.cc.version "15" then
-      pkgs.gcc15Stdenv
-    else
-      pkgs.stdenv;
-
-  # legacy/ exactly as it builds today (legacy/README.md §Building); it stays until legacy removal
-  # (13-rollout.md §Legacy removal step 1)
-  legacy = {
-    jig = legacyStdenv.mkDerivation {
-      pname = "jig-legacy";
-      version = "0.1.0";
-      src = fs.toSource {
-        root = ./legacy;
-        fileset = fs.unions [
-          ./legacy/meson.build
-          ./legacy/meson.options
-          ./legacy/jig
-        ];
-      };
-      nativeBuildInputs = [
-        pkgs.meson
-        pkgs.ninja
-        pkgs.pkg-config
-      ];
-      buildInputs = [
-        pkgs.libblake3
-        pkgs.zstd
-        pkgs.nlohmann_json
-      ];
-      mesonFlags = [ "-Dstore_dir=${builtins.storeDir}" ];
-      doCheck = true;
-      meta = {
-        mainProgram = "jig";
-        # SOCK_CLOEXEC, environ without a declaration: the C++ jig builds only on Linux
-        platforms = lib.platforms.linux;
-      };
-    };
-
-    jigd = pkgs.buildGoModule {
-      pname = "jigd-legacy";
-      version = "0.1.0";
-      src = fs.toSource {
-        root = ./legacy/jigd;
-        fileset = ./legacy/jigd;
-      };
-      vendorHash = "sha256-3TfQeKs/DJTm/h0QASqCPrpfGTfeTpnjaLak9eSWjz8=";
-      meta.mainProgram = "jigd";
-    };
-  };
 in
 {
-  inherit ekacache legacy;
+  inherit ekacache;
   ekacached = ekacache.ekacached;
   default = ekacache;
 }

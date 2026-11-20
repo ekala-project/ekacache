@@ -4,8 +4,8 @@
 //!
 //! Every request/response pair of the spec has a test here, plus the adopted JSON handling
 //! (Q-GO-1, -3, -4), the kept quirks (Q-GO-2, -5, -6, -7, -8), ADOPTED Q-CLIENT-2, and the
-//! recorded `cmd/go` sessions in `fixtures/gocache/` replayed against the legacy C++ jig's
-//! recorded responses. Nothing here needs a real jigd or the legacy binaries.
+//! recorded `cmd/go` sessions in `fixtures/gocache/` replayed against their recorded responses.
+//! Nothing here needs a real ecd.
 #![allow(clippy::unwrap_used, clippy::too_many_lines)]
 
 mod gocache_support;
@@ -411,7 +411,7 @@ fn object_id_is_ignored() {
     assert_eq!(s.fake.get("go/o/").unwrap(), b"xyz");
     assert_eq!(s.fake.get(&a_key(ACT)).unwrap(), b"");
     // writing the DiskPath (the directory itself) fails; its temp file stays behind, as in
-    // legacy (`gocache_difftest.rs` compares)
+    // legacy
     assert!(s.dp.is_dir());
     let fs = files(&s.dp);
     assert_eq!(fs.len(), 1);
@@ -711,10 +711,10 @@ fn fixture(name: &str) -> Vec<u8> {
 /// The sessions of `fixtures/gocache/session<n>.in` were recorded through a `tee` wrapper
 /// around the legacy C++ jig on a fresh Go jigd (go 1.25: `go build ./...` cold, again warm,
 /// `-gcflags=all=-N` cold, `go list -export`, `-N` warm; `session<n>.cmd`). The `.out` files
-/// are legacy's responses with the DiskPath directory replaced by `@DIR@`. Replayed in order
-/// against one fake jigd, the Rust responses must be byte-identical.
+/// are the recorded responses with the DiskPath directory replaced by `@DIR@`. Replayed in
+/// order against one fake ecd, the responses must be byte-identical.
 #[test]
-fn recorded_sessions_match_legacy() {
+fn recorded_sessions_match() {
     let s = setup();
     let dir = s.dp.to_str().unwrap().to_owned();
     for n in 1..=5 {

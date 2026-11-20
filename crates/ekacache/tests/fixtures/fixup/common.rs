@@ -1,6 +1,6 @@
 //! Shared by the reloc-fixup integration tests (`fixup_*.rs`, included with `#[path]`): running
-//! jig, and legacy, over a tree at one fixed path; snapshots of the tree; the comparison
-//! (`implementation/12-testing.md`, difftests gated on `JIG_LEGACY_JIG`).
+//! ec over a tree at one fixed path; snapshots of the tree; field mutation; ELF test binaries
+//! (`implementation/12-testing.md`).
 #![allow(dead_code, clippy::unwrap_used)]
 
 use ekacache_testkit::busy::CommandBusyExt as _;
@@ -14,28 +14,16 @@ use std::time::{Duration, Instant};
 
 pub const JIG: &str = env!("CARGO_BIN_EXE_ec");
 
-/// The `--dest` of most cases; `STORE_DIR` must be `/nix/store` (the legacy build's).
+/// The `--dest` of most cases; `STORE_DIR` must be `/nix/store`.
 pub const DEST: &str = "/nix/store/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-foo";
 
-/// Is this jig built for `/nix/store`, as the vectors and the legacy build are?
+/// Is this ec built for `/nix/store`, as the vectors are?
 pub fn nix_store() -> bool {
     if ekacache_core::store_path::STORE_DIR == b"/nix/store" {
         return true;
     }
     eprintln!("skipped: the vectors assume JIG_STORE_DIR=/nix/store");
     false
-}
-
-/// The legacy binary to compare with, from `JIG_LEGACY_JIG`.
-pub fn legacy() -> Option<PathBuf> {
-    match std::env::var_os("JIG_LEGACY_JIG") {
-        Some(p) if !p.is_empty() && nix_store() => Some(PathBuf::from(p)),
-        Some(p) if !p.is_empty() => None,
-        _ => {
-            eprintln!("skipped: set JIG_LEGACY_JIG to the legacy jig binary to run the difftest");
-            None
-        }
-    }
 }
 
 /// A fresh scratch directory (not removed when it has `chmod`ed contents left: see [`wipe`]).
@@ -273,19 +261,7 @@ fn scratch_io() -> PathBuf {
     scratch(&format!("io{n}"))
 }
 
-/// Our binary over the tree `prep` builds at `work`; the tree is snapshot and removed.
-pub fn run_jig(work: &Path, cwd: &Path, args: &[Vec<u8>], prep: &dyn Fn(&Path)) -> Run {
-    run_at(
-        Path::new(JIG),
-        work,
-        cwd,
-        args,
-        prep,
-        Sink::File,
-        Duration::from_secs(60),
-    )
-}
-
+/// `bin` over the tree `prep` builds at `work`; the tree is snapshot and removed.
 pub fn run_at(
     bin: &Path,
     work: &Path,
@@ -301,104 +277,6 @@ pub fn run_at(
     r.tree = snapshot(work);
     wipe(work);
     r
-}
-
-/// libstdc++'s report of an uncaught exception, which legacy appends to stderr before SIGABRT.
-const TERMINATE: &[u8] = b"terminate called after throwing an instance of ";
-
-/// Legacy's stderr without the `terminate called …` text (not reproduced, see `output.rs`).
-pub fn strip_terminate(stderr: &[u8]) -> &[u8] {
-    let at = stderr
-        .windows(TERMINATE.len())
-        .position(|w| w == TERMINATE)
-        .unwrap_or(stderr.len());
-    &stderr[..at]
-}
-
-/// A first difference between two runs, `None` when they agree.
-pub fn difference(l: &Run, r: &Run) -> Option<String> {
-    let show = |b: &[u8]| String::from_utf8_lossy(b).into_owned();
-    if (l.code, l.signal) != (r.code, r.signal) {
-        return Some(format!(
-            "status: legacy {:?}/{:?}, jig {:?}/{:?}\nlegacy stderr: {}\njig stderr: {}",
-            l.code,
-            l.signal,
-            r.code,
-            r.signal,
-            show(&l.stderr),
-            show(&r.stderr)
-        ));
-    }
-    if l.stdout != r.stdout {
-        return Some(format!(
-            "stdout:\n--- legacy\n{}--- jig\n{}",
-            show(&l.stdout),
-            show(&r.stdout)
-        ));
-    }
-    let lerr = if l.signal == Some(libc::SIGABRT) {
-        strip_terminate(&l.stderr)
-    } else {
-        &l.stderr
-    };
-    if mask_tmp(lerr) != mask_tmp(&r.stderr) {
-        return Some(format!(
-            "stderr:\n--- legacy\n{}--- jig\n{}",
-            show(lerr),
-            show(&r.stderr)
-        ));
-    }
-    if l.tree != r.tree {
-        let lp: Vec<_> = l
-            .tree
-            .iter()
-            .map(|e| (&e.path, e.kind, e.mode, e.nlink))
-            .collect();
-        let rp: Vec<_> = r
-            .tree
-            .iter()
-            .map(|e| (&e.path, e.kind, e.mode, e.nlink))
-            .collect();
-        if lp != rp {
-            return Some(format!("tree listing:\nlegacy {lp:?}\njig    {rp:?}"));
-        }
-        for (a, b) in l.tree.iter().zip(&r.tree) {
-            if a.data != b.data {
-                let (x, y) = (
-                    a.data.as_deref().unwrap_or_default(),
-                    b.data.as_deref().unwrap_or_default(),
-                );
-                let first = x.iter().zip(y).position(|(p, q)| p != q);
-                return Some(format!(
-                    "contents of {}: lengths {}/{}, first differing byte {first:?}",
-                    a.path,
-                    x.len(),
-                    y.len()
-                ));
-            }
-        }
-    }
-    None
-}
-
-/// Run legacy and jig over the same tree at the same path and require identical results.
-/// Returns legacy's run for further checks.
-pub fn difftest(
-    legacy: &Path,
-    name: &str,
-    work: &Path,
-    cwd: &Path,
-    args: &[Vec<u8>],
-    prep: &dyn Fn(&Path),
-    sink: Sink,
-) -> Run {
-    let limit = Duration::from_secs(60);
-    let l = run_at(legacy, work, cwd, args, prep, sink, limit);
-    let r = run_at(Path::new(JIG), work, cwd, args, prep, sink, limit);
-    if let Some(d) = difference(&l, &r) {
-        panic!("{name}: {d}");
-    }
-    l
 }
 
 /// `s` as an argument.
@@ -798,15 +676,4 @@ pub fn build_elf_set(g: &Gcc, dir: &Path, baked: &Path) -> ElfSet {
     b[at..at + 8].copy_from_slice(b"RELOCSTB");
     std::fs::write(bin.join("relocstb"), &b).unwrap();
     ElfSet { tree, side }
-}
-
-/// `bin/plain` of `set` with its stub check reading past the end of the file (a Q-FIX-10
-/// abort): the PT_LOAD that maps `e_entry − 16` moved beyond EOF.
-pub fn past_eof(set: &ElfSet) -> Vec<u8> {
-    let mut b = std::fs::read(set.tree.join("bin/plain")).unwrap();
-    let l = ElfLayout::parse(&b);
-    let (_, i) = l.file_offset(&b, l.entry - 16).unwrap();
-    let len = b.len() as u64;
-    put(&mut b, l.ph(i) + 8, 8, len + 0x10_0000, false);
-    b
 }

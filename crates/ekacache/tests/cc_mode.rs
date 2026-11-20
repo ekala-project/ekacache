@@ -1,15 +1,12 @@
 //! cc mode end to end (`implementation/06-jig-cc.md §Tests`, `behaviors/jig-cc-mode.md`,
 //! `behaviors/jig-driver-policy.md` TV-37).
 //!
-//! - TV-37 and the driver-argv difftest: a fake root `R/bin/jig` (a copy of the binary under
-//!   test) with `cc`, `c++` and `gfortran` symlinks and a fake compiler that prints its argv.
-//!   The difftest runs the same corpus through the legacy jig (`$JIG_LEGACY_JIG`) and compares
-//!   status, stdout, stderr and the `$JIG_LOG` rows.
+//! - TV-37: a fake root `R/bin/ec` (a copy of the binary under test) with `cc`, `c++` and
+//!   `gfortran` symlinks and a fake compiler that prints its argv.
 //! - Real compiles (launcher mode, `$JIG_TEST_GCC` / `$JIG_TEST_CLANG` or `gcc`/`clang` on
-//!   `PATH`) against a daemon (`$EC_RUST_ECD` or `$JIG_LEGACY_JIGD`): miss, hit, invalidation,
-//!   cached failures, `-E` to stdout, links; cross-implementation hits both ways (the mixed-fleet
-//!   guarantee); the adopted rules A–D and Q-CC-5 against legacy's behaviour.
-//! - Q-CC-2: a recording fake jigd sees `DONE` after the last `PUT`.
+//!   `PATH`) against a daemon (`$EC_RUST_ECD`): miss, hit, invalidation, cached failures, `-E` to
+//!   stdout, links; the adopted rules A–D and Q-CC-5.
+//! - Q-CC-2: a recording fake ecd sees `DONE` after the last `PUT`.
 //!
 //! Every test skips (with a message) when what it needs is not given.
 #![allow(clippy::unwrap_used, clippy::too_many_lines)]
@@ -23,7 +20,7 @@ use std::process::{Command, Output, Stdio};
 use std::sync::{Arc, Mutex};
 
 mod common;
-use common::{Daemon, JIG, any_daemon, legacy_jig};
+use common::{Daemon, JIG, daemon};
 
 fn write_exe(path: &Path, text: &str) {
     std::fs::write(path, text).unwrap();
@@ -118,159 +115,7 @@ impl Run {
     }
 }
 
-const ELF_CONF: &str = r#"{"cc": "<R>/fakecc", "flags": ["--target=x", "-O2"], "cxxflags": ["-stdlib=libc++"], "libc": "/sr/libc", "crt": "/cc/lib/crt_interp.o", "runtimes": "/sr/rt/lib", "prefix-map": ["-ffile-prefix-map=@/=/jig"]}"#;
-const COFF_CONF: &str =
-    r#"{"cc": "<R>/fakecc", "binfmt": "coff", "flags": ["--target=x86_64-pc-windows-msvc"]}"#;
-const MACHO_CONF: &str = r#"{"cc": "<R>/fakecc", "binfmt": "macho", "flags": ["--target=arm64-apple-macos14.0"], "libc": "/sr"}"#;
-const PKGS_CC: &str = r#"{"<R>":{"ldflags":["-L/dep/lib","-L","/x","-Wl,-rpath,/dep/lib"],"cflags":["-DP","-O2","-D_FORTIFY_SOURCE=3"],"cxxflags":["-DPP"]}}"#;
-
-struct Case {
-    conf: Option<&'static str>,
-    name: &'static str,
-    args: &'static [&'static str],
-    env: &'static [(&'static str, &'static str)],
-}
-
-const fn case(
-    conf: Option<&'static str>,
-    name: &'static str,
-    args: &'static [&'static str],
-) -> Case {
-    Case {
-        conf,
-        name,
-        args,
-        env: &[],
-    }
-}
-
-/// The driver corpus: seeded from the policy's test vectors plus the classification edges.
-fn corpus() -> Vec<Case> {
-    let elf = Some(ELF_CONF);
-    let mut cases = vec![
-        case(elf, "cc", &["-c", "a.c"]),
-        case(
-            elf,
-            "cc",
-            &["-c", "a.c", "-o", "out/a.o", "-MD", "-MF", "out/a.d"],
-        ),
-        case(elf, "cc", &["-o", "x", "x.c"]),
-        case(elf, "cc", &["x.o", "-o", "x"]),
-        case(elf, "cc", &["-shared", "-o", "l.so", "l.c"]),
-        case(elf, "cc", &["-shared", "-o", "l.so", "l.o", "-L.", "-lz"]),
-        case(elf, "cc", &["-o", "x", "x.c", "-lfoo", "-l", "bar"]),
-        case(
-            elf,
-            "cc",
-            &["x.o", "-Wl,-rpath,", "-Wl,-rpath,/usr/lib,-z,now"],
-        ),
-        case(
-            elf,
-            "cc",
-            &[
-                "-o",
-                "x",
-                "x.c",
-                "-Wl,-rpath,/build/build:",
-                "-Wl,-rpath",
-                "-Wl,/a",
-                "-Xlinker",
-                "-rpath",
-                "-Xlinker",
-                "/b",
-            ],
-        ),
-        case(elf, "cc", &["-o", "x"]),
-        case(elf, "cc", &["--version"]),
-        case(elf, "cc", &["-v"]),
-        case(elf, "cc", &["-static", "-o", "x", "x.c"]),
-        case(elf, "cc", &["-static-pie", "-o", "x", "x.c"]),
-        case(elf, "cc", &["-r", "-o", "x.o", "a.o", "b.o"]),
-        case(elf, "cc", &["-nostartfiles", "-o", "x", "x.c"]),
-        case(elf, "cc", &["-nostdlib", "x.o", "-o", "x"]),
-        case(elf, "cc", &["-O2", "-D_FORTIFY_SOURCE=2", "-c", "a.c"]),
-        case(elf, "cc", &["-c", "a.c", "-U_FORTIFY_SOURCE"]),
-        case(elf, "cc", &["-O0", "-c", "a.c"]),
-        case(
-            elf,
-            "cc",
-            &["-o", "x", "x.c", "/nix/store/h-zlib/lib/libz.so.1"],
-        ),
-        case(elf, "cc", &["-E", "a.c"]),
-        case(elf, "cc", &["-M", "a.c"]),
-        case(elf, "cc", &["-cc1", "-emit-obj", "a.c"]),
-        case(elf, "cc", &["-print-search-dirs"]),
-        case(elf, "cc", &["-print-file-name=libc.so"]),
-        case(elf, "c++", &["-c", "a.cc"]),
-        case(elf, "c++", &["-o", "x", "x.cc"]),
-        case(elf, "c++", &["-nostdlib++", "-o", "x", "x.cc"]),
-        case(elf, "c++", &["-shared", "-o", "l.so", "l.cc", "-nostdlib"]),
-        case(elf, "gfortran", &["-c", "a.f"]),
-        case(elf, "cc", &["@missing.rsp", "-c", "a.c"]),
-        case(Some(COFF_CONF), "cc", &["-fPIC", "-c", "a.c"]),
-        case(
-            Some(COFF_CONF),
-            "c++",
-            &["-std=c++11", "-o", "x.exe", "x.cc", "-lFoo", "-lBar/x"],
-        ),
-        case(Some(MACHO_CONF), "cc", &["a.c", "-o", "a"]),
-        case(Some(MACHO_CONF), "cc", &["-shared", "-o", "l.dylib", "l.o"]),
-        case(Some(r#"{"flags":[]}"#), "cc", &["-c", "a.c"]),
-        case(Some(r#"{"cc": 1}"#), "cc", &["-c", "a.c"]),
-        case(
-            Some(r#"{"cc": "<R>/fakecc", "binfmt": "wasm"}"#),
-            "cc",
-            &["-c", "a.c"],
-        ),
-        case(Some("not json"), "cc", &["-c", "a.c"]),
-        case(None, "cc", &["-c", "a.c"]),
-        case(None, "c++", &["-c", "a.cc", "-O0"]),
-    ];
-    for name in ["cc", "c++"] {
-        for args in [
-            &["-print-search-dirs"][..],
-            &["-c", "a.c"],
-            &["-o", "x", "x.c"],
-            &["-shared", "-o", "l.so", "l.o"],
-            &["-O0", "-c", "a.c"],
-        ] {
-            cases.push(Case {
-                conf: Some(ELF_CONF),
-                name,
-                args,
-                env: &[("PKGS_CC", PKGS_CC), ("PKGS_PREFIX_MAP", "/src=/p")],
-            });
-        }
-    }
-    cases.push(Case {
-        conf: None,
-        name: "c++",
-        args: &["-c", "a.cc", "-O0"],
-        env: &[("JIG_CC", "<R>/fakecc")],
-    });
-    cases.push(Case {
-        conf: Some(r#"{"flags":[]}"#),
-        name: "cc",
-        args: &["-c", "a.c"],
-        env: &[("JIG_CC", "/bin/true")],
-    });
-    cases.push(Case {
-        conf: Some(ELF_CONF),
-        name: "cc",
-        args: &["-c", "a.c"],
-        env: &[("PKGS_CC", "{")],
-    });
-    cases
-}
-
-fn run_corpus(jig: &Path) -> Vec<Run> {
-    corpus()
-        .iter()
-        .map(|c| Root::new(jig, c.conf).run(c.name, c.args, c.env))
-        .collect()
-}
-
-/// TV-37 on the Rust binary: the `end-to-end` rows of `tests/vectors/jig-driver-policy.toml`.
+/// TV-37 on the Rust binary: the `end-to-end` rows of `tests/vectors/ec-driver-policy.toml`.
 #[test]
 fn tv37_end_to_end() {
     let jig = Path::new(JIG);
@@ -320,21 +165,6 @@ fn tv37_end_to_end() {
             checked += 1;
         }
         assert!(checked > 0, "{at}: no expectation");
-    }
-}
-
-/// The driver-argv difftest: legacy and Rust print the same argv, output and log rows.
-#[test]
-fn driver_argv_difftest() {
-    let Some(legacy) = legacy_jig() else {
-        eprintln!("skipped: JIG_LEGACY_JIG not set");
-        return;
-    };
-    let cases = corpus();
-    let want = run_corpus(&legacy);
-    let got = run_corpus(Path::new(JIG));
-    for ((c, w), g) in cases.iter().zip(&want).zip(&got) {
-        assert_eq!(g, w, "{} {:?} {:?}", c.name, c.args, c.env);
     }
 }
 
@@ -427,8 +257,8 @@ fn row(outcome: &str, subject: &str) -> Vec<String> {
 
 #[test]
 fn real_compiles_hit() {
-    let Some(d) = any_daemon() else {
-        eprintln!("skipped: no jigd (EC_RUST_ECD / JIG_LEGACY_JIGD)");
+    let Some(d) = daemon("EC_RUST_ECD") else {
+        eprintln!("skipped: EC_RUST_ECD not set");
         return;
     };
     for compiler in [gcc(), clang()].into_iter().flatten() {
@@ -526,71 +356,15 @@ fn real_compiles_hit() {
     }
 }
 
-/// The mixed-fleet guarantee: an entry stored by one implementation is a hit for the other.
-#[test]
-fn cross_implementation_hits() {
-    let Some(legacy) = legacy_jig() else {
-        eprintln!("skipped: JIG_LEGACY_JIG not set");
-        return;
-    };
-    for compiler in [gcc(), clang()].into_iter().flatten() {
-        for (writer, reader) in [(legacy.as_path(), rust()), (rust(), legacy.as_path())] {
-            let Some(d) = any_daemon() else {
-                eprintln!("skipped: no jigd");
-                return;
-            };
-            let w = Work::new(&d);
-            w.write("inc/a.h", "#define N 1\n");
-            w.write("a.c", "#include \"a.h\"\nint f(void) { return N; }\n");
-            w.write("bad.c", "#include \"a.h\"\nint x = N +;\n");
-            w.write("m.c", "int f(void);\nint main(void) { return f() - 1; }\n");
-            let jobs: [&[&str]; 5] = [
-                &["-Iinc", "-c", "a.c", "-o", "a.o", "-MMD"],
-                &["-Iinc", "-c", "bad.c"],
-                &["-Iinc", "-E", "a.c"],
-                &["-c", "m.c"],
-                &["m.o", "a.o", "-o", "prog"],
-            ];
-            let mut stored = Vec::new();
-            for job in jobs {
-                let (out, log) = w.jig(writer, &compiler, job);
-                stored.push((out, log));
-            }
-            for (job, (first, first_log)) in jobs.iter().zip(&stored) {
-                let (out, log) = w.jig(reader, &compiler, job);
-                let first_outcome = first_log[0].split('\t').nth(1).unwrap();
-                let want = match first_outcome {
-                    "compiled" => "cached",
-                    "compiled-error" => "cached-error",
-                    other => other,
-                };
-                let got = log[0].split('\t').nth(1).unwrap();
-                assert_eq!(
-                    got,
-                    want,
-                    "{} {job:?} writer {} reader {}: {first_log:?} then {log:?}",
-                    compiler.display(),
-                    writer.display(),
-                    reader.display()
-                );
-                assert_eq!(out.status.code(), first.status.code());
-                assert_eq!(out.stdout, first.stdout);
-                assert_eq!(out.stderr, first.stderr);
-            }
-            assert!(!w.read("a.d").is_empty());
-        }
-    }
-}
-
-/// The adopted rules A–D and Q-CC-5, against legacy where it behaves differently.
+/// The adopted rules A–D and Q-CC-5.
 #[test]
 fn adopted_rules() {
     let Some(compiler) = gcc().or_else(clang) else {
         eprintln!("skipped: no gcc/clang");
         return;
     };
-    let Some(d) = any_daemon() else {
-        eprintln!("skipped: no jigd");
+    let Some(d) = daemon("EC_RUST_ECD") else {
+        eprintln!("skipped: EC_RUST_ECD not set");
         return;
     };
     let w = Work::new(&d);
@@ -618,24 +392,6 @@ fn adopted_rules() {
     let (out, log) = w.jig(rust(), &compiler, &["-c", "via.S"]);
     assert!(out.status.success(), "{out:?}");
     assert_eq!(log, row("compiled-unstored", "via.S incbin"));
-
-    if let Some(legacy) = legacy_jig() {
-        // the C++ jig caches all of these
-        let (_, log) = w.jig(&legacy, &compiler, &["-c", "a.c", "-gsplit-dwarf"]);
-        assert_eq!(log, row("compiled", "a.c new-key"));
-        let (_, log) = w.jig(rust(), &compiler, &["-c", "a.c", "-gsplit-dwarf"]);
-        assert_eq!(log, row("uncacheable", "a.c"));
-        // rule C on a hit: an entry the C++ jig wrote is refused, and the compile not stored
-        let (_, log) = w.jig(&legacy, &compiler, &["-c", "via.S"]);
-        assert_eq!(log, row("compiled", "via.S new-key"));
-        let (_, log) = w.jig(&legacy, &compiler, &["-c", "via.S"]);
-        assert_eq!(log, row("cached", "via.S"));
-        for _ in 0..2 {
-            let (out, log) = w.jig(rust(), &compiler, &["-c", "via.S"]);
-            assert!(out.status.success());
-            assert_eq!(log, row("compiled-unstored", "via.S incbin"));
-        }
-    }
 
     // Q-CC-5: a resource failure is not stored. A fake gcc writes its depfile and fails
     let bin = w.path().join("fake");
@@ -684,21 +440,14 @@ fn adopted_rules() {
         run_fake(rust(), "Permission denied"),
         row("compiled-error", "a.c new-key")
     );
-    if let Some(legacy) = legacy_jig() {
-        w.write("a.c", "int f(void) { return 3; }\n");
-        assert_eq!(
-            run_fake(&legacy, "No space left on device"),
-            row("compiled-error", "a.c new-key")
-        );
-    }
 }
 
 /// `-E` to stdout compiles to `<temp_directory>/jig<pid>.i`: `$TMPDIR` or `/tmp`, and a
-/// relative `jig<pid>.i` when `TMPDIR` is set but empty (path join semantics), as legacy does.
+/// relative `jig<pid>.i` when `TMPDIR` is set but empty (path join semantics).
 #[test]
 fn preprocess_temp_path() {
-    let Some(d) = any_daemon() else {
-        eprintln!("skipped: no jigd");
+    let Some(d) = daemon("EC_RUST_ECD") else {
+        eprintln!("skipped: EC_RUST_ECD not set");
         return;
     };
     let w = Work::new(&d);
@@ -734,15 +483,6 @@ fn preprocess_temp_path() {
         output_arg(rust(), Some(tmp)),
         format!("{tmp}/jig.i").replace(|c: char| c.is_ascii_digit(), "")
     );
-    if let Some(legacy) = legacy_jig() {
-        for t in [None, Some(""), Some(tmp)] {
-            assert_eq!(
-                output_arg(rust(), t),
-                output_arg(&legacy, t),
-                "TMPDIR={t:?}"
-            );
-        }
-    }
 }
 
 // ---------------------------------------------------------------------------------------------

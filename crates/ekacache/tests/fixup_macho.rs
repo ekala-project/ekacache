@@ -1,9 +1,10 @@
 //! The Mach-O fixup (A6) through the `jig` binary. First the spec's vectors
 //! (`behaviors/jig-reloc-fixup.md §Test vectors`, *From TestMachOFixup* and *Derived and
 //! confirmed: Mach-O re-signing*), whose expected values `test_mach_o_fixup` reads from
-//! `tests/vectors/jig-reloc-fixup.toml` while building the images here; then, gated on `JIG_LEGACY_JIG`, images compared with legacy
-//! (`implementation/12-testing.md`): a golden tree of load-command, header-room and signature
-//! cases under several invocations, the aborts, and mutants. The images are built here byte by
+//! `tests/vectors/ec-reloc-fixup.toml` while building the images here; then
+//! (`implementation/12-testing.md`) a golden tree of load-command, header-room and signature
+//! cases under several invocations, the aborts and streams, and mutants that must not panic or
+//! hang. The images are built here byte by
 //! byte, in the layout of `jig_test.cc`'s `macho` namespace; nothing needs macOS.
 #![allow(clippy::unwrap_used)]
 
@@ -18,8 +19,8 @@ use sha2::{Digest, Sha256};
 use ekacache_testkit::vectors::{Vector, VectorFile};
 
 use common::{
-    DEST, Rng, Run, Sink, arg, chmod, difference, difftest, get, interesting, legacy, nix_store,
-    put, run_at, run_mode, scratch, write,
+    DEST, Rng, Run, Sink, arg, chmod, get, interesting, nix_store, put, run_at, run_mode, scratch,
+    write,
 };
 
 const MAGIC_64: u64 = 0xfeed_facf;
@@ -665,10 +666,39 @@ fn macho_tree(w: &Path) {
     }
 }
 
+/// ec over the tree `prep` builds at `work`, which must not panic or hang.
+fn ec(
+    name: &str,
+    work: &Path,
+    cwd: &Path,
+    args: &[Vec<u8>],
+    prep: &dyn Fn(&Path),
+    sink: Sink,
+) -> Run {
+    let r = run_at(
+        Path::new(common::JIG),
+        work,
+        cwd,
+        args,
+        prep,
+        sink,
+        Duration::from_secs(60),
+    );
+    assert!(!r.timed_out, "{name}: ec timed out");
+    assert!(
+        !r.stderr.windows(11).any(|w| w == b"panicked at"),
+        "{name}: ec panicked: {}",
+        text(&r.stderr)
+    );
+    r
+}
+
 /// The golden tree under several invocations.
 #[test]
-fn macho_tree_difftest() {
-    let Some(old) = legacy() else { return };
+fn macho_tree_invocations() {
+    if !nix_store() {
+        return;
+    }
     let dir = scratch("machotree");
     let work = dir.join("w");
     let w = arg(&work);
@@ -739,7 +769,7 @@ fn macho_tree_difftest() {
         ),
     ];
     for (name, args) in &invocations {
-        let l = difftest(&old, name, &work, &dir, args, &macho_tree, Sink::File);
+        let l = ec(name, &work, &dir, args, &macho_tree, Sink::File);
         if *name == "sdk" {
             // the tree exercised what it is meant to
             let out = text(&l.stdout);
@@ -772,12 +802,11 @@ fn macho_tree_difftest() {
             assert_eq!(l.code, Some(1));
         }
     }
-    // a second run over legacy's result
-    let legacy_bin = old.clone();
-    let prep2 = move |w: &Path| {
+    // a second run over the first one's result
+    let prep2 = |w: &Path| {
         macho_tree(w);
         let r = run_mode(
-            &legacy_bin,
+            Path::new(common::JIG),
             w.parent().unwrap(),
             &[arg(w), arg("--dest"), arg(DEST)],
             Sink::File,
@@ -785,8 +814,7 @@ fn macho_tree_difftest() {
         );
         assert_eq!(r.code, Some(1));
     };
-    let l = difftest(
-        &old,
+    let l = ec(
         "second run",
         &work,
         &dir,
@@ -800,7 +828,9 @@ fn macho_tree_difftest() {
 /// Q-FIX-10 aborts on Mach-O input, what reaches stdout before them, and a closed stderr.
 #[test]
 fn macho_aborts_and_streams() {
-    let Some(old) = legacy() else { return };
+    if !nix_store() {
+        return;
+    }
     let dir = scratch("machoabort");
     let work = dir.join("w");
     let args = vec![arg(&work), arg("--dest"), arg(DEST)];
@@ -816,15 +846,7 @@ fn macho_aborts_and_streams() {
         write(&w.join("lib/libcrypto.3.dylib"), b"");
         write(&w.join("lib/libbeyond.dylib"), &beyond);
     };
-    let l = difftest(
-        &old,
-        "slot past the end",
-        &work,
-        &dir,
-        &args,
-        &prep,
-        Sink::File,
-    );
+    let l = ec("slot past the end", &work, &dir, &args, &prep, Sink::File);
     assert_eq!(l.signal, Some(libc::SIGABRT));
     // the slot is not reached when the hash type is refused first
     let refused = signed(
@@ -836,8 +858,7 @@ fn macho_aborts_and_streams() {
         false,
     );
     let prep = |w: &Path| write(&w.join("lib/libx.dylib"), &refused);
-    let l = difftest(
-        &old,
+    let l = ec(
         "refused before the slot",
         &work,
         &dir,
@@ -861,15 +882,7 @@ fn macho_aborts_and_streams() {
         std::fs::write(last, &beyond).unwrap();
     };
     for sink in [Sink::File, Sink::Pipe] {
-        let l = difftest(
-            &old,
-            "flushed before abort",
-            &work,
-            &dir,
-            &args,
-            &many,
-            sink,
-        );
+        let l = ec("flushed before abort", &work, &dir, &args, &many, sink);
         assert_eq!(l.signal, Some(libc::SIGABRT));
         assert!(l.stdout.len() >= 4096, "{}", l.stdout.len());
     }
@@ -879,8 +892,7 @@ fn macho_aborts_and_streams() {
         write(&w.join("lib/libssl.3.dylib"), &openssl);
         write(&w.join("lib/libcrypto.3.dylib"), b"");
     };
-    let l = difftest(
-        &old,
+    let l = ec(
         "stderr closed, quiet",
         &work,
         &dir,
@@ -890,8 +902,7 @@ fn macho_aborts_and_streams() {
     );
     assert_eq!(l.code, Some(0));
     let noisy = |w: &Path| write(&w.join("lib/libssl.3.dylib"), &openssl);
-    let l = difftest(
-        &old,
+    let l = ec(
         "stderr closed, noisy",
         &work,
         &dir,
@@ -901,8 +912,7 @@ fn macho_aborts_and_streams() {
     );
     assert_eq!(l.signal, Some(libc::SIGABRT));
 
-    // a page size shift of 64 or more with code slots: undefined behaviour in legacy, which
-    // is not compared; jig refuses it (see `macho.rs`, Q-FIX-10)
+    // a page size shift of 64 or more with code slots: ec refuses it (see `macho.rs`, Q-FIX-10)
     for shift in [64u8, 65, 200, 255] {
         let file = signed(
             &[id("@rpath/libx.dylib")],
@@ -910,24 +920,7 @@ fn macho_aborts_and_streams() {
             false,
         );
         let prep = |w: &Path| write(&w.join("lib/libx.dylib"), &file);
-        let limit = Duration::from_secs(60);
-        let l = run_at(&old, &work, &dir, &args, &prep, Sink::File, limit);
-        let r = run_at(
-            Path::new(common::JIG),
-            &work,
-            &dir,
-            &args,
-            &prep,
-            Sink::File,
-            limit,
-        );
-        eprintln!(
-            "page size shift {shift}: legacy {:?}/{:?} stdout {:?} stderr {:?}",
-            l.code,
-            l.signal,
-            text(&l.stdout),
-            text(&l.stderr)
-        );
+        let r = ec("page size shift", &work, &dir, &args, &prep, Sink::File);
         assert_eq!(
             text(&r.stderr),
             format!(
@@ -944,7 +937,7 @@ struct Field {
     at: usize,
     width: usize,
     big: bool,
-    /// A loop count legacy runs out even past the end of the file: kept small.
+    /// A loop count run out even past the end of the file: kept small.
     count: bool,
 }
 
@@ -1061,12 +1054,12 @@ fn mutate_macho(seed: &[u8], rng: &mut Rng) -> Vec<u8> {
 }
 
 /// Mutated Mach-O images from several seeds, each as `lib/libssl.3.dylib` next to an empty
-/// `lib/libcrypto.3.dylib`. A mutant jig refuses for its page size shift is not compared (legacy
-/// is undefined there), nor one legacy takes more than the time limit over (a huge loop count
-/// read from the wrong bytes).
+/// `lib/libcrypto.3.dylib`: ec must neither panic nor hang on any of them.
 #[test]
 fn macho_mutants() {
-    let Some(old) = legacy() else { return };
+    if !nix_store() {
+        return;
+    }
     let dir = scratch("machomut");
     let work = dir.join("w");
     let sha = Cd::sha256;
@@ -1107,7 +1100,7 @@ fn macho_mutants() {
     ];
     let args = vec![arg(&work), arg("--dest"), arg(OUT)];
     let mut rng = Rng(0x00ac_0f1c_5eed);
-    let (mut compared, mut aborts, mut changed, mut refused, mut slow) = (0, 0, 0, 0, 0);
+    let (mut aborts, mut changed, mut refused) = (0, 0, 0);
     let count = mutant_count(400);
     let limit = Duration::from_secs(20);
     for i in 0..count {
@@ -1125,25 +1118,18 @@ fn macho_mutants() {
             Sink::File,
             limit,
         );
-        assert!(!r.timed_out, "Mach-O mutant {i}: jig timed out");
-        if text(&r.stderr).contains("page size shift") {
-            refused += 1;
-            continue;
-        }
-        let l = run_at(&old, &work, &dir, &args, &prep, Sink::File, limit);
-        if l.timed_out {
-            slow += 1;
-            continue;
-        }
-        if let Some(d) = difference(&l, &r) {
-            panic!("Mach-O mutant {i}: {d}");
-        }
-        compared += 1;
-        aborts += usize::from(l.signal.is_some());
-        changed += usize::from(l.stdout.starts_with(b"lib/libssl.3.dylib  "));
+        assert!(!r.timed_out, "Mach-O mutant {i}: ec timed out");
+        assert!(
+            !r.stderr.windows(11).any(|w| w == b"panicked at"),
+            "Mach-O mutant {i}: ec panicked: {}",
+            text(&r.stderr)
+        );
+        refused += usize::from(text(&r.stderr).contains("page size shift"));
+        aborts += usize::from(r.signal.is_some());
+        changed += usize::from(r.stdout.starts_with(b"lib/libssl.3.dylib  "));
     }
     eprintln!(
-        "Mach-O mutants: {compared} compared ({aborts} aborted, {changed} rewritten), {refused} refused for the page size, {slow} too slow in legacy"
+        "Mach-O mutants: {count} run ({aborts} aborted, {changed} rewritten), {refused} refused for the page size"
     );
 }
 

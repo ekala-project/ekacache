@@ -1,5 +1,5 @@
-//! Helpers shared by the jigd server tests: a blocking protocol client, an in-process server on
-//! a temporary socket, and a daemon process (the Rust binary or the Go one) on its own root.
+//! Helpers shared by the ecd server tests: a blocking protocol client, an in-process server on
+//! a temporary socket, and a daemon process on its own root.
 
 // not every test crate uses every helper
 #![allow(dead_code)]
@@ -359,17 +359,6 @@ pub struct Daemon {
 /// The Rust binary under test.
 pub fn rust_jigd() -> PathBuf {
     PathBuf::from(env!("CARGO_BIN_EXE_ecd"))
-}
-
-/// The Go binary, from `JIG_LEGACY_JIGD`; `None` (and a note) when it is not set.
-pub fn legacy_jigd() -> Option<PathBuf> {
-    match std::env::var_os("JIG_LEGACY_JIGD") {
-        Some(p) if !p.is_empty() => Some(PathBuf::from(p)),
-        _ => {
-            eprintln!("note: JIG_LEGACY_JIGD is not set; skipping the comparison with the Go jigd");
-            None
-        }
-    }
 }
 
 impl Daemon {
