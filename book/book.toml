@@ -10,9 +10,9 @@ build-dir = "build"
 create-missing = false
 
 [output.html]
-git-repository-url = "https://github.com/ekala-project/jig"
-edit-url-template = "https://github.com/ekala-project/jig/edit/main/book/{path}"
-site-url = "/jig/"
+git-repository-url = "https://github.com/ekala-project/ekacache"
+edit-url-template = "https://github.com/ekala-project/ekacache/edit/main/book/{path}"
+site-url = "/ekacache/"
 no-section-label = false
 
 [output.html.fold]
