@@ -11,6 +11,8 @@ messages (`ec: …`, `ecd: …`) all use the new names, and there is no `jig` co
 behaviour, quirks included, is specified in [`behaviors/`](behaviors/), with the changes made
 along the way listed in [`behaviors/README.md` §Adopted changes](behaviors/README.md).
 
+User documentation: <https://ekala-project.github.io/ekacache/> (source in [`book/`](book/)).
+
 ## Origin
 
 jig and jigd were written by Jörg Thalheim ([@Mic92](https://github.com/Mic92)) and the repkgs
