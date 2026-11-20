@@ -1,6 +1,6 @@
-//! Shared by `rustc_mode.rs` and `rustc_difftest.rs`: a jigd stand-in that keeps values in
-//! memory, a recording proxy in front of a real jigd (both log every request a jig makes), the
-//! fake rustc of `fake-rustc.sh`, and helpers to run a jig and read its `$JIG_LOG`.
+//! Used by `rustc_mode.rs`: an ecd stand-in that keeps values in
+//! memory, a recording proxy in front of a real ecd (both log every request an ec makes), the
+//! fake rustc of `fake-rustc.sh`, and helpers to run an ec and read its `$JIG_LOG`.
 #![allow(dead_code, clippy::unwrap_used)]
 
 use ekacache_testkit::busy::CommandBusyExt as _;

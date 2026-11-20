@@ -1,9 +1,7 @@
 //! `jig nix-store` online, against a scripted fake builder-rpc daemon
 //! (`behaviors/jig-nix-store.md §Worker protocol`, `§Client state-transition table`, `§Wire
 //! examples`; `spec/builder_rpc.qnt` scenarios; Q-NIX-2/6/7/8/9/10/11/17). One test per row of
-//! the state table and of the drain sub-machine. With `JIG_LEGACY_JIG` set, every run is
-//! repeated with the legacy jig and the client→daemon bytes, stdout, stderr and exit status or
-//! signal must be identical.
+//! the state table and of the drain sub-machine.
 #![allow(clippy::unwrap_used)]
 
 mod nix_store_support;
@@ -13,11 +11,11 @@ use ekacache_testkit::vectors::VectorFile;
 use std::time::Duration;
 
 use nix_store_support::{
-    Inv, JIG, LAST, MAX_STRING, NEXT, Outcome, RESULT, Remote, Row, Running, START_ACTIVITY,
+    Inv, LAST, MAX_STRING, NEXT, Outcome, RESULT, Remote, Row, Running, START_ACTIVITY,
     STOP_ACTIVITY, Script, Step, V1_38, add_reply, bad_arguments, cat, check, client_add,
     client_features, client_handshake, client_hello, client_post, client_submit, daemon_hello,
-    daemon_info, did_not_parse, error, fetch_one, fetch_one_aterm, handshake, handshake_with,
-    legacy, next, not_an_array, path_info, strace, string, strings, usage, word,
+    daemon_info, did_not_parse, error, fetch_one, fetch_one_aterm, handshake, handshake_with, next,
+    not_an_array, path_info, strace, string, strings, usage, word,
 };
 
 const BAD_MAGIC: &[u8] = b"jig nix-store: bad daemon magic";
@@ -844,19 +842,15 @@ fn drain_huge_fields_count_loops() {
         &word(101),
         &word(u64::MAX),
     ]));
-    let mut bins = vec![std::path::PathBuf::from(JIG)];
-    bins.extend(legacy());
-    for bin in bins {
-        let dir = tempfile::tempdir().unwrap();
-        let mut run = Running::start(&bin, &add_hello(), &s, dir.path());
-        let alive = run.alive_after(Duration::from_millis(1500));
-        run.kill();
-        let o = run.finish();
-        assert!(alive, "{} exited: {o:?}", bin.display());
-        assert_eq!(o.signal, Some(libc::SIGKILL));
-        assert!(o.stdout.is_empty() && o.stderr.is_empty(), "{o:?}");
-        assert_eq!(o.sent, client_handshake());
-    }
+    let dir = tempfile::tempdir().unwrap();
+    let mut run = Running::start(&add_hello(), &s, dir.path());
+    let alive = run.alive_after(Duration::from_millis(1500));
+    run.kill();
+    let o = run.finish();
+    assert!(alive, "exited: {o:?}");
+    assert_eq!(o.signal, Some(libc::SIGKILL));
+    assert!(o.stdout.is_empty() && o.stderr.is_empty(), "{o:?}");
+    assert_eq!(o.sent, client_handshake());
 }
 
 // ---- §Wire examples ------------------------------------------------------------------------

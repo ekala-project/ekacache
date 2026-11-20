@@ -1,5 +1,5 @@
-//! Shared helpers for the integration tests: a jigd started from a binary named by an
-//! environment variable (`EC_RUST_ECD`, `JIG_LEGACY_JIGD`), and the jig binaries under test.
+//! Shared helpers for the integration tests: an ecd started from the binary `EC_RUST_ECD`
+//! names, and the ec binary under test.
 #![allow(dead_code, clippy::unwrap_used)]
 
 use std::path::{Path, PathBuf};
@@ -58,14 +58,4 @@ pub fn start(bin: &Path) -> Daemon {
 pub fn daemon(var: &str) -> Option<Daemon> {
     let bin = std::env::var_os(var)?;
     Some(start(Path::new(&bin)))
-}
-
-/// Any available daemon: the Rust jigd if given, else the Go one.
-pub fn any_daemon() -> Option<Daemon> {
-    daemon("EC_RUST_ECD").or_else(|| daemon("JIG_LEGACY_JIGD"))
-}
-
-/// The legacy C++ jig, if `JIG_LEGACY_JIG` names it.
-pub fn legacy_jig() -> Option<PathBuf> {
-    std::env::var_os("JIG_LEGACY_JIG").map(PathBuf::from)
 }

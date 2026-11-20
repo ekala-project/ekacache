@@ -1,8 +1,6 @@
-# Development shell for the Rust workspace and the legacy C++/Go build (differential tests).
+# Development shell for the Rust workspace.
 #
 #   nix-shell --run 'cargo test --workspace'
-#   nix-shell --run 'meson setup build legacy && ninja -C build'   # legacy jig
-#   nix-shell --run '(cd legacy/jigd && go build -o ../../build/jigd .)'
 #
 # quint 0.33.1 (spec/ trace generation) is expected on PATH; nixpkgs may carry an older one.
 {
@@ -17,12 +15,8 @@ pkgs.mkShell {
     pkgs.rustfmt
     pkgs.pkg-config
     pkgs.zstd
-    # legacy build inputs (difftest)
-    pkgs.meson
-    pkgs.ninja
+    # gocache_e2e and the Go generators under crates/*/gen
     pkgs.go
-    pkgs.libblake3
-    pkgs.nlohmann_json
     # test tools
     pkgs.cargo-deny # check job (deny.toml)
     pkgs.cargo-fuzz # scripts/fuzz.sh

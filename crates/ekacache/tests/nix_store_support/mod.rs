@@ -1,8 +1,7 @@
 //! Support for the `jig nix-store` integration tests (`implementation/09-jig-nix-store.md
 //! §Tests`): worker-protocol byte builders, a scriptable fake builder-rpc daemon, and a runner
-//! that runs the Rust jig and, when `JIG_LEGACY_JIG` names a legacy `jig` binary, the legacy jig
-//! against the same script, then compares the client→daemon bytes, stdout, stderr and the exit
-//! status or signal.
+//! that runs the ec against a script and collects the client→daemon bytes, stdout, stderr and
+//! the exit status or signal.
 //!
 //! The fake daemon lives here rather than in `ekacache-testkit` because only these tests use it.
 #![allow(dead_code)]
@@ -352,7 +351,7 @@ pub enum Input {
     HeldOpen,
 }
 
-/// One `jig nix-store …` invocation, run the same way for the Rust and the legacy binary.
+/// One `ec nix-store …` invocation.
 #[derive(Clone, Debug)]
 pub struct Inv {
     pub args: Vec<Vec<u8>>,
@@ -428,18 +427,9 @@ impl Inv {
         self.delay_connect = true;
         self
     }
-
-    /// The verbs whose legacy build crashes before P2718 (Q-NIX-1).
-    fn makes_derivations(&self) -> bool {
-        matches!(
-            self.args.first().map(Vec::as_slice),
-            Some(b"add-drv" | b"fetchurls")
-        )
-    }
 }
 
 /// What a run produced.
-#[derive(PartialEq, Eq)]
 pub struct Outcome {
     pub connected: bool,
     pub sent: Vec<u8>,
@@ -549,8 +539,8 @@ fn reader(mut r: impl Read + Send + 'static) -> JoinHandle<Vec<u8>> {
 }
 
 impl Running {
-    /// Start `bin` with `inv`, its daemon at `dir/sock` following `script`.
-    pub fn start(bin: &Path, inv: &Inv, script: &[Step], dir: &Path) -> Self {
+    /// Start the ec with `inv`, its daemon at `dir/sock` following `script`.
+    pub fn start(inv: &Inv, script: &[Step], dir: &Path) -> Self {
         let sock = dir.join("sock");
         let daemon = Daemon::start(&sock, script);
         // the shell sets the dispositions the client inherits: no core files from SIGABRT, and
@@ -579,7 +569,7 @@ impl Running {
                 "--",
             ]);
         }
-        cmd.arg(bin).arg("nix-store");
+        cmd.arg(JIG).arg("nix-store");
         cmd.args(inv.args.iter().map(|a| OsStr::from_bytes(a)));
         cmd.env_clear();
         match &inv.remote {
@@ -657,62 +647,11 @@ impl Running {
     }
 }
 
-/// The legacy binary to compare against, from `JIG_LEGACY_JIG`.
-pub fn legacy() -> Option<PathBuf> {
-    let p = std::env::var_os("JIG_LEGACY_JIG").filter(|p| !p.is_empty());
-    if p.is_none() {
-        eprintln!("JIG_LEGACY_JIG is unset: not compared with the legacy jig");
-    }
-    p.map(PathBuf::from)
-}
-
-/// Whether `bin` is a legacy build without P2718 (GCC 14 and older): it cannot encode the
-/// `§ATerm` vector (Q-NIX-1).
-fn pre_p2718(bin: &Path) -> bool {
-    static PRE: OnceLock<bool> = OnceLock::new();
-    *PRE.get_or_init(|| {
-        let json = br#"{"system":"s","builder":"/b","args":["a"],"env":{"a":"1"},"inputSrcs":["/s"],"inputDrvs":{"/d.drv":["out"]},"outputs":{"out":{"hashAlgo":"r:sha256"}}}"#;
-        let inv = Inv::new(&[&b"add-drv"[..], b"x.drv"]).stdin(json).offline();
-        let dir = tempfile::tempdir().unwrap();
-        let o = Running::start(bin, &inv, &[], dir.path()).finish();
-        let pre = o.code != Some(0);
-        if pre {
-            eprintln!("the legacy jig was built without P2718 (Q-NIX-1): {o:?}");
-        }
-        pre
-    })
-}
-
-/// Whether a difference is the pre-P2718 undefined behaviour of a derivation verb (Q-NIX-1:
-/// usually SIGSEGV, sometimes SIGABRT from `std::bad_alloc` or a wrong result), which Rust does
-/// not reproduce.
-fn legacy_q_nix_1(bin: &Path, inv: &Inv, rust: &Outcome, old: &Outcome) -> bool {
-    let ub = inv.makes_derivations() && rust != old && pre_p2718(bin);
-    if ub {
-        eprintln!(
-            "legacy jig without P2718 (Q-NIX-1) gave {old:?}: not compared; use a GCC 15 build \
-             of the legacy jig"
-        );
-    }
-    ub
-}
-
-/// Run the Rust jig, and the legacy jig if there is one, with `inv` against `script`; assert
-/// they agree, and return the Rust outcome.
+/// Run the ec with `inv` against `script` and return the outcome.
 #[track_caller]
 pub fn check(inv: &Inv, script: &[Step]) -> Outcome {
     let dir = tempfile::tempdir().unwrap();
-    let rust = Running::start(Path::new(JIG), inv, script, dir.path()).finish();
-    if let Some(bin) = legacy() {
-        let old = Running::start(&bin, inv, script, dir.path()).finish();
-        if !legacy_q_nix_1(&bin, inv, &rust, &old) {
-            assert_eq!(
-                rust, old,
-                "Rust jig (left) and legacy jig (right) differ for {inv:?}"
-            );
-        }
-    }
-    rust
+    Running::start(inv, script, dir.path()).finish()
 }
 
 /// Offline: no daemon is expected to be contacted.

@@ -2,7 +2,6 @@
 //! `implementation/12-testing.md §L4`): `spec/builder_rpc.qnt` traces drive the fake daemon, and
 //! the client's observable sequence must match each trace: the bytes it wrote (the model's
 //! `written`), its exit code, whether it printed a result, whether it printed a daemon error.
-//! With `JIG_LEGACY_JIG` set, each replay is also compared with the legacy jig.
 //!
 //! The traces in `fixtures/nix_store/itf/` come from `fixtures/nix_store/builder_rpc_mbt.qnt`
 //! (how they were made is described there). The concrete daemon behaviour for each abstract

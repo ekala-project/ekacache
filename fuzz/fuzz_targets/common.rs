@@ -1,5 +1,5 @@
 //! Shared by the fuzz targets (included with `#[path]`): the Go oracle tables and running the
-//! Rust and legacy binaries side by side (implementation/12-testing.md §L5).
+//! ec binary (implementation/12-testing.md §L5).
 #![allow(dead_code)]
 
 use std::collections::HashMap;
@@ -23,15 +23,12 @@ pub fn oracle(text: &str) -> HashMap<Vec<u8>, serde_json::Value> {
         .collect()
 }
 
-/// `EC_RUST_EC` and `JIG_LEGACY_JIG`. The process targets need the first.
-pub fn binaries() -> (PathBuf, Option<PathBuf>) {
-    let get = |v: &str| {
-        std::env::var_os(v)
-            .filter(|p| !p.is_empty())
-            .map(PathBuf::from)
-    };
-    let rust = get("EC_RUST_EC").expect("set EC_RUST_EC to a release jig binary");
-    (rust, get("JIG_LEGACY_JIG"))
+/// `EC_RUST_EC`, which the process targets need.
+pub fn binary() -> PathBuf {
+    std::env::var_os("EC_RUST_EC")
+        .filter(|p| !p.is_empty())
+        .map(PathBuf::from)
+        .expect("set EC_RUST_EC to a release ec binary")
 }
 
 /// What a run of jig shows: exit status or signal, stdout, stderr.
@@ -71,7 +68,7 @@ pub fn run(bin: &Path, argv0: &str, args: &[&[u8]], env: &[(&str, &str)], stdin:
     }
 }
 
-/// A Rust panic, as opposed to an abort legacy also makes (Q-FIX-10 and friends): with
+/// A Rust panic, as opposed to a deliberate abort (Q-FIX-10 and friends): with
 /// `panic = "abort"` both die by SIGABRT, and only the panic prints this.
 pub fn assert_no_panic(o: &Outcome) {
     assert!(

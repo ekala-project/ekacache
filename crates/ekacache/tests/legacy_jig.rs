@@ -3,8 +3,7 @@
 //! One test per `Test<Name>` function there, named `test_<name>` in snake case. The tests of
 //! private modules live next to them: `test_binary_image` (`src/fixup/image.rs`),
 //! `test_mach_o_fixup` (`tests/fixup_macho.rs`), `test_go_cache` (`src/gocache.rs`) and
-//! `test_nix_store` (`src/nix_store/hash.rs`). `scripts/check-legacy-ports.sh` checks that every
-//! legacy test function has a counterpart. Expectations changed by an adopted row say
+//! `test_nix_store` (`src/nix_store/hash.rs`). Expectations changed by an adopted row say
 //! `// ADOPTED Q-…`.
 //!
 //! Legacy runs every test with `JIG_STORE_IDENTITY=content`, `JIG_STORE_ROOTS=<vendor root>` and

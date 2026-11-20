@@ -1,6 +1,6 @@
-//! `jig nix-store` with `JIG_NIX_STORE_OFFLINE` (`behaviors/jig-nix-store.md §Test vectors`
-//! [bin] and `§CLI behavior`, `§Derivations`, Q-NIX-3/4/5/13/14/16/17), compared with the legacy
-//! jig when `JIG_LEGACY_JIG` is set. No daemon is ever contacted.
+//! `ec nix-store` with `JIG_NIX_STORE_OFFLINE` (`behaviors/ec-nix-store.md §Test vectors`
+//! [bin] and `§CLI behavior`, `§Derivations`, Q-NIX-3/4/5/13/14/16/17). No daemon is ever
+//! contacted.
 #![allow(clippy::unwrap_used)]
 
 mod nix_store_support;
@@ -133,12 +133,11 @@ fn offline_is_a_non_empty_test() {
     check(&inv, &[]).assert_fails(0, &[]);
 }
 
-/// The store path the Rust jig gives `aterm` as a text object (checked by the vectors above).
+/// The store path the ec gives `aterm` as a text object (checked by the vectors above).
 fn text_path(name: &[u8], refs: &[&[u8]], aterm: &[u8]) -> Vec<u8> {
     let mut args: Vec<&[u8]> = vec![b"add-text", name];
     args.extend_from_slice(refs);
     let o = nix_store_support::Running::start(
-        std::path::Path::new(nix_store_support::JIG),
         &Inv::new(&args).stdin(aterm).offline(),
         &[],
         tempfile::tempdir().unwrap().path(),

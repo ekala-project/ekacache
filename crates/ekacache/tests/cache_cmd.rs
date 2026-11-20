@@ -1,8 +1,7 @@
 //! `jig cache …` and `jig slot …` end to end (`behaviors/jig-cache-commands.md`,
 //! `implementation/08-jig-gocache-and-cache-cmds.md §Tests`).
 //!
-//! Tests that need a daemon use `$EC_RUST_ECD` or `$JIG_LEGACY_JIGD` and are skipped without
-//! one; the difftests also need the legacy C++ jig (`$JIG_LEGACY_JIG`).
+//! Tests that need a daemon use `$EC_RUST_ECD` and are skipped without it.
 #![allow(clippy::unwrap_used, clippy::too_many_lines)]
 
 mod common;
@@ -15,7 +14,7 @@ use std::os::unix::process::ExitStatusExt;
 use std::path::Path;
 use std::process::{Command, Output};
 
-use common::{Daemon, JIG, any_daemon, legacy_jig};
+use common::{Daemon, JIG, daemon};
 
 /// A store path whose hash `MaskHashes` recognises.
 const STORE_REF: &str = "/nix/store/0123456789abcdfghijklmnpqrsvwxyz-foo-1.0";
@@ -64,9 +63,9 @@ fn rust() -> &'static OsStr {
 }
 
 fn need_daemon() -> Option<Daemon> {
-    let d = any_daemon();
+    let d = daemon("EC_RUST_ECD");
     if d.is_none() {
-        eprintln!("neither EC_RUST_ECD nor JIG_LEGACY_JIGD is set: skipped");
+        eprintln!("EC_RUST_ECD not set: skipped");
     }
     d
 }
@@ -505,190 +504,4 @@ fn put_dir_of_a_missing_directory_aborts() {
         &[],
     );
     assert_eq!(o.status.code(), Some(1));
-}
-
-/// The outcome a jig run is compared on: exit status (or signal) and stderr.
-fn outcome(o: &Output) -> (Option<i32>, Option<i32>, Vec<u8>) {
-    (o.status.code(), o.status.signal(), o.stderr.clone())
-}
-
-#[test]
-fn difftest_trees_against_legacy() {
-    let Some(legacy) = legacy_jig() else {
-        eprintln!("JIG_LEGACY_JIG not set: skipped");
-        return;
-    };
-    let Some(d) = need_daemon() else { return };
-    let legacy = legacy.as_os_str();
-    let dir = tempfile::tempdir().unwrap();
-    let src = dir.path().join("src");
-    make_tree(&src);
-    let content = [("JIG_STORE_IDENTITY", "content")];
-    // content mode masks in both implementations, so listings must be byte-identical
-    // (walk order, modes, symlinks, hashes); the summaries match too
-    let ol = cache(legacy, &d.sock, "put-dir", "diff/legacy", &src, &content);
-    let or = cache(rust(), &d.sock, "put-dir", "diff/rust", &src, &content);
-    assert_eq!(or.status.code(), ol.status.code());
-    let summary = |o: &Output, key: &str| String::from_utf8_lossy(&o.stderr).replace(key, "K");
-    // the second put-dir finds every blob the first one stored
-    assert!(summary(&ol, "diff/legacy").ends_with(" new\n"));
-    assert!(summary(&or, "diff/rust").ends_with(" 0 new\n"));
-    let (ll, lr) = (dir.path().join("ll"), dir.path().join("lr"));
-    cache(rust(), &d.sock, "get", "diff/legacy", &ll, &[]);
-    cache(rust(), &d.sock, "get", "diff/rust", &lr, &[]);
-    assert_eq!(std::fs::read(&lr).unwrap(), std::fs::read(&ll).unwrap());
-
-    // cross restores in both modes: legacy's tree read by Rust and the reverse
-    for (mode_env, label) in [(&content[..], "content"), (&[][..], "path")] {
-        for (writer, reader, wname) in [(legacy, rust(), "legacy"), (rust(), legacy, "rust")] {
-            let key = format!("cross/{label}/{wname}");
-            let o = cache(writer, &d.sock, "put-dir", &key, &src, mode_env);
-            assert_eq!(o.status.code(), Some(0));
-            let a = dir.path().join(format!("{label}-{wname}-a"));
-            let b = dir.path().join(format!("{label}-{wname}-b"));
-            let oa = cache(reader, &d.sock, "get-dir", &key, &a, mode_env);
-            let ob = cache(writer, &d.sock, "get-dir", &key, &b, mode_env);
-            assert_eq!(outcome(&oa), outcome(&ob), "{key}");
-            let (mut sa, mut sb) = (snapshot(&a), snapshot(&b));
-            if label == "path" {
-                // ADOPTED Q-DIR-1: legacy masks text in path mode, Rust does not
-                sa.remove("share/a.txt");
-                sb.remove("share/a.txt");
-            }
-            assert_eq!(sa, sb, "{key}");
-        }
-    }
-
-    // a crafted listing: parse edge cases, Q-DIR-5, and a rollback, same result from both
-    let have = blob_hash(rust(), &d, dir.path(), b"payload\n");
-    let listing = format!(
-        "f 1750 {have}\ta\nf zz {have}\tbadmode\nnot a line\nf 644\tshort\n\
-         x 644 {have}\tk\nl 0 tgt\tl1\n\nf  640  {have}\t two\tsep\n"
-    );
-    put_listing(rust(), &d, dir.path(), "diff/crafted", &listing);
-    let partial = format!("{listing}f 644 {}\tmissing\n", "0".repeat(32));
-    put_listing(rust(), &d, dir.path(), "diff/partial", &partial);
-    for key in ["diff/crafted", "diff/partial", "diff/none"] {
-        let (a, b) = (
-            dir.path().join(format!("{key}-l")),
-            dir.path().join(format!("{key}-r")),
-        );
-        let oa = cache(legacy, &d.sock, "get-dir", key, &a, &[]);
-        let ob = cache(rust(), &d.sock, "get-dir", key, &b, &[]);
-        assert_eq!(outcome(&oa), outcome(&ob), "{key}");
-        assert_eq!(a.exists(), b.exists(), "{key}");
-        if a.exists() {
-            assert_eq!(snapshot(&a), snapshot(&b), "{key}");
-        }
-    }
-}
-
-#[test]
-fn difftest_cli_against_legacy() {
-    let Some(legacy) = legacy_jig() else {
-        eprintln!("JIG_LEGACY_JIG not set: skipped");
-        return;
-    };
-    let Some(d) = need_daemon() else { return };
-    let legacy = legacy.as_os_str();
-    let dir = tempfile::tempdir().unwrap();
-    let f = dir.path().join("f");
-    std::fs::write(&f, "data").unwrap();
-    let nosock = dir.path().join("nosock");
-    let s = |p: &Path| p.as_os_str().to_owned();
-    let cases: Vec<(Vec<std::ffi::OsString>, &Path)> = vec![
-        (vec!["cache".into()], &d.sock),
-        (vec!["cache".into(), "get".into(), "k".into()], &d.sock),
-        (
-            vec!["cache".into(), "put".into(), "cli/k".into(), s(&f)],
-            &d.sock,
-        ),
-        (
-            vec![
-                "cache".into(),
-                "get".into(),
-                "cli/k".into(),
-                s(&dir.path().join("o1")),
-            ],
-            &d.sock,
-        ),
-        (
-            vec![
-                "cache".into(),
-                "typo".into(),
-                "cli/k".into(),
-                s(&dir.path().join("o2")),
-            ],
-            &d.sock,
-        ),
-        (
-            vec![
-                "cache".into(),
-                "get".into(),
-                "cli/none".into(),
-                s(&dir.path().join("o3")),
-            ],
-            &d.sock,
-        ),
-        (
-            vec![
-                "cache".into(),
-                "put".into(),
-                "cli/u".into(),
-                "/nonexistent".into(),
-            ],
-            &d.sock,
-        ),
-        (
-            vec!["cache".into(), "get".into(), "cli/k".into(), s(&f)],
-            &nosock,
-        ),
-        (
-            vec![
-                "cache".into(),
-                "put-dir".into(),
-                "cli/d".into(),
-                "/nonexistent".into(),
-            ],
-            &nosock,
-        ),
-        (vec!["slot".into()], &d.sock),
-        (
-            vec![
-                "slot".into(),
-                "sh".into(),
-                "-c".into(),
-                "echo $JIG_SLOT; exit 5".into(),
-            ],
-            &d.sock,
-        ),
-        (vec!["slot".into(), "/nonexistent/prog".into()], &d.sock),
-        (
-            vec![
-                "cache".into(),
-                "put-dir".into(),
-                "cli/abort".into(),
-                "/nonexistent".into(),
-            ],
-            &d.sock,
-        ),
-    ];
-    for (args, sock) in cases {
-        let args: Vec<&OsStr> = args.iter().map(std::ffi::OsString::as_os_str).collect();
-        let ol = run_with(legacy, sock, &args, &[]);
-        let or = run_with(rust(), sock, &args, &[]);
-        let (lc, ls, le) = outcome(&ol);
-        let (rc, rs, re) = outcome(&or);
-        assert_eq!((lc, ls, &ol.stdout), (rc, rs, &or.stdout), "{args:?}");
-        // Q-DIR-4: the libstdc++ terminate text is not reproduced
-        if ls != Some(libc::SIGABRT) {
-            assert_eq!(
-                String::from_utf8_lossy(&le),
-                String::from_utf8_lossy(&re),
-                "{args:?}"
-            );
-        }
-    }
-    assert_eq!(std::fs::read(dir.path().join("o1")).unwrap(), b"data");
-    assert_eq!(std::fs::read(dir.path().join("o2")).unwrap(), b"data");
 }

@@ -1,8 +1,8 @@
 //! An explicit snapshot of the process environment.
 //!
 //! Legacy reads variables with `getenv` wherever it needs them. The Rust port captures the
-//! environment once (`implementation/02-core.md §store_path`) so functions stay pure for tests and
-//! the difftest harness can give both implementations the same environment. Lookups follow
+//! environment once (`implementation/02-core.md §store_path`) so functions stay pure for tests.
+//! Lookups follow
 //! `getenv`: the first entry with a matching name wins.
 
 use std::ffi::OsString;
