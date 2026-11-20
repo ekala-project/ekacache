@@ -15,6 +15,8 @@ legacy code and compatibility with jig deployments are gone.
   ([13](implementation/13-rollout.md)). [`STATUS.md`](implementation/STATUS.md) says what is
   done.
 - [`spec/`](spec/README.md): Quint models of the concurrent parts.
+- [`book/`](book/src/SUMMARY.md): the user-facing docs, published to GitHub Pages. Update it
+  when a change is visible to users.
 
 ## Ground rules
 

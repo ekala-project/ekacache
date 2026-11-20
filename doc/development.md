@@ -72,6 +72,18 @@ $ gh run view <run> --json jobs --jq '.jobs[]|"\(.databaseId) \(.name) \(.conclu
 $ gh api repos/<owner>/<repo>/actions/jobs/<job-id>/logs
 ```
 
+## The user docs book
+
+[`book/`](../book/) is the user-facing documentation (mdBook). The `book` workflow builds it on
+pull requests and publishes it to GitHub Pages from `main`. To preview it:
+
+```console
+$ nix-shell -p mdbook --run 'mdbook serve book'    # http://localhost:3000
+```
+
+Update the book when a change is visible to users: messages, exit codes, environment
+variables, what is cached, or the setup steps.
+
 ## Debugging tips
 
 - `EKACACHE_LOG=<file>` makes ec log one line per decision (`compiled`, `cached`, `linked`,
