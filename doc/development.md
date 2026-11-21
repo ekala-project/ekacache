@@ -29,8 +29,8 @@ The full description is in [12-testing.md](../implementation/12-testing.md).
 | Layer | What | Where |
 |---|---|---|
 | L1 vectors | test vectors from the behaviour docs | `tests/vectors/*.toml`, `scripts/check-vectors.sh` |
-| L2 ported tests | the C++/Go unit tests of jig and jigd, ported | `legacy_port.rs`, `legacy_store.rs`, `serve.rs`, `identity.rs` |
-| L4 Quint MBT | replay ITF traces from `spec/` against the code | `*_itf.rs`, `nix_store_quint.rs`, `scripts/gen-itf.sh` |
+| L2 ported tests | the C++/Go unit tests of jig and jigd, ported (the originals went with `legacy/`, last at `86ea083`) | `legacy_port.rs`, `legacy_store.rs`, `serve.rs`, `identity.rs` |
+| L4 Quint MBT | replay ITF traces from `spec/` against the code | `*_itf.rs`, `nix_store_quint.rs`, `gocache_mbt.rs`, `scripts/gen-itf.sh` |
 | L5 fuzzing | 12 targets, no panics and oracle checks | `fuzz/`, `scripts/fuzz.sh` |
 | perf | hit latency and daemon round trips | `scripts/bench.sh` |
 
@@ -61,8 +61,8 @@ ITF traces are generated rather than committed (`tests/itf/*/` is ignored). Run
 - **check:** fmt, clippy, cargo-deny, `check-vectors` and `check-macos`.
 - **test:** x86_64 and aarch64.
 - **quint:** the model tests, invariants and trace replay.
-- **e2e:** both architectures, with ecd and real compilers.
-- **macOS:** macos-15 and macos-15-intel, with ecd.
+- **e2e:** both architectures, with ecd and real compilers (GCC 15, clang 20).
+- **macOS:** macos-15 and macos-15-intel, the workspace tests with ecd.
 - **nightly:** bench and fuzz.
 
 To read a failed job's log:
