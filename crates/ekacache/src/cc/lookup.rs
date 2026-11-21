@@ -1,5 +1,6 @@
 //! Lookup and replay (`behaviors/ec-cc-mode.md §Lookup and replay`, `cc_mode.cc:192-283`).
 
+use std::collections::HashSet;
 use std::os::unix::fs::PermissionsExt;
 
 use ekacache_core::bytes::{find, find_byte_from, os_path, parse_uint};
@@ -40,29 +41,53 @@ impl Miss {
     }
 }
 
-/// `FindResult`, keeping the manifest text for the rule C check.
+/// `FindResult`, keeping the manifest text for the rule C check. `seen(path, bytes)` gets each
+/// input file validation reads.
 fn find_result(
     client: &mut Client,
     store: &Store,
     k1: &RequestKey,
+    seen: &mut dyn FnMut(&[u8], &[u8]),
 ) -> Result<(ResultKey, Vec<u8>), Vec<u8>> {
     let Some(text) = client.get(&slot::manifest(k1)) else {
         return Err(b"new-key".to_vec());
     };
-    let k2 = manifest::validate(store, k1, &text, &mut |paths: &[&[u8]]| {
-        client.identities(paths)
-    })?;
+    let k2 = manifest::validate_inspect(
+        store,
+        k1,
+        &text,
+        &mut |paths: &[&[u8]]| client.identities(paths),
+        seen,
+    )?;
     Ok((k2, text))
 }
 
+/// The inputs validation read, and whether one of them mentions `.incbin`: rule C on a hit
+/// reuses those bytes instead of reading the files again.
+#[derive(Default)]
+struct IncbinScan {
+    read: HashSet<Vec<u8>>,
+    found: bool,
+}
+
+impl IncbinScan {
+    fn see(&mut self, path: &[u8], bytes: &[u8]) {
+        self.found = self.found || mentions_incbin(bytes);
+        self.read.insert(path.to_vec());
+    }
+}
+
 /// ADOPTED Q-CC-12 (rule C on a validated hit): an input of the stored manifest whose bytes
-/// mention `.incbin`. Guards against entries the C++ jig wrote.
-fn manifest_mentions_incbin(store: &Store, text: &[u8]) -> bool {
-    manifest::parse(store, text).iter().any(|e| {
-        e.tab.is_some()
-            && !e.path.is_empty()
-            && read_file(&e.path).is_some_and(|bytes| mentions_incbin(&bytes))
-    })
+/// mention `.incbin`. Guards against entries the C++ jig wrote. Files `scan` saw during
+/// validation are not read again (store paths in path mode and daemon-identified inputs are).
+fn manifest_mentions_incbin(store: &Store, text: &[u8], scan: &IncbinScan) -> bool {
+    scan.found
+        || manifest::parse(store, text).iter().any(|e| {
+            e.tab.is_some()
+                && !e.path.is_empty()
+                && !scan.read.contains(&e.path)
+                && read_file(&e.path).is_some_and(|bytes| mentions_incbin(&bytes))
+        })
 }
 
 /// `Lookup(cache, k1, inv)` (`:201-235`): the manifest, k2, then `r/ o/ d/ e/` in one pipelined
@@ -73,8 +98,15 @@ pub fn lookup(
     k1: &RequestKey,
     inv: &Invocation,
 ) -> Result<CachedResult, Miss> {
-    let (k2, text) = find_result(client, store, k1).map_err(|why| Miss { why, store: true })?;
-    if !inv.link && is_assembly(&inv.source) && manifest_mentions_incbin(store, &text) {
+    let rule_c = !inv.link && is_assembly(&inv.source);
+    let mut scan = IncbinScan::default();
+    let (k2, text) = find_result(client, store, k1, &mut |path, bytes| {
+        if rule_c {
+            scan.see(path, bytes);
+        }
+    })
+    .map_err(|why| Miss { why, store: true })?;
+    if rule_c && manifest_mentions_incbin(store, &text, &scan) {
         return Err(Miss {
             why: b"incbin".to_vec(),
             store: false,

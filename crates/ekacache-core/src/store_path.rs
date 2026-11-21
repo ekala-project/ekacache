@@ -384,6 +384,12 @@ impl Store {
     /// when the file cannot be read.
     #[must_use]
     pub fn input_id(&self, path: &[u8]) -> Option<Vec<u8>> {
+        self.input_id_with(path, &mut |_| {})
+    }
+
+    /// `input_id`, handing the file's bytes to `seen` when it reads them, so that a caller
+    /// scanning the same file need not read it again.
+    pub fn input_id_with(&self, path: &[u8], seen: &mut dyn FnMut(&[u8])) -> Option<Vec<u8>> {
         if is_store_path(path) && !self.by_content() {
             let mut id = b"S:".to_vec();
             id.extend_from_slice(path);
@@ -396,14 +402,22 @@ impl Store {
             return None;
         }
         let content = std::fs::read(os_path(path)).ok()?;
+        seen(&content);
+        Some(self.content_id(path, &content))
+    }
+
+    /// The `C:` id `input_id` gives `path` when it reads `content` from it: `HashOf(bytes)` for
+    /// a store path, `HashOf(MaskOut(bytes))` otherwise.
+    #[must_use]
+    pub fn content_id(&self, path: &[u8], content: &[u8]) -> Vec<u8> {
         let digest = if is_store_path(path) {
-            hash_of(&content)
+            hash_of(content)
         } else {
-            hash_of(&self.mask_out(&content))
+            hash_of(&self.mask_out(content))
         };
         let mut id = b"C:".to_vec();
         id.extend_from_slice(&digest.to_hex());
-        Some(id)
+        id
     }
 }
 
@@ -552,7 +566,18 @@ mod tests {
             );
             assert_eq!(st.input_id(dir.path().as_os_str().as_bytes()), None);
             assert_eq!(st.input_id(b""), None);
+            // input_id_with hands over the bytes it hashed; content_id agrees with input_id
+            let mut seen = Vec::new();
+            let id = st.input_id_with(fp, &mut |b| seen.push(b.to_vec()));
+            assert_eq!(seen, vec![b"int a;\n".to_vec()]);
+            assert_eq!(id, Some(st.content_id(fp, b"int a;\n")));
         }
+        // a remembered id is not read
+        let st = path_store();
+        st.remember_identity(fp, b"C:00".to_vec());
+        let mut read = false;
+        assert_eq!(st.input_id_with(fp, &mut |_| read = true).unwrap(), b"C:00");
+        assert!(!read);
         if default_store_dir() {
             let sp = b"/nix/store/0123456789abcdfghijklmnpqrsvwxyz-zlib-1.3/include/zlib.h";
             assert_eq!(

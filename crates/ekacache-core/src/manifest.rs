@@ -230,7 +230,19 @@ pub fn validate(
     text: &[u8],
     ask: &mut AskIdentities<'_>,
 ) -> Result<ResultKey, Vec<u8>> {
-    validate_impl(store, k1, text, None, ask)
+    validate_impl(store, k1, text, None, ask, &mut |_, _| {})
+}
+
+/// `validate`, handing `seen(path, bytes)` each input file it reads to recompute an id
+/// (`Store::input_id_with`), so that a caller scanning the same files need not read them again.
+pub fn validate_inspect(
+    store: &Store,
+    k1: &RequestKey,
+    text: &[u8],
+    ask: &mut AskIdentities<'_>,
+    seen: &mut dyn FnMut(&[u8], &[u8]),
+) -> Result<ResultKey, Vec<u8>> {
+    validate_impl(store, k1, text, None, ask, seen)
 }
 
 /// `validate` with ADOPTED Q-RS-3 env-dep entries (`behaviors/ec-rustc-mode.md §Q-RS-3`).
@@ -247,7 +259,7 @@ pub fn validate_with_env(
     env: &EnvLookup<'_>,
     ask: &mut AskIdentities<'_>,
 ) -> Result<ResultKey, Vec<u8>> {
-    validate_impl(store, k1, text, Some(env), ask)
+    validate_impl(store, k1, text, Some(env), ask, &mut |_, _| {})
 }
 
 fn validate_impl(
@@ -256,6 +268,7 @@ fn validate_impl(
     text: &[u8],
     env: Option<&EnvLookup<'_>>,
     ask: &mut AskIdentities<'_>,
+    seen: &mut dyn FnMut(&[u8], &[u8]),
 ) -> Result<ResultKey, Vec<u8>> {
     let env = env.filter(|_| k1.text().starts_with(RUSTC_KEY_PREFIX));
     let is_env = |e: &Entry<'_>| env.is_some() && e.tab.is_some() && e.line.starts_with(ENV_PREFIX);
@@ -287,7 +300,8 @@ fn validate_impl(
                 }
             }
             (Some(_), _) => {
-                if store.input_id(&e.path).as_deref() != e.stored_id() {
+                let id = store.input_id_with(&e.path, &mut |bytes| seen(&e.path, bytes));
+                if id.as_deref() != e.stored_id() {
                     let mut why = b"inputs-changed:".to_vec();
                     why.extend_from_slice(e.stored_path());
                     return Err(why);
