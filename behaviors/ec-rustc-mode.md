@@ -194,6 +194,15 @@ permissions to `mode` exactly (replace), ignoring errors. Any failure returns fa
 blob returns true. Files are always restored into `--out-dir` under their basename, wherever
 rustc originally wrote them.
 
+**Adopted change (2026-11-21, Q-RS-11): restore is confined to `--out-dir`.** Before writing a
+record, the Rust port MUST compute `ReplaceAll(name, "@", stem)` and treat the record as
+malformed (UnpackFiles returns false, exactly like a bad header) when the result is empty,
+`.`, `..`, or contains `/` or NUL. Records before it stay written, and the lookup falls
+through to the compile with `object-gone` (§Lookup). The permissions set are `mode & 0777`,
+not `mode & 07777`: setuid, setgid and sticky bits are dropped. `PackFiles` only ever writes
+a basename and `permissions & 0777`, so no blob ec stored is affected; only a blob some other
+client planted in `o/<k2>` is.
+
 The restored `.d` file is byte-identical to the stored one. It is not rewritten for the
 current `out_dir` or stem.
 
@@ -360,6 +369,19 @@ starts with `@`, or if it carries a `-Z` flag that prints to stdout (at least
 argfiles as cc mode does and classifying the expanded arguments is an alternative, at the
 cost of another quoting format to specify. Compatibility: fewer hits; keys of the invocations
 that stay cacheable are unchanged.
+
+### Q-RS-11: Restore writes wherever the blob says
+
+**Current behavior**: `UnpackFiles` joins the stored name onto `out_dir` as it is. An absolute
+name replaces `out_dir`, and a name with `/` or `..` leaves it. The mode is applied as
+`mode & 07777`, setuid included.
+
+**Impact**: any client of the shared ecd can `PUT o/<k2>`. A planted blob can then write any
+file the building user can write, with any permission bits, on the next hit.
+
+**Recommendation**: **ADOPTED (signed off 2026-11-21).** A name that is not one path
+component after the `@` rewriting is a malformed record, and the mode is masked to `0777`
+(§Output blob).
 
 ---
 

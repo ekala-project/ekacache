@@ -11,9 +11,6 @@ use crate::util::{read_file, write_file};
 /// The permission bits a record carries (`kPermissionBits`).
 const PERMISSION_BITS: u32 = 0o777;
 
-/// `perms::mask`: what `std::filesystem::permissions` keeps of the mode it is given.
-const PERMS_MASK: u64 = 0o7777;
-
 /// `PackFiles(paths, stem)`: a record per readable path, in order; an unreadable path is
 /// skipped. The name is the basename with every `stem` replaced by `@` (unchanged for an empty
 /// stem); the mode is `permissions & 0777` (`0777` when `stat` fails, `perms::unknown`). Bytes
@@ -38,9 +35,14 @@ pub fn pack_files<P: AsRef<[u8]>>(paths: &[P], stem: &[u8]) -> Vec<u8> {
 }
 
 /// `UnpackFiles(blob, dir, stem)`: write each record to `dir / ReplaceAll(name, "@", stem)`
-/// (`WriteFile`: temp file and rename), then set its mode exactly, ignoring errors. `false` at
-/// the first malformed record or failed write; files written before it stay. An empty blob is
+/// (`WriteFile`: temp file and rename), then set its mode, ignoring errors. `false` at the
+/// first malformed record or failed write; files written before it stay. An empty blob is
 /// `true`.
+///
+/// ADOPTED Q-RS-11: a record whose name, after the `@` rewriting, is not a single path component
+/// (empty, `.`, `..`, or containing `/` or NUL) is malformed, and the mode is masked to `0777`
+/// (legacy kept `mode & 07777`), so a planted blob cannot write outside `dir` or restore a
+/// setuid, setgid or sticky file.
 ///
 /// Q-RS-8: every `@` becomes the stem, also one that was in the original name; with an empty
 /// stem `@` is removed.
@@ -61,16 +63,26 @@ pub fn unpack_files(mut blob: &[u8], dir: &[u8], stem: &[u8]) -> bool {
         let Some(size) = usize::try_from(size).ok().filter(|&s| s <= body.len()) else {
             return false;
         };
-        let out = fspath::join(dir, &replace_all(name, b"@", stem));
+        let name = replace_all(name, b"@", stem);
+        // ADOPTED Q-RS-11: one path component under `dir`, nothing else
+        if !is_plain_name(&name) {
+            return false;
+        }
+        let out = fspath::join(dir, &name);
         if !write_file(&out, &body[..size]) {
             return false;
         }
-        // `fs::permissions(out, perms(mode), ec)`: chmod(mode & perms::mask), errors ignored
-        let bits = u32::try_from(mode & PERMS_MASK).unwrap_or(0);
+        // chmod, errors ignored. ADOPTED Q-RS-11: `& 0777` (legacy: `& perms::mask`, 07777)
+        let bits = u32::try_from(mode & u64::from(PERMISSION_BITS)).unwrap_or(0);
         let _ = std::fs::set_permissions(os_path(&out), std::fs::Permissions::from_mode(bits));
         blob = &body[size..];
     }
     true
+}
+
+/// ADOPTED Q-RS-11: a restorable name is one non-empty path component other than `.` and `..`.
+fn is_plain_name(name: &[u8]) -> bool {
+    !matches!(name, b"" | b"." | b"..") && !name.iter().any(|&c| c == b'/' || c == 0)
 }
 
 #[cfg(test)]
@@ -160,11 +172,9 @@ mod tests {
     fn unpack_modes() {
         let dst = tempfile::tempdir().unwrap();
         let dir = b(dst.path());
-        // the setuid bit passes (perms::mask is 07777); higher bits are masked off
-        assert!(unpack_files(b"s 4755 0\nt 1000640 0\n", &dir, b""));
-        if setuid_allowed(dst.path()) {
-            assert_eq!(mode_of(&dst.path().join("s")), 0o4755);
-        }
+        // ADOPTED Q-RS-11: setuid, setgid, sticky and higher bits are masked off
+        assert!(unpack_files(b"s 7755 0\nt 1000640 0\n", &dir, b""));
+        assert_eq!(mode_of(&dst.path().join("s")), 0o755);
         assert_eq!(mode_of(&dst.path().join("t")), 0o640);
         // a tab around a number is trimmed by ParseUint
         assert!(unpack_files(b"u 600\t 2\nab", &dir, b""));
@@ -213,9 +223,56 @@ mod tests {
         }
         assert!(!unpack_files(b"first 644 1\n1second 644\n", &dir, b""));
         assert_eq!(std::fs::read(dst.path().join("first")).unwrap(), b"1");
-        // a name with `/` is joined under the directory as it is
-        std::fs::create_dir(dst.path().join("sub")).unwrap();
-        assert!(unpack_files(b"sub/f 644 1\nz", &dir, b""));
-        assert_eq!(std::fs::read(dst.path().join("sub/f")).unwrap(), b"z");
+    }
+
+    /// ADOPTED Q-RS-11: a name that is not one path component is a malformed record, and
+    /// nothing is written outside the directory.
+    #[test]
+    fn adopted_q_rs_9_hostile_names() {
+        let root = tempfile::tempdir().unwrap();
+        let dst = root.path().join("out");
+        std::fs::create_dir(&dst).unwrap();
+        std::fs::create_dir(dst.join("sub")).unwrap();
+        let dir = b(&dst);
+        let abs = root.path().join("abs");
+        let mut absolute = b(&abs);
+        absolute.extend_from_slice(b" 644 1\nz");
+        for (bad, stem) in [
+            (absolute, &b""[..]),
+            (b"../x 644 1\nz".to_vec(), b""),
+            (b"sub/f 644 1\nz".to_vec(), b""),
+            (b".. 644 1\nz".to_vec(), b""),
+            (b". 644 1\nz".to_vec(), b""),
+            (b"a\0b 644 1\nz".to_vec(), b""),
+            // empty, `..` or with `/` only after the `@` rewriting
+            (b"@ 644 1\nz".to_vec(), b""),
+            (b"@ 644 1\nz".to_vec(), b".."),
+            (b"@x 644 1\nz".to_vec(), b"../"),
+            // a good record first is written; the bad one after it is not
+            (b"ok 644 1\n1../y 644 1\nz".to_vec(), b""),
+        ] {
+            assert!(
+                !unpack_files(&bad, &dir, stem),
+                "{:?}",
+                String::from_utf8_lossy(&bad)
+            );
+        }
+        assert!(!abs.exists());
+        assert!(!root.path().join("x").exists());
+        assert!(!root.path().join("y").exists());
+        assert!(!dst.join("sub/f").exists());
+        let mut left: Vec<_> = std::fs::read_dir(&dst)
+            .unwrap()
+            .map(|e| e.unwrap().file_name())
+            .collect();
+        left.sort();
+        assert_eq!(left, ["ok", "sub"]);
+        assert!(std::fs::read_dir(dst.join("sub")).unwrap().next().is_none());
+        let mut above: Vec<_> = std::fs::read_dir(root.path())
+            .unwrap()
+            .map(|e| e.unwrap().file_name())
+            .collect();
+        above.sort();
+        assert_eq!(above, ["out"]);
     }
 }

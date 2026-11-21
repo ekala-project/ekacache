@@ -313,6 +313,27 @@ fn miss_store_hit() {
     assert_eq!(snapshot(&ws.out)["first"].1, 0o600);
     d.take_log();
 
+    // ADOPTED Q-RS-11: a planted blob naming a path outside the out-dir is malformed too
+    ws.clear_out();
+    let outside = ws.root.join("planted");
+    let mut blob = outside.clone().into_os_string().into_encoded_bytes();
+    blob.extend_from_slice(b" 4755 1\nz");
+    d.put(format!("o/{k2}").as_bytes(), &blob);
+    ws.wrap(&d.sock, &args, &[("FAKE_NO_DEPINFO", "1")]);
+    assert_eq!(
+        take_log(&ws.log),
+        log1("compiled-unstored", "foo-abc object-gone")
+    );
+    assert!(!outside.exists());
+    d.put(format!("o/{k2}").as_bytes(), b"../planted 644 1\nz");
+    ws.wrap(&d.sock, &args, &[("FAKE_NO_DEPINFO", "1")]);
+    assert_eq!(
+        take_log(&ws.log),
+        log1("compiled-unstored", "foo-abc object-gone")
+    );
+    assert!(!outside.exists());
+    d.take_log();
+
     // an input changed
     std::fs::write(ws.root.join("src/m.rs"), "pub fn g() {}\n").unwrap();
     ws.wrap(&d.sock, &args, &[]);

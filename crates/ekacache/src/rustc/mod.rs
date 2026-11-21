@@ -11,9 +11,10 @@
 //! Adopted changes: Q-RS-3 (`# env-dep:` variables are `$env:` manifest lines, `rs-schema=8`),
 //! Q-RS-5 (`--crate-type` values split on `,`, `parse`), Q-CC-2 / Q-CLIENT-2 (the slot is
 //! released after the PUTs, and every PUT reply is checked), Q-KEY-3 (an input without an
-//! identity makes the result unstorable). Kept quirks: Q-RS-1 (failures are never cached),
-//! Q-RS-2 (no `MaskOut`), Q-RS-4 (an empty blob is stored and replayed), Q-RS-6 (a glued `-L`
-//! is in the key), Q-RS-7 (out-dir and metadata are not), Q-RS-8 (`@` rewriting on restore).
+//! identity makes the result unstorable), Q-RS-11 (restore is confined to the out-dir, `pack`).
+//! Kept quirks: Q-RS-1 (failures are never cached), Q-RS-2 (no `MaskOut`), Q-RS-4 (an empty
+//! blob is stored and replayed), Q-RS-6 (a glued `-L` is in the key), Q-RS-7 (out-dir and
+//! metadata are not), Q-RS-8 (`@` rewriting on restore).
 
 pub mod depinfo;
 pub mod key;
