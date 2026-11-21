@@ -118,6 +118,12 @@ are kept), run one `PrefetchIdentities`, and concatenate `(InputId or "?") + ","
 2. If there is a k2: `GET o/<k2>`. If present and `UnpackFiles(blob, out_dir, extra_filename)`
    succeeds: `GET e/<k2>` (a separate round trip), write its value (or nothing) to stderr
    verbatim, log `cached`, and **return 0**. No slot is taken.
+
+   **Adopted change (2026-11-21):** the Rust port MUST send `GET o/<k2>` and `GET e/<k2>`
+   together, pipelined in one send (`GetMany`, `ec-cache-client.md`), and read both replies in
+   order before unpacking. The request order and keys are unchanged; the difference on the
+   wire is that `GET e/<k2>` is also sent when the blob is missing or fails to unpack, and its
+   value is then discarded. The result (hit, `object-gone`, stderr bytes) is the same.
 3. Otherwise fall through to the compile. Files written by a partial `UnpackFiles` are left
    in place and overwritten by rustc.
 

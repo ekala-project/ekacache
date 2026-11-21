@@ -11,7 +11,8 @@
 //! Adopted changes: Q-RS-3 (`# env-dep:` variables are `$env:` manifest lines, `rs-schema=8`),
 //! Q-RS-5 (`--crate-type` values split on `,`, `parse`), Q-CC-2 / Q-CLIENT-2 (the slot is
 //! released after the PUTs, and every PUT reply is checked), Q-KEY-3 (an input without an
-//! identity makes the result unstorable), Q-RS-11 (restore is confined to the out-dir, `pack`).
+//! identity makes the result unstorable), Q-RS-11 (restore is confined to the out-dir, `pack`),
+//! and the hit's `GET o/` and `GET e/` pipelined in one round trip (§Lookup).
 //! Kept quirks: Q-RS-1 (failures are never cached), Q-RS-2 (no `MaskOut`), Q-RS-4 (an empty
 //! blob is stored and replayed), Q-RS-6 (a glued `-L` is in the key), Q-RS-7 (out-dir and
 //! metadata are not), Q-RS-8 (`@` rewriting on restore).
@@ -99,11 +100,17 @@ pub fn run(args: &[Vec<u8>], ctx: &mut Ctx) -> i32 {
         Ok(_) => missed.extend_from_slice(b"object-gone"),
         Err(why) => missed.extend_from_slice(why),
     }
-    if let Ok(k2) = &result
-        && let Some(blob) = client.get(&slot::object(k2))
-        && pack::unpack_files(&blob, &inv.out_dir, &inv.extra_filename)
-    {
-        let stderr = client.get(&slot::stderr(k2)).unwrap_or_default();
+    // ADOPTED (§Lookup, 2026-11-21): `o/` and `e/` in one round trip, `e/` read even when the
+    // blob then misses
+    let hit = result.as_ref().ok().and_then(|k2| {
+        let mut got = client
+            .get_many(&[slot::object(k2), slot::stderr(k2)])
+            .into_iter();
+        let blob = got.next().flatten()?;
+        let stderr = got.next().flatten().unwrap_or_default();
+        pack::unpack_files(&blob, &inv.out_dir, &inv.extra_filename).then_some(stderr)
+    });
+    if let Some(stderr) = hit {
         write_stderr(&stderr);
         log::outcome(&ctx.env, TOOL, Outcome::Hit, &label, &clock);
         return 0;

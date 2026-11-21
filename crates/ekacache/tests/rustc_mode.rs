@@ -299,6 +299,17 @@ fn miss_store_hit() {
     d.remove(format!("o/{k2}").as_bytes());
     ws.wrap(&d.sock, &args, &[]);
     assert_eq!(take_log(&ws.log), log1("compiled", "foo-abc object-gone"));
+    // the lookup pipelines `GET e/` behind `GET o/` even when the blob is gone
+    let log = lines(&d.take_log());
+    assert_eq!(
+        log[..4],
+        [
+            "HELLO 1".to_owned(),
+            format!("GET m/{k1}"),
+            format!("GET o/{k2}"),
+            format!("GET e/{k2}"),
+        ]
+    );
     // a blob that does not unpack is "gone" too; files before the bad record stay
     ws.clear_out();
     d.put(format!("o/{k2}").as_bytes(), b"first 600 2\nokbad header\n");
