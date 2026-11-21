@@ -12,7 +12,7 @@
 use std::collections::HashMap;
 use std::fs::File;
 use std::io::Read;
-use std::os::unix::fs::MetadataExt;
+use std::os::unix::fs::{MetadataExt, OpenOptionsExt};
 use std::sync::{PoisonError, RwLock};
 
 use crate::gofs;
@@ -82,7 +82,14 @@ impl Identities {
         }
         // type and location are checked on the opened descriptor: a build owns directories
         // under its $out and can swap one for a symlink between any two path lookups
-        let f = File::open(gofs::nul_free(&real)?).ok()?;
+        // ADOPTED Q-ID-6: O_NONBLOCK, so a FIFO with no writer cannot block the open (and pin a
+        // blocking thread forever); it is then refused by the fstat below like any other
+        // non-regular file. Reads of a regular file ignore O_NONBLOCK. std adds O_CLOEXEC.
+        let f = File::options()
+            .read(true)
+            .custom_flags(libc::O_NONBLOCK | libc::O_NOCTTY)
+            .open(gofs::nul_free(&real)?)
+            .ok()?;
         let meta = f.metadata().ok()?;
         if !meta.file_type().is_file() || !fd_under(&f, &self.real_store) {
             return None;

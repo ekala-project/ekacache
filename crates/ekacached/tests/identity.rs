@@ -106,7 +106,7 @@ fn identity_only_under_store() {
     );
 }
 
-/// Q-ID-6/Q-ID-7 territory: the path as asked must be clean and under the configured prefix;
+/// §Algorithm steps 1 and 2: the path as asked must be clean and under the configured prefix;
 /// the resolved one under the resolved store.
 #[test]
 fn lexical_checks() {
@@ -209,4 +209,40 @@ fn memo_stamp() {
     assert!(got != ABC && got.len() == 34, "{}", s(&got));
     // the memo is never pruned: one entry per path ever identified
     assert_eq!(ids.len(), 1);
+}
+
+/// ADOPTED Q-ID-6: a FIFO with no writer is opened without blocking and gets `""`, like any
+/// other non-regular file. (Device nodes need root to create; sockets are in `file_types`.)
+#[test]
+fn fifo_without_writer_is_refused_promptly() {
+    let store = tempfile::tempdir().unwrap();
+    let st = store.path().to_owned();
+    // mkfifo(1): rustix has no mkfifo/mknod on every target and the tests carry no unsafe
+    let made = std::process::Command::new("mkfifo")
+        .arg(st.join("fifo"))
+        .status()
+        .unwrap();
+    assert!(made.success(), "mkfifo: {made}");
+    symlink("fifo", st.join("to-fifo")).unwrap();
+    let (tx, rx) = std::sync::mpsc::channel();
+    // on a thread: if the open blocks, the test fails on the timeout instead of hanging
+    std::thread::spawn(move || {
+        let ids = Identities::new(&b(&st));
+        let got = (
+            ids.of(&b(&st.join("fifo"))),
+            ids.of(&b(&st.join("to-fifo"))),
+            ids.len(),
+        );
+        let _ = tx.send(got);
+    });
+    let (direct, linked, memo) = rx
+        .recv_timeout(std::time::Duration::from_secs(10))
+        .expect("IDS on a FIFO blocked");
+    assert!(direct.is_empty(), "{}", s(&direct));
+    assert!(linked.is_empty(), "{}", s(&linked));
+    assert_eq!(memo, 0);
+    // regular files are still read through the non-blocking descriptor
+    std::fs::write(store.path().join("f"), b"abc").unwrap();
+    let ids = Identities::new(&b(store.path()));
+    assert_eq!(ids.of(&b(&store.path().join("f"))), ABC);
 }

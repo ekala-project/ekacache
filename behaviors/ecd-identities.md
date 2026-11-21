@@ -63,7 +63,7 @@ or with `/nix/store` if that is unset or empty (`main.go:210-214`). It computes:
 1. if not path.starts_with(store) or Clean(path) != path: return ""
 2. real = EvalSymlinks(path)                       # error -> return ""
    if not real.starts_with(realStore): return ""
-3. f = open(real, O_RDONLY)                        # error -> return ""
+3. f = open(real, O_RDONLY|O_NONBLOCK|O_NOCTTY|O_CLOEXEC)  # error -> return "" (Q-ID-6)
 4. info = fstat(f)                                 # error -> return ""
    if not info.is_regular_file: return ""
    if not fdUnder(f, realStore): return ""         # readlink(/proc/self/fd/N) must start with realStore
@@ -89,6 +89,9 @@ Details a reimplementation MUST keep:
   descriptor**: `fstat` and `/proc/self/fd/N`. A build that swaps a directory for a symlink
   between the path lookups cannot redirect the read. On non-Linux builds `fdUnder` always
   returns true (`peer_other.go:13`).
+- **Non-blocking open** (step 3, adopted 2026-11-21, Q-ID-6). The open uses `O_NONBLOCK`, so
+  a FIFO with no writer opens at once and is then refused by the `fstat` check like any other
+  non-regular file. `O_NONBLOCK` has no effect on reads of a regular file.
 - **Memo key** is the path as requested, not the resolved path. Two paths that resolve to the
   same file get two entries.
 - **Stamp** is (inode, size, mtime in ns) of the file actually opened. Device number, ctime
@@ -173,6 +176,19 @@ relative request paths can match. The real path is resolved once at startup.
 **Impact**: Configuration surprises only.
 
 **Recommendation**: keep as-is.
+
+### Q-ID-6: A FIFO with no writer blocks the open (adopted 2026-11-21)
+
+**Current behavior** (jigd): step 3 opens the resolved path with plain `O_RDONLY` before the
+type check. A FIFO in the store with no writer blocks that open forever and holds a worker.
+Any build can create FIFOs under its `$out` and ask about them, and the daemon's blocking
+pool is bounded, so a few hundred such requests wedge every connection.
+
+**Adopted behavior**: open with `O_NONBLOCK` (plus `O_NOCTTY` and `O_CLOEXEC`). A FIFO opens
+at once and gets `""` from the `fstat` check, as sockets, devices and directories already do.
+Identities of regular files are unchanged.
+
+**Tests**: `crates/ekacached/tests/identity.rs` `fifo_without_writer_is_refused_promptly`.
 
 ## Open questions
 
