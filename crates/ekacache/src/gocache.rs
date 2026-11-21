@@ -13,8 +13,9 @@
 //! - **ADOPTED §Adopted: JSON handling** (Q-GO-1, Q-GO-3, Q-GO-4): each line is parsed by
 //!   serde_json and each response is produced by it; base64 is decoded strictly. A bad line
 //!   whose integer `ID` can be recovered gets an `Err` reply; any other bad line is fatal
-//!   (`ec gocacheprog: bad request line` on stderr, exit 1). Invalid base64 gets an `Err` reply
-//!   and nothing is stored.
+//!   (`ec gocacheprog: bad request line` on stderr, exit 1). A bad line that is still a `put`
+//!   with an integer `BodySize > 0` has its body line consumed before the `Err` reply, as a
+//!   refused good `put` does. Invalid base64 gets an `Err` reply and nothing is stored.
 //! - **ADOPTED Q-CLIENT-2** (`behaviors/ec-cache-client.md`): a PUT whose reply is not `OK`
 //!   prints `ec: cache put <key> failed` on stderr, and the client drops the connection, so the
 //!   rest of the session runs as if ecd were absent.
@@ -102,6 +103,11 @@ impl Session<'_> {
             let (id, req) = match parse_request(&line) {
                 Parsed::Request(id, req) => (id, req),
                 Parsed::Bad(id, msg) => {
+                    // a refused put's body line is still its own (as `put` reads it first),
+                    // or it would be parsed as the next request
+                    if bad_put_has_body(&line) {
+                        let _ = input.next_non_empty();
+                    }
                     send(out, &err_reply(id, &msg));
                     continue;
                 }
@@ -286,6 +292,20 @@ fn recover_id(line: &[u8]) -> Option<i64> {
     value.get("ID")?.as_i64()
 }
 
+/// Whether a bad line is still recognisably a `put` with a positive `BodySize`, so a body line
+/// follows it (§Adopted: JSON handling). Read leniently, as `recover_id` does: `Command` must
+/// be the string `put` and `BodySize` an integer above 0.
+fn bad_put_has_body(line: &[u8]) -> bool {
+    let Ok(value) = serde_json::from_slice::<serde_json::Value>(line) else {
+        return false;
+    };
+    value.get("Command").and_then(serde_json::Value::as_str) == Some("put")
+        && value
+            .get("BodySize")
+            .and_then(serde_json::Value::as_i64)
+            .is_some_and(|n| n > 0)
+}
+
 /// ADOPTED Q-GO-4: strict standard base64 (RFC 4648 §4, padded, canonical trailing bits, no
 /// whitespace). A missing field is the empty string, as legacy's `JsonField` gives.
 fn decode_b64(text: Option<&str>) -> Option<Vec<u8>> {
@@ -466,6 +486,29 @@ impl<R: Read> LineReader<R> {
 mod tests {
     use super::*;
     use ekacache_core::env::Env;
+
+    /// §Adopted: JSON handling: which bad lines still own a body line.
+    #[test]
+    fn bad_put_has_body_rule() {
+        for yes in [
+            r#"{"ID":1,"Command":"put","ActionID":7,"BodySize":3}"#,
+            r#"{"ID":1,"Command":"get","Command":"put","BodySize":1}"#,
+        ] {
+            assert!(bad_put_has_body(yes.as_bytes()), "{yes}");
+        }
+        for no in [
+            r#"{"ID":1,"Command":"put","BodySize":0}"#,
+            r#"{"ID":1,"Command":"put","BodySize":-3}"#,
+            r#"{"ID":1,"Command":"put","BodySize":"3"}"#,
+            r#"{"ID":1,"Command":"put","BodySize":3.0}"#,
+            r#"{"ID":1,"Command":"put"}"#,
+            r#"{"ID":1,"Command":"get","BodySize":3}"#,
+            r#"{"ID":1,"Command":["put"],"BodySize":3}"#,
+            r#"{"ID":1,"Command":"put","BodySize":3"#,
+        ] {
+            assert!(!bad_put_has_body(no.as_bytes()), "{no}");
+        }
+    }
 
     /// `TestGoCache` (`legacy/jig/src/jig_test.cc:483`): standard base64, decoded strictly now
     /// (ADOPTED Q-GO-4), round-trips what Go encodes.

@@ -585,6 +585,46 @@ fn adopted_invalid_json_with_an_id() {
     assert_eq!(lines[3], "{\"ID\":4,\"Miss\":true}");
 }
 
+/// §Adopted: JSON handling: a bad put with an integer `BodySize > 0` still owns its body line,
+/// which is consumed before the `Err` reply rather than parsed as the next request.
+#[test]
+fn adopted_bad_put_consumes_its_body() {
+    let s = setup();
+    let o = b64(OUT);
+    let out = s.session(&format!(
+        "{{\"ID\":1,\"Command\":\"put\",\"ActionID\":7,\"OutputID\":\"{o}\",\"BodySize\":3}}\n\n\"eHl6\"\n\
+         {{\"ID\":2,\"Command\":\"put\",\"OutputID\":[1],\"BodySize\":0}}\n{}{}",
+        put(3, ACT, OUT, b"abc"),
+        get(4, ACT)
+    ));
+    let r = ok(&out);
+    let lines: Vec<&str> = r.lines().collect();
+    assert_eq!(lines.len(), 4, "{r}");
+    assert!(
+        lines[0].starts_with("{\"ID\":1,\"Err\":\"bad request: invalid type: "),
+        "{r}"
+    );
+    // BodySize 0: no body line, the next line is the next request
+    assert!(
+        lines[1].starts_with("{\"ID\":2,\"Err\":\"bad request: invalid type: "),
+        "{r}"
+    );
+    assert_eq!(
+        lines[2],
+        format!("{{\"ID\":3,\"DiskPath\":\"{}\"}}", s.disk_path(OUT))
+    );
+    assert_eq!(
+        lines[3],
+        format!(
+            "{{\"ID\":4,\"OutputID\":\"{o}\",\"Size\":3,\"DiskPath\":\"{}\"}}",
+            s.disk_path(OUT)
+        )
+    );
+    // the bad put stored nothing
+    assert_eq!(s.fake.get(&o_key(OUT)).unwrap(), b"abc");
+    assert_eq!(s.fake.kv().len(), 2);
+}
+
 #[test]
 fn adopted_invalid_json_without_an_id() {
     for bad in [

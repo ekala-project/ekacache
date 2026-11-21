@@ -208,6 +208,11 @@ Signed off 2026-11-17. This replaces the substring scanner (Q-GO-1, Q-GO-3, Q-GO
   integer `ID` can be recovered, reply `{"ID":<n>,"Err":"<message>"}`. Otherwise write
   `ec gocacheprog: bad request line` to stderr and exit 1, since the stream can no longer be
   trusted.
+- Every `put` with `BodySize > 0` consumes its body line (the next non-empty line) before any
+  reply, `Err` included, so the stream stays in step. This also holds for a bad line whose
+  `ID` was recovered: when a lenient read of it still gives `"Command":"put"` and an integer
+  `BodySize > 0`, the body line is consumed before the `Err` reply. (Added 2026-11-21; before,
+  the body line of such a bad put was parsed as the next request and ended the session.)
 - Invalid base64 in `ActionID`/`OutputID`/body: reply with `Err` and store nothing. A put body
   that fails to decode MUST NOT be stored (the same rule as the BodySize mismatch).
 - Unknown `Command` values keep the current behaviour (Q-GO-2) unless signed off separately.
