@@ -36,14 +36,14 @@ that source; ec and ecd behave the same.
 | [ecd-daemon.md](ecd-daemon.md) | CLI, socket creation, peer authentication, signals, logging, slot limit | Q-DAEMON-1..13 |
 | [ecd-protocol.md](ecd-protocol.md) | line protocol: GET HAS PUT IDS SLOT DONE STATS, framing, hang-up rules | Q-PROTO-1..12 |
 | [ecd-store.md](ecd-store.md) | bitcask packs and hints, index, tiers, budgets, demotion, eviction, recovery | Q-STORE-1..15 |
-| [ecd-identities.md](ecd-identities.md) | IDS: store-file identities and the memo | Q-ID-1..5 |
+| [ecd-identities.md](ecd-identities.md) | IDS: store-file identities and the memo | Q-ID-1..6 |
 | [ecd-slots.md](ecd-slots.md) | host-wide compile slots, fairness, hang-up release | Q-SLOT-1..5 |
 | **ec** | | |
 | [ec-dispatch.md](ec-dispatch.md) | mode selection (argv[0]/argv[1], launcher), usage, process spawning, exit status | Q-DISPATCH-1..8 |
 | [ec-keys.md](ec-keys.md) | Hasher framing, key prefixes, store masking, identities, manifests, test vectors | Q-KEY-1..13 |
 | [ec-cache-client.md](ec-cache-client.md) | the client side of the ecd protocol, value encoding, slots | Q-CLIENT-1..9 |
 | [ec-cc-mode.md](ec-cc-mode.md) | C/C++ compile and link caching | Q-CC-1..16 |
-| [ec-rustc-mode.md](ec-rustc-mode.md) | rustc caching (`rustcwrap`, launcher) | Q-RS-1..10 |
+| [ec-rustc-mode.md](ec-rustc-mode.md) | rustc caching (`rustcwrap`, launcher) | Q-RS-1..11 |
 | [ec-gocacheprog.md](ec-gocacheprog.md) | GOCACHEPROG over ecd | Q-GO-1..8 |
 | [ec-cache-commands.md](ec-cache-commands.md) | `ec cache put/get/put-dir/get-dir`, `ec slot`, directory blobs | Q-DIR-1..7 |
 | [ec-nix-store.md](ec-nix-store.md) | `ec nix-store`: builder-rpc-v0 client, offline store, derivations | Q-NIX-1..17 |
@@ -74,6 +74,10 @@ The Rust port MUST implement these instead of the current behaviour:
 | fsync on seal and on demotion, not per PUT (Q-STORE-7) | ecd-store.md; `spec/store.qnt` `FSYNC_ON_SEAL` | file formats unchanged |
 | Uncacheable: side-output flags (`--coverage`, `-gsplit-dwarf`, `-MJ`, …), hidden-input flags (`-fprofile-use`, `-fplugin=`, `-specs=`), C++20 module flags, `.incbin` in assembler sources, other toolchains' temp-dir compiles (Q-CC-12..16) | ec-cc-mode.md §Additional uncacheable cases | fewer hits; no key changes |
 | Strict `EKACACHED_SIZE` / `EKACACHED_COLD_SIZE` with M/G/T suffixes; invalid values exit 2; budgets logged (Q-DAEMON-1, Q-ENV-3) | ecd-daemon.md | `+N`, negatives and junk now refused |
+| IDS opens with `O_NONBLOCK` (2026-11-21): a FIFO with no writer no longer blocks a worker forever; it gets `""` like other non-regular files (Q-ID-6) | ecd-identities.md §Algorithm, Q-ID-6 | identities unchanged |
+| rustc restore confined to `--out-dir` (2026-11-21): a blob record whose name (after `@` rewriting) is empty, `.`, `..` or has `/`/NUL is malformed; mode masked to `0777` (Q-RS-11) | ec-rustc-mode.md §Output blob, Q-RS-11 | none for blobs ec stores; planted blobs miss and recompile |
+| rustc hit fetches `o/<k2>` and `e/<k2>` pipelined in one round trip (2026-11-21) | ec-rustc-mode.md §Lookup | ecd unchanged; `GET e/` also sent on a miss |
+| gocacheprog: a bad `put` line with integer `BodySize > 0` consumes its body line before the `Err` reply (2026-11-21) | ec-gocacheprog.md §Adopted: JSON handling | identical for Go's output |
 
 ## Proposed changes awaiting sign-off
 
