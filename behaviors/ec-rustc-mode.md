@@ -301,6 +301,66 @@ in the original filename. With an empty stem, `@` is removed.
 
 **Recommendation**: keep as-is.
 
+### Q-RS-9: Toolchains behind a rustup proxy share keys
+
+**Current behavior**: with rustup, the `rustc` that ec resolves (`OnPath`, usually
+`~/.cargo/bin/rustc`) is a symlink to the `rustup` proxy, which picks the real toolchain at
+run time from `RUSTUP_TOOLCHAIN` (`cargo +nightly` sets it), a `rust-toolchain.toml`, a
+directory override or the default. k1 sees only the proxy:
+
+- `rustc=` is `ToolId(~/.cargo/bin/rustc)`, a path, so it is the same for every toolchain;
+- `stdlib=`: `canonical(rustc)` is `~/.cargo/bin/rustup`, so the root is `~/.cargo`, which has
+  no `lib/rustlib`. Without `--sysroot` (cargo passes none) no rlib is found and the field is
+  empty;
+- `RUSTUP_TOOLCHAIN` is not one of the hashed variables.
+
+So `cargo +stable build` and `cargo +nightly build` of the same crate compute the same k1, and
+so does a build before and after `rustup update`.
+
+**Impact**: an rlib built by one toolchain is replayed into a build with another. rustc then
+refuses it (E0514, "compiled by an incompatible version of rustc"), and the user has to clear
+the cache or `cargo clean`. Builds inside Nix are not affected: there `rustc` is a store path
+whose `lib/rustlib` holds the stdlib rlibs.
+
+**Recommendation**: change, needs sign-off. Add two k1 fields after `stdlib=`:
+`RUSTUP_TOOLCHAIN=<value>` (empty when unset), and `rustc-vV=` followed by the stdout of
+`rustc -vV`, run with the invocation's environment and cwd (it names the release, commit hash,
+host and LLVM version). The `-vV` result MAY be memoised by the identity of the real tool, but
+not by the proxy path alone, since the proxy's answer depends on the toolchain selection.
+Running `rustup which rustc` and using its path for `ToolId` and `StdlibIds` is an
+alternative. Compatibility: rustc keys change, so `rs-schema` is bumped and existing rustc
+entries start cold. cc keys are unchanged. Costs one extra process per cacheable rustc
+invocation, unless memoised.
+
+### Q-RS-10: stdout is not stored, and `@argfile` contents are not keyed
+
+**Current behavior**:
+
+- **stdout.** The cached compile runs rustc with stdout inherited and only stderr captured
+  (§Compile and store). Nothing written to stdout is stored, and a hit writes only the `e/`
+  value to stderr. Flags that make rustc print results to stdout, such as
+  `-Zprint-type-sizes`, `-Zunpretty=…` and `-Zprint-mono-items`, are ordinary `key_args`, so a
+  cargo library build that passes them is cacheable.
+- **`@argfile`.** rustc reads arguments from `@path` (and `@shell:path`), but `ParseRustInvocation` does not expand
+  it. `@path` falls through to `TakeCodegenOption` and enters `key_args` as the text `@path`;
+  the file's contents are not hashed. When the argfile holds the source, `--out-dir` or
+  `--emit`, the invocation is not cacheable (those are not seen), but when they are on the
+  command line and the argfile holds only other flags (`--cfg`, `-C`, `--extern`), it is
+  cached with a key that ignores those flags.
+
+**Impact**: on a hit, the `-Z` printing flags produce empty output, where a miss printed the
+report. With an argfile, changing its contents (another `--cfg`, other `-C opt-level`) still
+hits and replays the output of the old flags. cargo writes an argfile only when the command
+line is too long, and then it holds every argument, so this rarely matters with cargo.
+
+**Recommendation**: change, needs sign-off. Make an invocation uncacheable if any argument
+starts with `@`, or if it carries a `-Z` flag that prints to stdout (at least
+`-Zprint-type-sizes`, `-Zunpretty`, `-Zprint-mono-items`), in either the glued or the
+`-Z <opt>` spelling. Expanding
+argfiles as cc mode does and classifying the expanded arguments is an alternative, at the
+cost of another quoting format to specify. Compatibility: fewer hits; keys of the invocations
+that stay cacheable are unchanged.
+
 ---
 
 ## Open questions

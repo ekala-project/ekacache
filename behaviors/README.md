@@ -40,10 +40,10 @@ that source; ec and ecd behave the same.
 | [ecd-slots.md](ecd-slots.md) | host-wide compile slots, fairness, hang-up release | Q-SLOT-1..5 |
 | **ec** | | |
 | [ec-dispatch.md](ec-dispatch.md) | mode selection (argv[0]/argv[1], launcher), usage, process spawning, exit status | Q-DISPATCH-1..8 |
-| [ec-keys.md](ec-keys.md) | Hasher framing, key prefixes, store masking, identities, manifests, test vectors | Q-KEY-1..12 |
-| [ec-cache-client.md](ec-cache-client.md) | the client side of the ecd protocol, value encoding, slots | Q-CLIENT-1..8 |
+| [ec-keys.md](ec-keys.md) | Hasher framing, key prefixes, store masking, identities, manifests, test vectors | Q-KEY-1..13 |
+| [ec-cache-client.md](ec-cache-client.md) | the client side of the ecd protocol, value encoding, slots | Q-CLIENT-1..9 |
 | [ec-cc-mode.md](ec-cc-mode.md) | C/C++ compile and link caching | Q-CC-1..16 |
-| [ec-rustc-mode.md](ec-rustc-mode.md) | rustc caching (`rustcwrap`, launcher) | Q-RS-1..8 |
+| [ec-rustc-mode.md](ec-rustc-mode.md) | rustc caching (`rustcwrap`, launcher) | Q-RS-1..10 |
 | [ec-gocacheprog.md](ec-gocacheprog.md) | GOCACHEPROG over ecd | Q-GO-1..8 |
 | [ec-cache-commands.md](ec-cache-commands.md) | `ec cache put/get/put-dir/get-dir`, `ec slot`, directory blobs | Q-DIR-1..7 |
 | [ec-nix-store.md](ec-nix-store.md) | `ec nix-store`: builder-rpc-v0 client, offline store, derivations | Q-NIX-1..17 |
@@ -88,6 +88,10 @@ the current behaviour.
 | keys | Q-KEY-6, Q-CC-3 | absent tracking inside the store and for GCC | fewer hits, more soundness |
 | keys | Q-RS-2, -4 | rustc: MaskOut, empty blobs | rustc keys change |
 | keys | Q-CC-6 | narrower build-system depfile detection | cc behaviour change |
+| keys | Q-KEY-13 | hash GCC's programs (`cc1`…, `as`, `ld`), clang config and GCC specs files into `toolchain=`; key `CCC_OVERRIDE_OPTIONS`, `SDKROOT`, `*_DEPLOYMENT_TARGET`; `DEPENDENCIES_OUTPUT`/`SUNPRO_DEPENDENCIES` uncacheable | every cc key changes (with `cc-schema=`) |
+| keys | Q-RS-9 | rustc: `RUSTUP_TOOLCHAIN` and `rustc -vV` in k1 | rustc keys change (`rs-schema` bump) |
+| rustc | Q-RS-10 | uncacheable: `@argfile` arguments and `-Z` flags that print to stdout | fewer hits; no key changes |
+| client | Q-CLIENT-9 | cc/rustc: failed PUTs logged to `$EKACACHE_LOG` only, not stderr (narrows adopted Q-CLIENT-2) | stderr bytes change |
 | parsing | Q-DIR-4, -5, Q-DISPATCH-3..5 | path sanitising for get-dir; errors instead of aborts; exec/fork diagnostics | none for valid input |
 | nix | Q-NIX-4..9 | see ec-nix-store.md | per item |
 | driver/fixup | Q-DRV-1, -9, -10, Q-FIX-3, -4, -7, -10, -11, -17 | see those docs | per item |
