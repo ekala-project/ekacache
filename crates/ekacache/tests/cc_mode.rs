@@ -7,11 +7,14 @@
 //!   `PATH`) against a daemon (`$EC_RUST_ECD`): miss, hit, invalidation, cached failures, `-E` to
 //!   stdout, links; the adopted rules A–D and Q-CC-5.
 //! - Q-CC-2: a recording fake ecd sees `DONE` after the last `PUT`.
+//! - A storing fake ecd: a PUT batch that dies after `m/` (`object-gone`), ADOPTED Q-KEY-3
+//!   (`not-cached:unreadable:`), content identity mode.
 //!
 //! Every test skips (with a message) when what it needs is not given.
 #![allow(clippy::unwrap_used, clippy::too_many_lines)]
 
 use ekacache_testkit::busy::CommandBusyExt as _;
+use std::collections::HashMap;
 use std::io::{BufRead, BufReader, Read, Write};
 use std::os::unix::fs::PermissionsExt;
 use std::os::unix::net::UnixListener;
@@ -224,6 +227,17 @@ impl Work {
 
     /// `ec <compiler> args`; the log rows without times.
     fn ec(&self, ec: &Path, compiler: &Path, args: &[&str]) -> (Output, Vec<String>) {
+        self.ec_env(ec, compiler, args, &[])
+    }
+
+    /// `ec` with `env` added.
+    fn ec_env(
+        &self,
+        ec: &Path,
+        compiler: &Path,
+        args: &[&str],
+        env: &[(&str, &str)],
+    ) -> (Output, Vec<String>) {
         let log = self.path().join("tmp/log");
         let _ = std::fs::remove_file(&log);
         let out = Command::new(ec)
@@ -235,6 +249,7 @@ impl Work {
             .env("TMPDIR", self.path().join("tmp"))
             .env("EKACACHE_SOCK", &self.sock)
             .env("EKACACHE_LOG", &log)
+            .envs(env.iter().copied())
             .stdin(Stdio::null())
             .output_busy()
             .unwrap();
@@ -605,4 +620,175 @@ fn refused_put() {
         assert_eq!(seen.iter().filter(|c| *c == "PUT").count(), 1, "{seen:?}");
         assert_eq!(seen.last().map(String::as_str), Some("PUT"), "{seen:?}");
     }
+}
+
+// ---------------------------------------------------------------------------------------------
+// a storing fake daemon
+
+/// A fake ecd that keeps what is PUT and serves it to GET (identities are always unknown).
+/// With `die_at`, the first PUT whose key starts with it hangs up instead of storing: a store
+/// batch that dies partway.
+fn storing_daemon(die_at: Option<&'static str>) -> (tempfile::TempDir, PathBuf) {
+    let dir = tempfile::Builder::new()
+        .prefix("jf")
+        .tempdir_in("/tmp")
+        .unwrap();
+    let sock = dir.path().join("s");
+    let listener = UnixListener::bind(&sock).unwrap();
+    let values = Arc::new(Mutex::new(HashMap::<String, Vec<u8>>::new()));
+    let armed = Arc::new(Mutex::new(die_at));
+    std::thread::spawn(move || {
+        for stream in listener.incoming() {
+            let Ok(stream) = stream else { return };
+            let (values, armed) = (Arc::clone(&values), Arc::clone(&armed));
+            std::thread::spawn(move || {
+                let mut out = stream.try_clone().unwrap();
+                let mut r = BufReader::new(stream);
+                let mut line = String::new();
+                while r.read_line(&mut line).is_ok_and(|n| n > 0) {
+                    let words: Vec<String> = line.split_whitespace().map(str::to_string).collect();
+                    line.clear();
+                    let Some(cmd) = words.first() else { continue };
+                    let reply: Vec<u8> = match cmd.as_str() {
+                        "HELLO" => b"OK 1\n".to_vec(),
+                        "GET" => match values.lock().unwrap().get(&words[1]) {
+                            Some(v) => [format!("OK {}\n", v.len()).as_bytes(), v].concat(),
+                            None => b"MISS\n".to_vec(),
+                        },
+                        "PUT" => {
+                            let n: usize = words[2].parse().unwrap();
+                            let mut v = vec![0; n];
+                            r.read_exact(&mut v).unwrap();
+                            let mut armed = armed.lock().unwrap();
+                            if armed.is_some_and(|p| words[1].starts_with(p)) {
+                                *armed = None;
+                                return;
+                            }
+                            values.lock().unwrap().insert(words[1].clone(), v);
+                            b"OK\n".to_vec()
+                        }
+                        "IDS" => {
+                            let n: usize = words[1].parse().unwrap();
+                            for _ in 0..n {
+                                r.read_line(&mut line).unwrap();
+                            }
+                            line.clear();
+                            "\n".repeat(n).into_bytes()
+                        }
+                        _ => b"OK\n".to_vec(),
+                    };
+                    if out.write_all(&reply).is_err() {
+                        return;
+                    }
+                }
+            });
+        }
+    });
+    (dir, sock)
+}
+
+/// `behaviors/ec-cc-mode.md §CompileAndStore`: the manifest is PUT first, so a batch that dies
+/// after `m/` leaves an entry without `o/`, which the next lookup reports as `object-gone` (and
+/// then recompiles and stores).
+#[test]
+fn put_batch_dies_after_the_manifest() {
+    let Some(compiler) = gcc().or_else(clang) else {
+        eprintln!("skipped: no gcc/clang");
+        return;
+    };
+    let (_dir, sock) = storing_daemon(Some("o/"));
+    let w = Work::with_sock(sock);
+    w.write("a.c", "int f(void) { return 1; }\n");
+    let (out, log) = w.ec(rust(), &compiler, &["-c", "a.c"]);
+    assert!(out.status.success(), "{out:?}");
+    assert_eq!(log, row("compiled-unstored", "a.c new-key"));
+    let stderr = String::from_utf8(out.stderr).unwrap();
+    assert!(stderr.starts_with("ec: cache put o/"), "{stderr}");
+    let (out, log) = w.ec(rust(), &compiler, &["-c", "a.c"]);
+    assert!(out.status.success(), "{out:?}");
+    assert_eq!(log, row("compiled", "a.c object-gone"));
+    let (_, log) = w.ec(rust(), &compiler, &["-c", "a.c"]);
+    assert_eq!(log, row("cached", "a.c"));
+}
+
+/// ADOPTED Q-KEY-3 for cc: an input that is gone by the time the manifest is built makes the
+/// result unstorable, logged as `<source> not-cached:unreadable:<Key(path)>`, for a success and
+/// for a deterministic failure alike.
+#[test]
+fn unreadable_input_is_not_stored() {
+    let Some(compiler) = gcc().or_else(clang) else {
+        eprintln!("skipped: no gcc/clang");
+        return;
+    };
+    let (_dir, sock, seen) = recording_daemon(false);
+    let w = Work::with_sock(sock);
+    // the compiler removes the header it read
+    std::fs::create_dir(w.path().join("bin")).unwrap();
+    let wrapper = w.path().join("bin/gcc");
+    write_exe(
+        &wrapper,
+        &format!(
+            "#!/bin/sh\n'{}' \"$@\"\nrc=$?\nrm -f gone.h\nexit $rc\n",
+            compiler.display()
+        ),
+    );
+    w.write("a.c", "#include \"gone.h\"\nint f(void) { return N; }\n");
+    w.write("bad.c", "#include \"gone.h\"\nint x = ;\n");
+    for (args, outcome, ok) in [
+        (&["-c", "a.c"][..], "compiled-unstored", true),
+        (&["-c", "bad.c"], "failed", false),
+    ] {
+        w.write("gone.h", "#define N 1\n");
+        seen.lock().unwrap().clear();
+        let (out, log) = w.ec(rust(), &wrapper, args);
+        assert_eq!(out.status.success(), ok, "{out:?}");
+        let source = args[1];
+        assert_eq!(
+            log,
+            row(outcome, &format!("{source} not-cached:unreadable:gone.h"))
+        );
+        let seen = seen.lock().unwrap().clone();
+        assert!(!seen.iter().any(|c| c == "PUT"), "{seen:?}");
+    }
+}
+
+/// cc in content identity mode against the storing fake daemon (no identities from ecd: every
+/// input is hashed locally): miss, hit with the same object and depfile, invalidation.
+#[test]
+fn content_identity_mode() {
+    let Some(compiler) = gcc().or_else(clang) else {
+        eprintln!("skipped: no gcc/clang");
+        return;
+    };
+    let (_dir, sock) = storing_daemon(None);
+    let w = Work::with_sock(sock);
+    w.write("inc/a.h", "#define N 1\n");
+    w.write("a.c", "#include \"a.h\"\nint f(void) { return N; }\n");
+    let env = [("EKACACHE_STORE_IDENTITY", "content")];
+    // no system headers: their store paths resolve only through $EKACACHE_STORE_ROOTS
+    let args = [
+        "-nostdinc",
+        "-Iinc",
+        "-c",
+        "a.c",
+        "-o",
+        "a.o",
+        "-MD",
+        "-MF",
+        "a.d",
+    ];
+    let (out, log) = w.ec_env(rust(), &compiler, &args, &env);
+    assert!(out.status.success(), "{out:?}");
+    assert_eq!(log, row("compiled", "a.c new-key"));
+    let (object, depfile) = (w.read("a.o"), w.read("a.d"));
+    std::fs::remove_file(w.path().join("a.o")).unwrap();
+    std::fs::remove_file(w.path().join("a.d")).unwrap();
+    let (out, log) = w.ec_env(rust(), &compiler, &args, &env);
+    assert!(out.status.success() && out.stderr.is_empty(), "{out:?}");
+    assert_eq!(log, row("cached", "a.c"));
+    assert_eq!(w.read("a.o"), object);
+    assert_eq!(w.read("a.d"), depfile);
+    w.write("inc/a.h", "#define N 2\n");
+    let (_, log) = w.ec_env(rust(), &compiler, &args, &env);
+    assert_eq!(log, row("compiled", "a.c inputs-changed:inc/a.h"));
 }
