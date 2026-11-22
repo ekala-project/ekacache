@@ -61,6 +61,19 @@ jobs:
           node-version: 22
       - name: install quint
         run: npm install -g "@informalsystems/quint@$QUINT_VERSION"
+      # quint fetches its Rust evaluator through the GitHub API without a token and fails when
+      # the runner's shared IP is rate limited; it skips the fetch when the binary is already
+      # in place, so download it here with the job's token. Bump the tag with QUINT_VERSION.
+      - name: install the quint evaluator
+        env:
+          GH_TOKEN: ${{ github.token }}
+          QUINT_EVALUATOR_VERSION: v0.7.1
+        run: |
+          dir="$HOME/.quint/rust-evaluator-$QUINT_EVALUATOR_VERSION"
+          mkdir -p "$dir"
+          gh release download "evaluator/$QUINT_EVALUATOR_VERSION" --repo quint-co/quint \
+            --pattern 'quint_evaluator-x86_64-unknown-linux-gnu.tar.gz' --output - | tar -xz -C "$dir"
+          chmod +x "$dir/quint_evaluator"
       - name: quint test (unchanged models)
         run: |
           quint test --main=slots spec/slots.qnt
