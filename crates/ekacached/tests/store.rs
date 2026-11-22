@@ -447,3 +447,91 @@ fn manual_demoter_steps() {
     assert!(!s.kick_pending());
     assert_eq!(read(&s, b"a").as_deref(), Some(&[1u8; 9][..]));
 }
+
+/// A value that names its key and version and is otherwise filler derived from both, so a
+/// reader can tell a right value from bytes of another record.
+fn stress_value(key: u32, ver: u32) -> Vec<u8> {
+    let mut v = Vec::new();
+    v.extend_from_slice(&key.to_le_bytes());
+    v.extend_from_slice(&ver.to_le_bytes());
+    v.resize(8 + 40 + (key % 60) as usize, key.wrapping_add(ver) as u8);
+    v
+}
+
+/// GET (which also serves HAS) racing rotation, demotion (by link and by copy) and eviction
+/// from the last tier, with the real demoter thread: a GET finds a key or not, and a value it
+/// finds reads in full as one that was stored under that key. Bounded by the number of PUTs,
+/// with no timing assumptions.
+#[test]
+fn get_races_demotion_and_eviction() {
+    use std::sync::atomic::{AtomicBool, Ordering};
+    const KEYS: u32 = 64;
+    const ROUNDS: u32 = 12;
+    for force_copy in [false, true] {
+        let (hot, cold) = (tempfile::tempdir().unwrap(), tempfile::tempdir().unwrap());
+        // packs of a few records, a hot tier of a couple of packs, a cold tier that evicts
+        let (mut cfg, _cap) = config(vec![tier(hot.path(), 900), tier(cold.path(), 1800)], 400);
+        cfg.force_copy = force_copy;
+        // every GET also sets the mtime, through the pack's current path
+        cfg.touch_every_ns = 0;
+        let s = Arc::new(Store::open(cfg).unwrap());
+        let done = Arc::new(AtomicBool::new(false));
+        let readers: Vec<_> = (0..4u32)
+            .map(|t| {
+                let (s, done) = (Arc::clone(&s), Arc::clone(&done));
+                std::thread::spawn(move || {
+                    let (mut found, mut i) = (0u64, t);
+                    loop {
+                        let last = done.load(Ordering::SeqCst);
+                        for _ in 0..KEYS {
+                            i = i.wrapping_mul(1_103_515_245).wrapping_add(12_345);
+                            let k = (i >> 8) % KEYS;
+                            let key = format!("k{k}");
+                            let Some(mut r) = s.get(key.as_bytes()) else {
+                                continue;
+                            };
+                            let mut got = Vec::new();
+                            r.read_to_end(&mut got).expect("read value");
+                            assert!(got.len() >= 8, "{key}: short value");
+                            let ver = u32::from_le_bytes(got[4..8].try_into().unwrap());
+                            assert!(ver < ROUNDS, "{key}: version {ver}");
+                            assert_eq!(got, stress_value(k, ver), "{key}");
+                            found += 1;
+                        }
+                        if last {
+                            return found;
+                        }
+                    }
+                })
+            })
+            .collect();
+        for ver in 0..ROUNDS {
+            for k in 0..KEYS {
+                putb(&s, format!("k{k}").as_bytes(), &stress_value(k, ver));
+            }
+        }
+        done.store(true, Ordering::SeqCst);
+        let found: u64 = readers.into_iter().map(|h| h.join().unwrap()).sum();
+        assert!(found > 0, "no GET ever hit");
+        s.wait();
+        // once the demoter is idle: the budgets hold (the active pack is never a victim), and
+        // whatever is left reads back as the newest value
+        let snap = s.snapshot();
+        assert!(
+            snap.totals[0] <= 900 + 400 && snap.totals[1] <= 1800,
+            "{snap:?}"
+        );
+        // the race really happened: early packs were evicted, later ones demoted
+        assert!(!snap.packs.contains_key(&1), "pack 1 never evicted");
+        assert!(snap.packs.values().any(|p| p.tier == 1), "nothing demoted");
+        let mut left = 0;
+        for k in 0..KEYS {
+            let key = format!("k{k}");
+            if let Some(v) = read(&s, key.as_bytes()) {
+                assert_eq!(v, stress_value(k, ROUNDS - 1), "{key}");
+                left += 1;
+            }
+        }
+        assert!(left > 0, "the newest values were all evicted");
+    }
+}

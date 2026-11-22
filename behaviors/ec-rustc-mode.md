@@ -118,6 +118,12 @@ are kept), run one `PrefetchIdentities`, and concatenate `(InputId or "?") + ","
 2. If there is a k2: `GET o/<k2>`. If present and `UnpackFiles(blob, out_dir, extra_filename)`
    succeeds: `GET e/<k2>` (a separate round trip), write its value (or nothing) to stderr
    verbatim, log `cached`, and **return 0**. No slot is taken.
+
+   **Adopted change (2026-11-21):** the Rust port MUST send `GET o/<k2>` and `GET e/<k2>`
+   together, pipelined in one send (`GetMany`, `ec-cache-client.md`), and read both replies in
+   order before unpacking. The request order and keys are unchanged; the difference on the
+   wire is that `GET e/<k2>` is also sent when the blob is missing or fails to unpack, and its
+   value is then discarded. The result (hit, `object-gone`, stderr bytes) is the same.
 3. Otherwise fall through to the compile. Files written by a partial `UnpackFiles` are left
    in place and overwritten by rustc.
 
@@ -193,6 +199,15 @@ exactly 3 fields, an octal mode, a decimal size and `size ≤ remaining`. Write
 permissions to `mode` exactly (replace), ignoring errors. Any failure returns false. An empty
 blob returns true. Files are always restored into `--out-dir` under their basename, wherever
 rustc originally wrote them.
+
+**Adopted change (2026-11-21, Q-RS-11): restore is confined to `--out-dir`.** Before writing a
+record, the Rust port MUST compute `ReplaceAll(name, "@", stem)` and treat the record as
+malformed (UnpackFiles returns false, exactly like a bad header) when the result is empty,
+`.`, `..`, or contains `/` or NUL. Records before it stay written, and the lookup falls
+through to the compile with `object-gone` (§Lookup). The permissions set are `mode & 0777`,
+not `mode & 07777`: setuid, setgid and sticky bits are dropped. `PackFiles` only ever writes
+a basename and `permissions & 0777`, so no blob ec stored is affected; only a blob some other
+client planted in `o/<k2>` is.
 
 The restored `.d` file is byte-identical to the stored one. It is not rewritten for the
 current `out_dir` or stem.
@@ -300,6 +315,79 @@ in the original filename. With an empty stem, `@` is removed.
 **Impact**: none for cargo's names.
 
 **Recommendation**: keep as-is.
+
+### Q-RS-9: Toolchains behind a rustup proxy share keys
+
+**Current behavior**: with rustup, the `rustc` that ec resolves (`OnPath`, usually
+`~/.cargo/bin/rustc`) is a symlink to the `rustup` proxy, which picks the real toolchain at
+run time from `RUSTUP_TOOLCHAIN` (`cargo +nightly` sets it), a `rust-toolchain.toml`, a
+directory override or the default. k1 sees only the proxy:
+
+- `rustc=` is `ToolId(~/.cargo/bin/rustc)`, a path, so it is the same for every toolchain;
+- `stdlib=`: `canonical(rustc)` is `~/.cargo/bin/rustup`, so the root is `~/.cargo`, which has
+  no `lib/rustlib`. Without `--sysroot` (cargo passes none) no rlib is found and the field is
+  empty;
+- `RUSTUP_TOOLCHAIN` is not one of the hashed variables.
+
+So `cargo +stable build` and `cargo +nightly build` of the same crate compute the same k1, and
+so does a build before and after `rustup update`.
+
+**Impact**: an rlib built by one toolchain is replayed into a build with another. rustc then
+refuses it (E0514, "compiled by an incompatible version of rustc"), and the user has to clear
+the cache or `cargo clean`. Builds inside Nix are not affected: there `rustc` is a store path
+whose `lib/rustlib` holds the stdlib rlibs.
+
+**Recommendation**: change, needs sign-off. Add two k1 fields after `stdlib=`:
+`RUSTUP_TOOLCHAIN=<value>` (empty when unset), and `rustc-vV=` followed by the stdout of
+`rustc -vV`, run with the invocation's environment and cwd (it names the release, commit hash,
+host and LLVM version). The `-vV` result MAY be memoised by the identity of the real tool, but
+not by the proxy path alone, since the proxy's answer depends on the toolchain selection.
+Running `rustup which rustc` and using its path for `ToolId` and `StdlibIds` is an
+alternative. Compatibility: rustc keys change, so `rs-schema` is bumped and existing rustc
+entries start cold. cc keys are unchanged. Costs one extra process per cacheable rustc
+invocation, unless memoised.
+
+### Q-RS-10: stdout is not stored, and `@argfile` contents are not keyed
+
+**Current behavior**:
+
+- **stdout.** The cached compile runs rustc with stdout inherited and only stderr captured
+  (§Compile and store). Nothing written to stdout is stored, and a hit writes only the `e/`
+  value to stderr. Flags that make rustc print results to stdout, such as
+  `-Zprint-type-sizes`, `-Zunpretty=…` and `-Zprint-mono-items`, are ordinary `key_args`, so a
+  cargo library build that passes them is cacheable.
+- **`@argfile`.** rustc reads arguments from `@path` (and `@shell:path`), but `ParseRustInvocation` does not expand
+  it. `@path` falls through to `TakeCodegenOption` and enters `key_args` as the text `@path`;
+  the file's contents are not hashed. When the argfile holds the source, `--out-dir` or
+  `--emit`, the invocation is not cacheable (those are not seen), but when they are on the
+  command line and the argfile holds only other flags (`--cfg`, `-C`, `--extern`), it is
+  cached with a key that ignores those flags.
+
+**Impact**: on a hit, the `-Z` printing flags produce empty output, where a miss printed the
+report. With an argfile, changing its contents (another `--cfg`, other `-C opt-level`) still
+hits and replays the output of the old flags. cargo writes an argfile only when the command
+line is too long, and then it holds every argument, so this rarely matters with cargo.
+
+**Recommendation**: change, needs sign-off. Make an invocation uncacheable if any argument
+starts with `@`, or if it carries a `-Z` flag that prints to stdout (at least
+`-Zprint-type-sizes`, `-Zunpretty`, `-Zprint-mono-items`), in either the glued or the
+`-Z <opt>` spelling. Expanding
+argfiles as cc mode does and classifying the expanded arguments is an alternative, at the
+cost of another quoting format to specify. Compatibility: fewer hits; keys of the invocations
+that stay cacheable are unchanged.
+
+### Q-RS-11: Restore writes wherever the blob says
+
+**Current behavior**: `UnpackFiles` joins the stored name onto `out_dir` as it is. An absolute
+name replaces `out_dir`, and a name with `/` or `..` leaves it. The mode is applied as
+`mode & 07777`, setuid included.
+
+**Impact**: any client of the shared ecd can `PUT o/<k2>`. A planted blob can then write any
+file the building user can write, with any permission bits, on the next hit.
+
+**Recommendation**: **ADOPTED (signed off 2026-11-21).** A name that is not one path
+component after the `@` rewriting is a malformed record, and the mode is masked to `0777`
+(§Output blob).
 
 ---
 

@@ -140,7 +140,7 @@ In this order:
      - `query |= (stop == 'E' && (sources == 0 || source == "/dev/null"))`;
      - if `stop == 'E'` and `output` is empty or `-`: `to_stdout = true` and
        `output = $TMPDIR/ekacache<pid>.i`. `$TMPDIR` defaults to `/tmp` when unset; set-but-empty
-       gives `/ekacache<pid>.i`;
+       gives a relative `ekacache<pid>.i` in the cwd (`path("") / name` is `name`);
      - otherwise, if `output` is empty: `output = stem(source) + (stop == 'S' ? ".s" : ".o")`.
        Only the stem is kept, so `-c dir/foo.c` writes `foo.o` in the cwd.
    - **otherwise**:

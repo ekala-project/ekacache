@@ -5,6 +5,8 @@
 //! Called under the job slot (`super::run`): ADOPTED Q-CC-2 moves DONE after the last PUT, so
 //! the slot covers the run, the forwarded output, the manifest's hashing and the upload.
 
+use std::collections::HashSet;
+
 use ekacache_core::bytes::{contains, find_byte_from, itoa, split};
 use ekacache_core::fspath;
 use ekacache_core::keys::{RequestKey, slot};
@@ -180,6 +182,64 @@ fn subject(source: &[u8], tail: &[&[u8]]) -> Vec<u8> {
     s
 }
 
+/// The build-time check and rule C before storing.
+struct Scan {
+    build_time: bool,
+    incbin: bool,
+}
+
+/// The build-time check (`behaviors/ec-cc-mode.md §Build-time check`) and ADOPTED Q-CC-12 (rule
+/// C, before storing), reading each file once: the inputs whose ids `build_manifest` would hash
+/// from their bytes get those ids remembered from the same read (`Store::content_id`).
+///
+/// - `build_time` (non-links): an input that is not a store path is readable and mentions
+///   `__DATE__`/`__TIME__`/`__TIMESTAMP__`. Store headers do not use them; the build tree's
+///   (version.h) might.
+/// - `incbin`: the lookup's rule C said not to store, or (assembler compiles) the primary
+///   source or an input mentions `.incbin`.
+///
+/// Once `build_time` holds nothing is stored and the scan stops (`build_time` is decided before
+/// `incbin` on both paths of `compile_and_store`); once `incbin` holds no ids are remembered.
+fn scan_inputs(store: &Store, inv: &Invocation, inputs: &[Vec<u8>], miss: &Miss) -> Scan {
+    let check_build_time = !inv.links();
+    let check_incbin = miss.store && !inv.link && is_assembly(&inv.source);
+    let mut scan = Scan {
+        build_time: false,
+        incbin: !miss.store,
+    };
+    // the primary source is read for rule C even when the depfile does not list it
+    let source = (check_incbin && !inputs.contains(&inv.source)).then_some(&inv.source);
+    // a path seen before gives the same answers
+    let mut done: HashSet<&[u8]> = HashSet::new();
+    for (path, is_input) in source
+        .into_iter()
+        .map(|p| (p, false))
+        .chain(inputs.iter().map(|p| (p, true)))
+    {
+        let wants_build_time = is_input && check_build_time && !is_store_path(path);
+        let wants_incbin = check_incbin && !scan.incbin;
+        if (!wants_build_time && !wants_incbin) || !done.insert(path) {
+            continue;
+        }
+        let Some(bytes) = read_file(path) else {
+            continue;
+        };
+        if wants_build_time && mentions_build_time(&bytes) {
+            scan.build_time = true;
+            break;
+        }
+        if wants_incbin && mentions_incbin(&bytes) {
+            scan.incbin = true;
+        }
+        let hashed_locally =
+            !is_store_path(path) || (store.by_content() && !store.daemon_may_identify(path));
+        if is_input && !scan.incbin && hashed_locally && path != &inv.source {
+            store.remember_identity(path, store.content_id(path, &bytes));
+        }
+    }
+    scan
+}
+
 /// `CompileAndStore(cache, compiler, k1, inv, why)`: the compiler's status, the outcome and the
 /// `$EKACACHE_LOG` subject (`<source> <why>`, or the adopted not-stored subjects:
 /// `<source> not-cached:unreadable:<Key(path)>` (Q-KEY-3) and `<source> incbin` (Q-CC-12)).
@@ -195,18 +255,7 @@ pub fn compile_and_store(
     let links = inv.links();
     let obs = run_observed(compiler, inv, env);
     let missed = subject(&inv.source, &[&miss.why]);
-    // store headers do not use them; the build tree's (version.h) might
-    let build_time = !links
-        && obs.inputs.iter().any(|input| {
-            !is_store_path(input) && read_file(input).is_some_and(|t| mentions_build_time(&t))
-        });
-    // ADOPTED Q-CC-12 (rule C, before storing)
-    let incbin = !miss.store
-        || (!inv.link
-            && is_assembly(&inv.source)
-            && std::iter::once(&inv.source)
-                .chain(&obs.inputs)
-                .any(|input| read_file(input).is_some_and(|t| mentions_incbin(&t))));
+    let Scan { build_time, incbin } = scan_inputs(store, inv, &obs.inputs, miss);
     let incbin_subject = || subject(&inv.source, &[b"incbin"]);
     let status = obs.run.status;
 

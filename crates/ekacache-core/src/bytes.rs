@@ -40,10 +40,7 @@ pub fn find_from(hay: &[u8], needle: &[u8], from: usize) -> Option<usize> {
     if needle.len() > hay.len() - from {
         return None;
     }
-    hay[from..]
-        .windows(needle.len())
-        .position(|w| w == needle)
-        .map(|p| p + from)
+    memchr::memmem::find(&hay[from..], needle).map(|p| p + from)
 }
 
 /// `std::string::find(needle)`.
@@ -55,10 +52,7 @@ pub fn find(hay: &[u8], needle: &[u8]) -> Option<usize> {
 /// `std::string::find(char, from)`.
 #[must_use]
 pub fn find_byte_from(hay: &[u8], b: u8, from: usize) -> Option<usize> {
-    hay.get(from..)?
-        .iter()
-        .position(|&c| c == b)
-        .map(|p| p + from)
+    memchr::memchr(b, hay.get(from..)?).map(|p| p + from)
 }
 
 /// `std::string::rfind(needle)`: an empty needle matches at `len`.
@@ -70,7 +64,7 @@ pub fn rfind(hay: &[u8], needle: &[u8]) -> Option<usize> {
     if needle.len() > hay.len() {
         return None;
     }
-    hay.windows(needle.len()).rposition(|w| w == needle)
+    memchr::memmem::rfind(hay, needle)
 }
 
 /// `std::string::contains(needle)`.
@@ -277,5 +271,61 @@ mod tests {
         );
         assert_eq!(hex_encode(&[0, 0xab, 0xff]), b"00abff");
         assert_eq!(join(&[&b""[..], b"a", b"b"], b","), b"a,b");
+    }
+
+    /// The previous `windows()` implementations: the reference for the memchr ones.
+    fn naive_find_from(hay: &[u8], needle: &[u8], from: usize) -> Option<usize> {
+        if from > hay.len() {
+            return None;
+        }
+        if needle.is_empty() {
+            return Some(from);
+        }
+        if needle.len() > hay.len() - from {
+            return None;
+        }
+        hay[from..]
+            .windows(needle.len())
+            .position(|w| w == needle)
+            .map(|p| p + from)
+    }
+
+    fn naive_rfind(hay: &[u8], needle: &[u8]) -> Option<usize> {
+        if needle.is_empty() {
+            return Some(hay.len());
+        }
+        if needle.len() > hay.len() {
+            return None;
+        }
+        hay.windows(needle.len()).rposition(|w| w == needle)
+    }
+
+    // a small alphabet so that matches (and overlapping ones) are common
+    fn small() -> impl proptest::strategy::Strategy<Value = Vec<u8>> {
+        proptest::collection::vec(0u8..3, 0..40)
+    }
+
+    proptest::proptest! {
+        #[test]
+        fn find_from_matches_naive(hay in small(), needle in proptest::collection::vec(0u8..3, 0..5), from in 0usize..45) {
+            proptest::prop_assert_eq!(find_from(&hay, &needle, from), naive_find_from(&hay, &needle, from));
+        }
+
+        #[test]
+        fn rfind_matches_naive(hay in small(), needle in proptest::collection::vec(0u8..3, 0..5)) {
+            proptest::prop_assert_eq!(rfind(&hay, &needle), naive_rfind(&hay, &needle));
+        }
+
+        #[test]
+        fn find_byte_from_matches_naive(hay in small(), b in 0u8..3, from in 0usize..45) {
+            let naive = hay.get(from..).and_then(|t| t.iter().position(|&c| c == b)).map(|p| p + from);
+            proptest::prop_assert_eq!(find_byte_from(&hay, b, from), naive);
+        }
+
+        #[test]
+        fn any_bytes_match_naive(hay in proptest::collection::vec(proptest::num::u8::ANY, 0..300), needle in proptest::collection::vec(proptest::num::u8::ANY, 0..4)) {
+            proptest::prop_assert_eq!(find(&hay, &needle), naive_find_from(&hay, &needle, 0));
+            proptest::prop_assert_eq!(rfind(&hay, &needle), naive_rfind(&hay, &needle));
+        }
     }
 }

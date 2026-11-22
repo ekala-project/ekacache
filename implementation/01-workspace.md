@@ -55,6 +55,7 @@ Each one is chosen for a reason, and adding another needs a note in this table.
 | Crate | Used by | Why | Notes |
 |---|---|---|---|
 | `blake3` | core | the hasher, and ecd identities | pure Rust with SIMD. Same digest as `libblake3` and `lukechampine.com/blake3`; vectors in `ec-keys.md` prove it. Disable the `rayon` feature. |
+| `memchr` | core | substring search in `bytes::find_from`/`rfind` (`memmem`), which MaskOut/UnmaskOut run over whole objects in content mode | `default-features = false, features = ["std"]`. Linear-time SIMD search instead of the naive O(n·m) `windows()` scan; already in the lock as a transitive dependency. |
 | `zstd` (`zstd-sys`) | ec | value framing, level 1 | Build with the `pkg-config` feature so Nix links the system libzstd. Compressed bytes are **not** required to match legacy (they are opaque values), but the `ec-cache-client.md` vector pins libzstd 1.5.7, so that test runs only when the linked version matches. |
 | `serde`, `serde_json` | ec | gocacheprog JSON (adopted real parser), `ekacache.json`, derivation JSON in nix-store | default features, **without** `preserve_order`: nlohmann objects iterate in sorted key order, and serde_json's default `BTreeMap` matches that (see 09). Parity shims against nlohmann (BOM, abort-on-type-error) are listed in 06 and 09. |
 | `base64` | ec | strict RFC 4648 (adopted, Q-GO-4) | `STANDARD` engine with strict padding |

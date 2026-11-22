@@ -26,13 +26,14 @@ or what is still missing.
 | P8a | `021d07c` | Met: rewritten trees byte-identical to the C++ jig's (`fixup_difftest`). |
 | P8b | `9192189` | Met: worker-protocol transcripts identical (`nix_store_rpc`, `nix_store_quint`); vectors pass (`nix_store_offline`). |
 | P9 | `3a78547`, `bcee151`, `91d6f09`, `79fd31c` | **Not met:** "differential suite green on macOS" needs a Mac. Done so far: the Mach-O fixup, which is host-independent and difftested on Linux (`fixup_macho`); every macOS `cfg` branch; and `scripts/check-macos.sh`, which runs clippy with `-D warnings` for both darwin targets, clean. |
-| P10 | `cc40b39`, `8fcd88f`, `2b74a1f`, `f1c5650`, `e5bd25d` | Packaging done: `default.nix` builds `ec`, `ecd`, `legacy.jig` and `legacy.jigd`, and runs the test suites in the sandbox. Mixed-fleet compatibility tested locally (§Test results). Rollout, soak and legacy removal: not started. |
+| P10 | `cc40b39`, `8fcd88f`, `2b74a1f`, `f1c5650`, `e5bd25d` | Packaging done: `default.nix` builds `ec` and `ecd` (attributes `ekacache`, `ekacached`) and runs the test suites in the sandbox; the `legacy.jig`/`legacy.jigd` attributes it also had were removed on 2026-11-19. Mixed-fleet compatibility was tested locally (§Test results). Legacy removal: done 2026-11-19, without the planned soak. Rollout: not started. |
 
-## Test results
+## Test results (historical, before legacy removal)
 
-All on Linux x86_64, at `2ae5b2d`. The rename to ekacache was rerun on the same setup (counts
-in brackets: one test more, `binary::self_names`). The legacy jig is the GCC 15 build from `nix-build -A
-legacy.jig`, the Go jigd is `nix-build -A legacy.jigd`, and the real compilers are GCC 15.2 and
+These runs predate the 2026-11-19 removal of `legacy/`; the legacy builds, difftests and check
+scripts they name no longer exist. All on Linux x86_64, at `2ae5b2d`. The rename to ekacache
+was rerun on the same setup (counts in brackets: one test more, `binary::self_names`). The
+legacy jig is the GCC 15 build from `nix-build -A legacy.jig`, the Go jigd is `nix-build -A legacy.jigd`, and the real compilers are GCC 15.2 and
 clang 20.1.8 from the pinned nixpkgs (the ones the CI difftest job uses). The ITF traces were
 generated with `scripts/gen-itf.sh` and quint 0.33.1.
 
@@ -205,26 +206,23 @@ These quirks are kept, though they look unreasonable:
 ### Corrections to the behaviour docs
 
 - Q-CC-8: with `TMPDIR=""`, the `-E` temporary is the relative `ekacache<pid>.i`, in legacy as in the
-  port, not `/ekacache<pid>.i` as the doc says.
+  port, not `/ekacache<pid>.i` as `ec-cc-mode.md` said. The doc is now corrected.
 - Mach-O `dataoff` wraps around at 2^32 (a `u32`, reproduced), not at 2^64 as the spec says.
 
 ## Not built, or not run
 
-- **CI has run on GitHub (PR #1).** check, test, difftest and quint pass on `ubuntu-24.04` and
-  `ubuntu-24.04-arm`. The macOS jobs (`macos-15`, `macos-15-intel`) build only the Go jigd, because
-  the C++ jig does not compile on macOS (`SOCK_CLOEXEC`, `environ`). They compare ec and ecd
-  against it.
-
-  The bench and fuzz jobs are nightly only.
+- **CI** ([`.github/workflows/ci.yml`](../.github/workflows/ci.yml)) has these jobs: check (fmt,
+  clippy, cargo-deny, `check-vectors.sh`, `check-macos.sh`), test and e2e on `ubuntu-24.04` and
+  `ubuntu-24.04-arm` (e2e with the Rust ecd, GCC 15 and clang 20), quint (model tests,
+  invariants, trace replay), and macOS on `macos-15` and `macos-15-intel` (the workspace tests
+  with the Rust ecd). The bench and fuzz jobs are nightly only. The difftest job, and the
+  macOS jobs' comparison against the Go jigd, went with `legacy/`.
 - **Testing infrastructure from 12 that was not built as specified:**
   - The `ekacache-testkit` harness (TOML scenarios, recording proxy, fakes) will not be built
-    (decided 2026-11-18; 12 §Harness now says so). Each phase has its own Rust difftest
-    harness, with proxies and fakes where it needs them. `ekacache-testkit` holds the ITF reader,
-    the vector reader and the `ETXTBSY` retry.
-  - `tests/difftest/allow.toml` lists one rule per adopted change, with the tests that pin it,
-    and `scripts/check-allow-list.sh` keeps it in step with `behaviors/README.md`. The
-    harnesses apply the rules in code, at the `ADOPTED Q-…` lines; nothing reads the file at
-    run time.
+    (decided 2026-11-18; 12 §Harness now says so). `ekacache-testkit` holds the ITF reader,
+    the vector reader and the `ETXTBSY` retry. The per-phase difftest harnesses and
+    `tests/difftest/allow.toml` with `scripts/check-allow-list.sh` were removed with `legacy/`;
+    adopted changes are pinned by their named tests and the `ADOPTED Q-…` lines.
 
   The ecd peer refusal is tested only in-process.
 - **The macOS tests have not run on a Mac**, only the cross type-check and lint.

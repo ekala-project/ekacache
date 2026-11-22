@@ -299,6 +299,17 @@ fn miss_store_hit() {
     d.remove(format!("o/{k2}").as_bytes());
     ws.wrap(&d.sock, &args, &[]);
     assert_eq!(take_log(&ws.log), log1("compiled", "foo-abc object-gone"));
+    // the lookup pipelines `GET e/` behind `GET o/` even when the blob is gone
+    let log = lines(&d.take_log());
+    assert_eq!(
+        log[..4],
+        [
+            "HELLO 1".to_owned(),
+            format!("GET m/{k1}"),
+            format!("GET o/{k2}"),
+            format!("GET e/{k2}"),
+        ]
+    );
     // a blob that does not unpack is "gone" too; files before the bad record stay
     ws.clear_out();
     d.put(format!("o/{k2}").as_bytes(), b"first 600 2\nokbad header\n");
@@ -311,6 +322,27 @@ fn miss_store_hit() {
     assert_eq!(ws.rustc_runs(), runs + 1);
     assert_eq!(std::fs::read(ws.out.join("first")).unwrap(), b"ok");
     assert_eq!(snapshot(&ws.out)["first"].1, 0o600);
+    d.take_log();
+
+    // ADOPTED Q-RS-11: a planted blob naming a path outside the out-dir is malformed too
+    ws.clear_out();
+    let outside = ws.root.join("planted");
+    let mut blob = outside.clone().into_os_string().into_encoded_bytes();
+    blob.extend_from_slice(b" 4755 1\nz");
+    d.put(format!("o/{k2}").as_bytes(), &blob);
+    ws.wrap(&d.sock, &args, &[("FAKE_NO_DEPINFO", "1")]);
+    assert_eq!(
+        take_log(&ws.log),
+        log1("compiled-unstored", "foo-abc object-gone")
+    );
+    assert!(!outside.exists());
+    d.put(format!("o/{k2}").as_bytes(), b"../planted 644 1\nz");
+    ws.wrap(&d.sock, &args, &[("FAKE_NO_DEPINFO", "1")]);
+    assert_eq!(
+        take_log(&ws.log),
+        log1("compiled-unstored", "foo-abc object-gone")
+    );
+    assert!(!outside.exists());
     d.take_log();
 
     // an input changed

@@ -342,6 +342,31 @@ since ec is built without exceptions).
 
 **Recommendation**: keep as-is.
 
+### Q-CLIENT-9: A failed store prints on the compiler's stderr
+
+**Current behavior**: the adopted Q-CLIENT-2 rule is implemented by writing
+`ec: cache put <key> failed\n` to ec's stderr, once per invocation (at the first refused PUT;
+the rest are skipped), in cc and rustc modes as well as in `ec cache` and gocacheprog. In the
+build-path modes that stderr is the compiler's stderr as the build system sees it. The
+compiler's status is still returned.
+
+**Impact**: while ecd misbehaves (a full disk, a hung-up connection, a key or value over its
+limits), every cacheable compile prints a line the compiler did not. Checks that require an
+empty stderr then fail: autoconf tests under `AC_LANG_WERROR` (`ac_c_werror_flag`: any output
+in `conftest.err` fails the test), libtool's option probes (which compare stderr with a
+boilerplate run), and test suites that compare diagnostics. A cache
+problem turns into misconfigured feature detection, which is the kind of build difference ec
+must never cause.
+
+**Recommendation**: change, needs sign-off. In cc and rustc modes, record the failure only in
+`$EKACACHE_LOG` (the outcome is already `compiled-unstored`, or `failed` for a cached failure;
+add the key to the subject) and write nothing to stderr. `ec cache put`/`put-dir` keep the
+stderr message and exit 1, and gocacheprog keeps it, since their stderr is not a compiler's.
+This narrows Q-CLIENT-2, whose "log … in the mode's log format" was read as stderr for every
+mode: adopting this change means amending that row in
+[README.md §Adopted changes](README.md#adopted-changes-signed-off-2026-11-17). Compatibility:
+stderr bytes change (less output); keys, wire and exit codes are unchanged.
+
 ---
 
 ## Open questions

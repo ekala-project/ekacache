@@ -68,11 +68,12 @@ pub(crate) fn read_body(s: &Shared, size: i64, r: &mut impl Read) -> Result<Body
 /// active pack's size, and account for it.
 pub(crate) fn put(s: &Shared, key: &[u8], size: i64, body: Body) -> Result<(), GoErr> {
     validate_put(key, size)?;
+    let rec_len = REC_HEADER as i64 + key.len() as i64 + size;
+    presync_before_rotate(s, rec_len);
     let mut inner = s.write();
     if inner.closed {
         return Err(GoErr::msg("store closed"));
     }
-    let rec_len = REC_HEADER as i64 + key.len() as i64 + size;
     let Some(active) = inner.active else {
         return Err(GoErr::msg("store closed"));
     };
@@ -137,6 +138,35 @@ pub(crate) fn put(s: &Shared, key: &[u8], size: i64, body: Body) -> Result<(), G
         s.kick();
     }
     Ok(())
+}
+
+/// When this PUT is about to rotate, flush the active pack's data to disk before the write lock
+/// is taken, so that the fsync in `seal` (adopted Q-STORE-7), which runs under the write lock,
+/// finds little left to write and GETs are not stalled behind up to a whole pack of writeback.
+///
+/// This changes no bytes and no ordering: `seal` still fsyncs the pack before the hint is
+/// written, and that fsync is what the durability guarantee rests on. The sync here goes
+/// through a fresh descriptor and its result is ignored: Linux reports a writeback error to
+/// every open file description, so the pack's own descriptor still sees it in `seal`, which
+/// then fails as before. Nothing here is visible on success or failure.
+fn presync_before_rotate(s: &Shared, rec_len: i64) {
+    let path = {
+        let inner = s.read();
+        if inner.closed {
+            return;
+        }
+        let Some(p) = inner.active.and_then(|id| inner.packs.get(&id)) else {
+            return;
+        };
+        // the same test as `put`, which repeats it under the write lock
+        if !(p.size + rec_len > s.pack_limit && p.size > 0) {
+            return;
+        }
+        p.path.clone()
+    };
+    if let Ok(f) = gofs::open(&path) {
+        let _ = f.sync_data();
+    }
 }
 
 /// `rotate(id)`: seal the active pack (an error changes nothing), then create the new one in

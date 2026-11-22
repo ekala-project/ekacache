@@ -605,6 +605,54 @@ hashes, `Resolve` maps the masked name to the first one listed.
 
 **Recommendation**: keep as-is.
 
+### Q-KEY-13: The toolchain and environment in cc keys are incomplete
+
+**Current behavior**: `T` (`ToolchainIds`) identifies the driver binary
+(`canonical(OnPath(compiler))`), any `--ld-path=` linker of a link, and the `libLLVM*`,
+`libclang-cpp*` and `liblld*` files in `<driver root>/lib`. `env=` (`KeyEnvironment`) holds
+`CPATH`, `C_INCLUDE_PATH`, `CPLUS_INCLUDE_PATH`, `OBJC_INCLUDE_PATH`, `GCC_EXEC_PREFIX` and
+`COMPILER_PATH`, plus the non-volatile `NIX_*` for links. Not covered:
+
+- **GCC's programs.** The driver runs `cc1`/`cc1plus`/`cc1obj`/`lto1` and `collect2` from
+  `<root>/libexec/gcc/<triple>/<version>/`, and `as` and `ld` found through its program
+  search (`-print-prog-name=…`, which falls back to `PATH`). None of them is hashed. In
+  content mode the driver's bytes are hashed with store hashes masked, so a GCC rebuilt with
+  a patched `cc1`, or a binutils update, leaves `T` unchanged.
+- **Configuration files.** clang reads `<triple>-clang.cfg`/`clang.cfg` from its binary
+  directory (clang 16+) and any `--config=<file>`. GCC reads `<root>/lib/gcc/<triple>/<version>/specs`
+  if that file exists. These change the effective arguments; only an explicit `-specs=` is
+  handled (uncacheable, §Additional uncacheable cases rule B in `ec-cc-mode.md`).
+- **Environment.** `CCC_OVERRIDE_OPTIONS` (clang edits its own argv), `DEPENDENCIES_OUTPUT`
+  and `SUNPRO_DEPENDENCIES` (GCC and clang write a depfile there), and on macOS
+  `MACOSX_DEPLOYMENT_TARGET` (and the other `*_DEPLOYMENT_TARGET`s) and `SDKROOT`, which pick
+  the target version and the SDK.
+
+**Impact**: an object compiled by a different compiler proper, assembler or linker, or with
+different effective flags, is replayed. With `DEPENDENCIES_OUTPUT` set, a hit also leaves the
+build's depfile unwritten. Inside Nix most of these are fixed by the store paths of the
+wrapper and toolchain, so the risk is mainly a toolchain rebuild that keeps the driver bytes,
+and builds outside Nix.
+
+**Recommendation**: change, needs sign-off.
+
+- Extend `T` with, for a GCC driver, every regular file named `cc1`, `cc1plus`, `cc1obj`,
+  `lto1`, `lto-wrapper` or `collect2` under `<root>/libexec/gcc/*/*/` (a directory scan like
+  the `libLLVM` one) and the `specs` file under `<root>/lib/gcc/*/*/`; and, for a clang driver,
+  the default config files that exist next to the binary and every `--config=`/`--config`
+  file. Add the `as` (compiles) and `ld` (links) that `-print-prog-name` reports, memoised by
+  the driver's identity and the values of `PATH`, `GCC_EXEC_PREFIX` and `COMPILER_PATH`, so the
+  driver is not spawned on every invocation.
+- Add `CCC_OVERRIDE_OPTIONS`, `SDKROOT` and every `*_DEPLOYMENT_TARGET` that clang reads
+  (`MACOSX_`, `IPHONEOS_`, `TVOS_`, `WATCHOS_`, `XROS_`, `DRIVERKIT_`) to the variables kept by
+  `KeyEnvironment`.
+- `DEPENDENCIES_OUTPUT` and `SUNPRO_DEPENDENCIES` name a side output, so keying them is not
+  enough: when either is set and non-empty, the invocation is uncacheable, as for the flags
+  of rule A in `ec-cc-mode.md`.
+
+Compatibility: the new `T` members change every cc key, which amounts to a cache flush; per
+Q-KEY-10 it should come with a `cc-schema=` field. The new `env=` variables change keys only
+where they are set.
+
 ---
 
 ## Open questions

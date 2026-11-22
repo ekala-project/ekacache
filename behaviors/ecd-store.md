@@ -534,7 +534,10 @@ stale value is usually still correct.
 **Recommendation**: **ADOPTED (signed off 2026-11-17).** **fsync on seal and on demotion** (not per PUT):
 - `seal(p)`: `fsync` the pack file. Write `%06d.hint.tmp`, flush, `fsync` it, close, rename it
   to `%06d.hint`, then `fsync` the tier directory. An fsync error is a seal error (same
-  handling as a Flush error today).
+  handling as a Flush error today). A PUT that is about to rotate MAY first flush the active
+  pack's data through a separate descriptor, with no lock held and its result ignored, so that
+  the fsync under the write lock has little left to write (2026-11-21). The fsync in `seal`
+  stays, and so does its ordering before the hint; files and errors are unchanged.
 - `moveDown` into a non-last tier: after the copy path, `fsync` `to.tmp` before the rename.
   After both files are in place (linked or copied), `fsync` the destination directory before
   taking the lock for the switch, so the source is removed only once the destination is

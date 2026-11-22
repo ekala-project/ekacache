@@ -11,6 +11,17 @@ use zstd::zstd_safe;
 /// The header size.
 pub const HEADER: usize = 4;
 
+/// The largest raw size [`decode`] accepts: `kMaxObjectSize` (2 GiB), the client's limit on
+/// a received value (`behaviors/ec-cache-client.md §Q-CLIENT-7`).
+pub const MAX_RAW_SIZE: u64 = 1 << 31;
+
+/// The header's raw size, or `None` when it exceeds [`MAX_RAW_SIZE`] (treated as a miss).
+fn checked_size(header: [u8; HEADER]) -> Option<usize> {
+    let size = u32::from_le_bytes(header);
+    // Q-CLIENT-7: the port caps the claimed size at kMaxObjectSize instead of trusting it
+    (u64::from(size) <= MAX_RAW_SIZE).then_some(size as usize)
+}
+
 /// `ZSTD_compress` reported an error; the caller sends nothing (legacy returns an empty value).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct FrameError;
@@ -62,11 +73,12 @@ fn content_size(mut src: &[u8]) -> Result<Option<u64>, ()> {
 /// Allocation guard (Q-CLIENT-7 stays observable-as-is): when every frame states its content
 /// size, a total different from the header is refused before anything is allocated. Legacy
 /// fails on the same input after allocating. Frames without a content size are decoded as a
-/// stream that stops one byte past the header's size.
+/// stream that stops one byte past the header's size. A header above [`MAX_RAW_SIZE`] is
+/// refused outright (Q-CLIENT-7).
 #[must_use]
 pub fn decode(wire: &[u8]) -> Option<Vec<u8>> {
     let header: [u8; HEADER] = wire.get(..HEADER)?.try_into().ok()?;
-    let size = u32::from_le_bytes(header) as usize;
+    let size = checked_size(header)?;
     let src = &wire[HEADER..];
     match content_size(src) {
         Err(()) => None,
@@ -87,6 +99,10 @@ pub fn decode(wire: &[u8]) -> Option<Vec<u8>> {
 
 fn decode_stream(src: &[u8], size: usize) -> Option<Vec<u8>> {
     use std::io::Read;
+    // Q-CLIENT-7: never read more than kMaxObjectSize (+1 to detect overlong data)
+    if size as u64 > MAX_RAW_SIZE {
+        return None;
+    }
     let decoder = zstd::stream::read::Decoder::with_buffer(src).ok()?;
     let mut out = Vec::new();
     decoder.take(size as u64 + 1).read_to_end(&mut out).ok()?;
@@ -119,6 +135,23 @@ mod tests {
         // 1..4 trailing bytes
         let mut wire = encode(b"hello").unwrap();
         wire.push(0);
+        assert_eq!(decode(&wire), None);
+    }
+
+    #[test]
+    fn oversized_header_is_a_miss() {
+        assert_eq!(checked_size(0u32.to_le_bytes()), Some(0));
+        assert_eq!(
+            checked_size(((1u32 << 31) - 1).to_le_bytes()),
+            Some((1 << 31) - 1)
+        );
+        assert_eq!(checked_size((1u32 << 31).to_le_bytes()), Some(1 << 31));
+        assert_eq!(checked_size(((1u32 << 31) + 1).to_le_bytes()), None);
+        assert_eq!(checked_size(u32::MAX.to_le_bytes()), None);
+        assert_eq!(decode_stream(b"", (1 << 31) + 1), None);
+        // a valid body under an oversized header
+        let mut wire = encode(b"hello").unwrap();
+        wire[..HEADER].copy_from_slice(&u32::MAX.to_le_bytes());
         assert_eq!(decode(&wire), None);
     }
 
